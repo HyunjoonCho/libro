@@ -99,7 +99,7 @@ def query_llm_for_gentest(proj, bug_id, model, template, use_plain_text=False, u
             else:
                 f.write(prompt)
 
-    query_result = query_llm(prompt, model, stop)
+    query_result, cost = query_llm(prompt, model, stop)
     if not chat_mode:
         gen_test = 'public void test' + query_result
     else:
@@ -107,7 +107,7 @@ def query_llm_for_gentest(proj, bug_id, model, template, use_plain_text=False, u
             gen_test = query_result.split("```")[1]
         else:
             gen_test = query_result
-    return gen_test
+    return gen_test, cost
 
 
 if __name__ == '__main__':
@@ -127,7 +127,7 @@ if __name__ == '__main__':
     if args.dataset == 'ghrb':
         BR_DIR = llm_exp_config['bug_report_dir']['ghrb']
 
-    gen_test = query_llm_for_gentest(
+    gen_test, cost = query_llm_for_gentest(
         args.project, args.bug_id, 
         args.model,
         args.template, 
@@ -139,3 +139,6 @@ if __name__ == '__main__':
 
     with open(args.out, 'w') as f:
         f.write(gen_test)
+
+    with open(args.out.replace('.', '_cost.'), 'w') as f:
+        json.dump(f, indent=2)

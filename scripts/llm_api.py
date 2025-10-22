@@ -78,8 +78,14 @@ class ModelWrapper:
         stopping_criteria = None
         if stop_tokens:
             stopping_criteria = StoppingCriteriaList([StopOnTokens(stop_tokens, cls._tokenizer)])
-                
-        return cls._generator(prompt, temperature=use_temp, stopping_criteria=stopping_criteria, return_full_text=False)[0]['generated_text']
+
+        generated_text = cls._generator(prompt, temperature=use_temp, stopping_criteria=stopping_criteria, return_full_text=False)[0]['generated_text']
+        cost = {
+            'prompt_tokens': len(cls._tokenizer.encode(prompt)),
+            'completion_tokens': len(cls._tokenizer.encode(generated_text)),
+        }
+
+        return generated_text, cost
 
 def query_chat_llm(prompt, model, stop_tokens):
     assert model in AVAILABLE_MODEL_INFO, f'Unknown model {model}'
@@ -98,16 +104,20 @@ def query_chat_llm(prompt, model, stop_tokens):
             stop=stop_tokens
         )
         gen_result = response.choices[0].message.content
+        cost = {
+            'prompt_tokens': response.usage.prompt_tokens,
+            'completion_tokens': response.usage.completion_tokens,
+        }
         if gen_result and "```" in gen_result:
             parts = gen_result.split("```")
             if len(parts) >= 2:
                 gen_result = parts[1]
                 gen_result = gen_result.removeprefix('java')
     elif model_info['query_type'] == 'hf_transformers':
-        gen_result = ModelWrapper.generate(prompt, model, stop_tokens)
+        gen_result, cost = ModelWrapper.generate(prompt, model, stop_tokens)
     else:
         raise NotImplementedError(f'Unknown query type {model_info["query_type"]}')
-    return gen_result
+    return gen_result, cost
 
 def query_string_llm(prompt, model, stop_tokens):
     assert model in AVAILABLE_MODEL_INFO, f'Unknown model {model}'
@@ -115,7 +125,7 @@ def query_string_llm(prompt, model, stop_tokens):
     assert type(prompt) == str
     assert not model_info['uses_chat']
 
-    return ""
+    return "", {}
 
 def query_llm(prompt, model, stop_tokens):
     # sanity checks
