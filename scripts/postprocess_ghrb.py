@@ -401,7 +401,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--project', default='google_gson')
     parser.add_argument('-b', '--bug_id', default=2134)
     parser.add_argument('-n', '--test_no', type=int, default=None)
-    parser.add_argument('--gen_test_dir', default='/root/data/GHRB/gen_tests/')
+    parser.add_argument('--gen_test_dir', default='/root/libro/data/GHRB/gen_tests/')
     parser.add_argument('--all', action='store_true')
     parser.add_argument('--exp_name', default='example2_n50_ghrb')
     args = parser.parse_args()

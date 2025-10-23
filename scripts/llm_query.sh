@@ -1,6 +1,6 @@
 #!/bin/bash
 
-bug_report_path="/root/data/Defects4J/bug_report"
+bug_report_path="/root/libro/data/Defects4J/bug_report"
 
 # get the bug id
 # Chart-1.json => p=Chart, v=1
@@ -12,7 +12,7 @@ do
     # repeat 0 times
     for i in `seq 1 10`
     do
-        python3.9 llm_query.py -p $p -b $v --out /root/data/Defects4J/gen_tests_gpt3.5/${p}_${v}_n${i}.txt
+        python3.9 llm_query.py -p $p -b $v --out /root/libro/data/Defects4J/gen_tests_gpt3.5/${p}_${v}_n${i}.txt
     done
 
 done

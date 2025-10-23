@@ -220,7 +220,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--project', default='Time')
     parser.add_argument('-b', '--bug_id', type=int, default=18)
     parser.add_argument('-n', '--test_no', type=int, default=None)
-    parser.add_argument('--gen_test_dir', default='/root/data/Defects4J/gen_tests_gpt3.5/')
+    parser.add_argument('--gen_test_dir', default='/root/libro/data/Defects4J/gen_tests_gpt3.5/')
     parser.add_argument('--all', action='store_true')
     parser.add_argument('--exp_name', default='gpt3.5')
     args = parser.parse_args()
