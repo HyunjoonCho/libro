@@ -12,7 +12,7 @@ do
     # repeat 0 times
     for i in `seq 1 10`
     do
-        python3.9 llm_query.py -p $p -b $v --out /root/libro/data/Defects4J/gen_tests_gpt3.5/${p}_${v}_n${i}.txt
+        python3.9 llm_query.py -p $p -b $v --out /root/libro/data/Defects4J/gen_tests_gpt-4o/${p}_${v}_n${i}.txt
     done
 
 done

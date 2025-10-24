@@ -119,7 +119,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_plain_text', action='store_true')
     parser.add_argument('--save_prompt', action='store_true')
     parser.add_argument('--template', default='2example_chat')
-    parser.add_argument('--model', default='OpenAI/gpt-3.5-turbo')
+    parser.add_argument('--model', default='OpenAI/gpt-4o')
     parser.add_argument('-o', '--out', default='output.txt')
     parser.add_argument('--prompt_out', default=None)
     args = parser.parse_args()
@@ -141,4 +141,4 @@ if __name__ == '__main__':
         f.write(gen_test)
 
     with open(args.out.replace('.', '_cost.'), 'w') as f:
-        json.dump(f, indent=2)
+        json.dump(cost, f, indent=2)
