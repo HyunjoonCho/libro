@@ -171,7 +171,7 @@ def twover_run_experiment(proj, bug_id, example_tests, injection=True):
             buggy_info = f'[error] {repr(e)}'
 
         buggy_results.append(buggy_info)
-    
+
     # Running experiment for fixed version
     git_reset(repo_path)
     git_clean(repo_path)
@@ -231,6 +231,8 @@ if __name__ == '__main__':
         bug2tests = defaultdict(list)
         
         for gen_test_file in glob.glob(os.path.join(GEN_TEST_DIR, '*.txt')):
+            if gen_test_file.endswith("cost.txt"):
+                continue
             bug_id = '_'.join(os.path.basename(gen_test_file).split('_')[:2])
             bug2tests[bug_id].append(gen_test_file)
 
@@ -250,7 +252,11 @@ if __name__ == '__main__':
                     test_content = test_content.removesuffix('```')
                 
                 example_tests.append(test_content)
-            results = twover_run_experiment(project, bug_id, example_tests)
+            try:
+                results = twover_run_experiment(project, bug_id, example_tests)
+            except Exception as e:
+                print(str(e))
+                results = None
             if results is None:
                 continue
 
@@ -258,8 +264,8 @@ if __name__ == '__main__':
                 res_for_bug[os.path.basename(test_path)] = res
             exec_results[bug_key] = res_for_bug
 
-            with open(f'/root/results/{args.exp_name}.json', 'w') as f:
-                json.dump(exec_results, f, indent=4)
+        with open(f'/root/libro/results/{args.exp_name}.json', 'w') as f:
+            json.dump(exec_results, f, indent=4)
 
     elif args.test_no is None:
         test_files = glob.glob(os.path.join(GEN_TEST_DIR, f'{args.project}_{args.bug_id}_*.txt'))
@@ -281,7 +287,7 @@ if __name__ == '__main__':
         for test_path, res in zip(test_files, results):
             res_for_bug[os.path.basename(test_path)] = res
 
-        with open(f'/root/results/{args.exp_name}_{args.project}_{args.bug_id}.json', 'w') as f:
+        with open(f'/root/libro/results/{args.exp_name}_{args.project}_{args.bug_id}.json', 'w') as f:
             json.dump(res_for_bug, f, indent=4)
 
     else:
