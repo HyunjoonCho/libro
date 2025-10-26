@@ -1,0 +1,42 @@
+
+import static org.junit.Assert.assertTrue;
+import org.junit.Test;
+
+public class ClosureCompilerBugTest {
+
+    @Test
+    public void testClosureRemovesNeededCode() {
+        // JavaScript code to test
+        String originalCode = 
+            "Math.blah = function(test) { test.a = 5; };"
+            + "var test = new Object();"
+            + "Math.blah(test);";
+
+        // Expected compiled output (ideally should not remove main functionality)
+        String expectedOutput = 
+            "Math.blah=function(a){a.a=5};var test={};Math.blah(test);";
+
+        try {
+            ProcessBuilder processBuilder = new ProcessBuilder("java", "-jar", "/path/to/closure-compiler.jar", "--compilation_level", "SIMPLE", "--js", "-", "--js_output_file", "/dev/stdout");
+            processBuilder.redirectErrorStream(true);
+            Process process = processBuilder.start();
+            process.getOutputStream().write(originalCode.getBytes());
+            process.getOutputStream().close();
+
+            StringBuilder result = new StringBuilder();
+            int b;
+            while ((b = process.getInputStream().read()) != -1) {
+                result.append((char) b);
+            }
+
+            process.waitFor();
+
+            // Check if the output contains the call to Math.blah(test)
+            String actualOutput = result.toString().trim();
+            assertTrue("Output does not contain expected function call", actualOutput.contains("Math.blah(test);"));
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}

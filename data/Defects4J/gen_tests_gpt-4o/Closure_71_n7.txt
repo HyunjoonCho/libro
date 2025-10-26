@@ -1,0 +1,51 @@
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.rhino.Node;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertTrue;
+
+public class PrivatePropertyTest {
+
+    @Test
+    public void testPrivatePropertyRedeclarationWarning() {
+        List<SourceFile> externs = AbstractCommandLineRunner.getBuiltinExterns(CompilerOptions.Environment.BROWSER);
+
+        // Original constructor
+        SourceFile fooFile = SourceFile.fromCode(
+            "Foo.js",
+            "/** @constructor */ function Foo() { /** @private */ this.x_ = 3; }"
+        );
+
+        // Subclass constructor
+        SourceFile subFooFile = SourceFile.fromCode(
+            "SubFoo.js",
+            "/** @constructor \n" +
+            " * @extends {Foo} */ function SubFoo() { /** @private */ this.x_ = 3; }"
+        );
+
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+        WarningLevel.VERBOSE.setOptionsForWarningLevel(options);
+
+        // Enabling visibility checks
+        options.setWarningLevel(DiagnosticGroups.VISIBILITY, CheckLevel.ERROR);
+
+        Compiler compiler = new Compiler();
+        Result result = compiler.compile(externs, List.of(fooFile, subFooFile), options);
+
+        // Check for visibility warning errors
+        boolean hasVisibilityError = false;
+        for (JSError warning : result.errors) {
+            if ("JSC_USED_IMPLICITLY_PRIVATE_MEMBER".equals(warning.type.key)) {
+                hasVisibilityError = true;
+                break;
+            }
+        }
+
+        assertTrue("Expected a visibility error due to private property redeclaration, but none was found.", hasVisibilityError);
+    }
+}

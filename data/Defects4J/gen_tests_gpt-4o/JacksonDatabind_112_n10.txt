@@ -1,0 +1,68 @@
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Collection;
+import java.util.Collections;
+
+import static org.junit.Assert.assertEquals;
+
+public class CustomCollectionDeserializationTest {
+
+    static class ImmutableStringCollection {
+        private final Collection<String> values;
+
+        // Custom constructor to simulate immutable collection
+        ImmutableStringCollection(Collection<String> values) {
+            this.values = Collections.unmodifiableCollection(values);
+        }
+
+        // Getter method to satisfy Jackson's deserialization necessity
+        public Collection<String> getValues() {
+            return values;
+        }
+    }
+
+    static class MyObject {
+        private ImmutableStringCollection collection;
+
+        // Getter and Setter
+        public ImmutableStringCollection getCollection() {
+            return collection;
+        }
+
+        public void setCollection(ImmutableStringCollection collection) {
+            this.collection = collection;
+        }
+    }
+
+    @Test
+    public void testCustomCollectionDeserialization() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        
+        // Register a module if you have a custom deserializer for ImmutableStringCollection
+        SimpleModule module = new SimpleModule();
+        module.addDeserializer(ImmutableStringCollection.class, new ImmutableStringCollectionDeserializer());
+        mapper.registerModule(module);
+
+        String json = "{\"collection\": [\"a\", \"b\", \"c\"]}";
+
+        MyObject result = mapper.readValue(json, MyObject.class);
+
+        assertEquals(3, result.getCollection().getValues().size());
+        assertEquals("a", result.getCollection().getValues().iterator().next());
+    }
+    
+    // Assume we have a custom deserializer to handle the immutable collection
+    static class ImmutableStringCollectionDeserializer extends com.fasterxml.jackson.databind.JsonDeserializer<ImmutableStringCollection> {
+        @Override
+        public ImmutableStringCollection deserialize(com.fasterxml.jackson.core.JsonParser p,
+                                                     com.fasterxml.jackson.databind.DeserializationContext ctxt) throws IOException {
+            // Simple implementation just for the purpose of this test
+            Collection<String> values = ctxt.readValue(p, ctxt.getTypeFactory().constructCollectionType(Collection.class, String.class));
+            return new ImmutableStringCollection(values);
+        }
+    }
+}

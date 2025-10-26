@@ -1,0 +1,60 @@
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import org.junit.Before;
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+
+public class MixinAnnotationTest {
+
+    public interface Contact {
+        String getCity();
+    }
+
+    public class ContactImpl implements Contact {
+        @Override
+        public String getCity() {
+            return "New York";
+        }
+    }
+
+    public static class ContactMixin implements Contact {
+        @Override
+        @JsonProperty
+        public String getCity() {
+            return null;
+        }
+    }
+
+    public interface Person extends Contact {}
+
+    public class PersonImpl extends ContactImpl implements Person {}
+
+    public static class PersonMixin extends ContactMixin implements Person {}
+
+    private ObjectMapper objectMapper;
+
+    @Before
+    public void setUp() {
+        objectMapper = new ObjectMapper();
+
+        SimpleModule module = new SimpleModule();
+        module.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
+        module.setMixInAnnotation(Person.class, PersonMixin.class);
+        objectMapper.registerModule(module);
+    }
+
+    @Test
+    public void testMixinAnnotationsArePreserved() throws JsonProcessingException {
+        PersonImpl person = new PersonImpl();
+        
+        String json = objectMapper.writeValueAsString(person);
+
+        // Verify that the "city" property is included in JSON
+        assertTrue(json.contains("\"city\":\"New York\""));
+    }
+}

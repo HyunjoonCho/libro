@@ -1,0 +1,48 @@
+
+import org.junit.Test;
+import org.mozilla.javascript.Context;
+import org.mozilla.javascript.Scriptable;
+import static org.junit.Assert.*;
+
+public class JavaScriptOptimizationTest {
+
+    @Test
+    public void testOptimizationFailsWithVariableInCatchClause() {
+        // JavaScript code to test
+        String jsCode = "function getStack() {" +
+                        "  var getErrorObject = function() {" +
+                        "    try {" +
+                        "      throw Error('');" +
+                        "    } catch(err) {" +
+                        "      return err;" +
+                        "    }" +
+                        "  };" +
+                        "  return getErrorObject().stack;" +
+                        "}" +
+                        "window = {};" +
+                        "window['getStackTrace'] = getStack;";
+
+        // This would be transformed by the Closure Compiler with simple optimizations
+        String optimizedJsCode = "function getStack() { " +
+                                 "  try { " +
+                                 "    throw Error(''); " +
+                                 "  } catch(a) { " +
+                                 "  } " +
+                                 "  return a.stack; " +
+                                 "} " +
+                                 "window.getStackTrace = getStack;";
+
+        Context ctx = Context.enter();
+        try {
+            Scriptable scope = ctx.initStandardObjects();
+            ctx.evaluateString(scope, optimizedJsCode, "optimizedScript", 1, null);
+
+            Object result = ctx.evaluateString(scope, "window.getStackTrace()", "testScript", 1, null);
+            assertNotNull("Stack trace should not be null", result);
+        } catch (Exception e) {
+            fail("Script execution failed: " + e.getMessage());
+        } finally {
+            Context.exit();
+        }
+    }
+}

@@ -1,0 +1,55 @@
+
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+
+import static org.junit.Assert.assertEquals;
+
+public class TarArchiveInputStreamTest {
+
+    @Test(expected = NumberFormatException.class)
+    public void testUidParsingError() throws IOException {
+        // Create a sample TAR header with a PAX extended header containing a large UID value.
+        String paxHeader = "22 uid=4294967294\n";
+        String tarHeader = "sample.txt";
+        
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        Writer writer = new OutputStreamWriter(baos, StandardCharsets.UTF_8);
+        
+        // Write PAX extended header (100 bytes for header size)
+        writer.write(createPaxHeader(paxHeader, tarHeader));
+        
+        // Dummy content for sample.txt entry
+        writer.write(createDummyFileContentEntry());
+        
+        writer.flush();
+        
+        // Read the created TAR content using TarArchiveInputStream
+        try (TarArchiveInputStream tarInput = new TarArchiveInputStream(new ByteArrayInputStream(baos.toByteArray()))) {
+            TarArchiveEntry entry = tarInput.getNextTarEntry();
+            // This should throw NumberFormatException due to large UID
+        }
+    }
+
+    private String createPaxHeader(String paxHeader, String filename) throws IOException {
+        // Calculate and adjust the length of the PAX header entry
+        String prefix = String.format("%d uid=", paxHeader.length() + 5);
+        String fullHeader = prefix + paxHeader + "\n";
+        
+        return String.format("%-100s%-8s%-8s%-8s%-12s%-12s%-8s%-8s%-12s",
+                filename, "000775", "000000", "000000", "00000000000", "00000000000", "000000", "00") +
+                "\0".repeat(356) + fullHeader;
+    }
+
+    private String createDummyFileContentEntry() {
+        // Dummy file content data
+        return "Hello, World!\n";
+    }
+}

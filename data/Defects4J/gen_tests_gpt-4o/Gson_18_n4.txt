@@ -1,0 +1,43 @@
+
+import com.google.gson.Gson;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import java.util.List;
+import java.util.Map;
+
+public class GsonWildcardDeserializationTest {
+
+    static class BigClass {
+        Map<String, ? extends List<SmallClass>> inBig;
+    }
+
+    static class SmallClass {
+        String inSmall;
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (obj == null || getClass() != obj.getClass()) return false;
+            SmallClass that = (SmallClass) obj;
+            return inSmall != null ? inSmall.equals(that.inSmall) : that.inSmall == null;
+        }
+    }
+
+    @Test
+    public void testGsonDeserializesWildcards() {
+        String json = "{\"inBig\": {\"key\": [{ \"inSmall\": \"hello\" }]}}";
+
+        try {
+            BigClass bigClass = new Gson().fromJson(json, BigClass.class);
+            List<SmallClass> list = bigClass.inBig.get("key");
+            SmallClass small = list.get(0);
+
+            // Validate that the deserialization worked correctly
+            assertEquals("hello", small.inSmall);
+
+        } catch (ClassCastException e) {
+            // This is the expected failure point due to the bug, hence the exception handling
+            throw new AssertionError("Gson deserialization failed due to ClassCastException", e);
+        }
+    }
+}

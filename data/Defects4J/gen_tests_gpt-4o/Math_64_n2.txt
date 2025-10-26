@@ -1,0 +1,50 @@
+
+import org.apache.commons.math3.fitting.leastsquares.LeastSquaresBuilder;
+import org.apache.commons.math3.fitting.leastsquares.LeastSquaresProblem;
+import org.apache.commons.math3.fitting.leastsquares.LeastSquaresOptimizer.Optimum;
+import org.apache.commons.math3.fitting.leastsquares.LevenbergMarquardtOptimizer;
+import org.apache.commons.math3.linear.ArrayRealVector;
+import org.apache.commons.math3.linear.RealVector;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class LevenbergMarquardtBugTest {
+
+    @Test
+    public void testLevenbergMarquardtInconsistentResult() {
+        // Define a simple observation model
+        LeastSquaresProblem model = new LeastSquaresBuilder()
+                .start(new double[]{3.0})
+                .model((point) -> {
+                    // A simple linear model: y = 2 * x
+                    double[] values = new double[1];
+                    values[0] = 2 * point[0];
+                    return new ArrayRealVector(values);
+                }, (point) -> {
+                    // Jacobian matrix: derivative of the model function
+                    double[][] jacobian = new double[1][1];
+                    jacobian[0][0] = 2;
+                    return new ArrayRealVector(jacobian[0]);
+                })
+                .target(new double[]{6.0}) // Target value we're trying to fit
+                .lazyEvaluation(false)
+                .maxEvaluations(1000)
+                .maxIterations(1000)
+                .build();
+
+        // Optimize and retrieve the optimal solution
+        LevenbergMarquardtOptimizer optimizer = new LevenbergMarquardtOptimizer();
+        Optimum bestFit = optimizer.optimize(model);
+        
+        // Retrieve solution details
+        RealVector solutionPoint = bestFit.getPoint();
+        double computedCost = bestFit.getCost();
+        RealVector residuals = bestFit.getResiduals();
+
+        // Verify if the solution is consistent
+        // The optimal point should result in a residual close to zero
+        assertEquals(3.0, solutionPoint.getEntry(0), 1e-6);
+        assertEquals(0.0, residuals.getEntry(0), 1e-6);
+        assertEquals(0.0, computedCost, 1e-6);
+    }
+}

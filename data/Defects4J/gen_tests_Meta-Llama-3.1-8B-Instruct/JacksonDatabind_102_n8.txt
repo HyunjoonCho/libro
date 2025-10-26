@@ -1,0 +1,27 @@
+java
+public void testCannotSetCustomFormatForSqlDateSerializer() {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.configOverride(java.sql.Date.class).setFormat(JsonFormat.Value.forPattern("yyyy-MM-dd"));
+    SimpleModule module = new SimpleModule() {
+        @Override
+        public void setupModule(SetupContext context) {
+            context.setSerializerProvider(new SerializerProvider() {
+                @Override
+                public JsonSerializer<Object> findValueSerializer(SerializationConfig config, JavaType type, Type typeHandler) {
+                    if (type.getRawClass() == java.sql.Date.class) {
+                        return new SqlDateSerializer(false, new SimpleDateFormat("yyyy-MM-dd"));
+                    }
+                    return super.findValueSerializer(config, type, typeHandler);
+                }
+            });
+        }
+    };
+    mapper.registerModule(module);
+    try {
+        java.sql.Date date = new java.sql.Date(0);
+        String json = mapper.writeValueAsString(date);
+        assertEquals("0000-00-00", json);
+    } catch (JsonProcessingException e) {
+        fail("Failed to serialize java.sql.Date with custom format");
+    }
+}

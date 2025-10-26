@@ -1,0 +1,60 @@
+
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.io.StringWriter;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+public class JsonStreamContextTest {
+
+    private static class TestData {
+        public String field1 = "value1";
+        public String field2 = "value2";
+    }
+
+    @Test
+    public void testJsonStreamContextDiscrepancy() {
+        ObjectMapper mapper = new ObjectMapper();
+
+        TestData testData = new TestData();
+
+        // Using writeValue
+        try {
+            StringWriter writer = new StringWriter();
+            ObjectWriter objectWriter = mapper.writer();
+            JsonGenerator jsonGenerator = objectWriter.createGenerator(writer);
+            jsonGenerator.writeObject(testData);
+            assertJsonStreamContext(jsonGenerator.getOutputContext(), "writeValue");
+            jsonGenerator.close();
+        } catch (IOException e) {
+            fail("writeValue test failed with an IOException");
+        }
+
+        // Using convertValue
+        ObjectNode node = mapper.convertValue(testData, ObjectNode.class);
+        try (JsonParser parser = mapper.treeAsTokens(node)) {
+            assertJsonStreamContext(parser.getParsingContext(), "convertValue");
+        } catch (IOException e) {
+            fail("convertValue test failed with an IOException");
+        }
+    }
+
+    private void assertJsonStreamContext(JsonStreamContext context, String method) {
+        // Simplified to demonstrate the point
+        if ("writeValue".equals(method)) {
+            assertEquals("Expected context type differs for writeValue", JsonStreamContext.TYPE_ROOT, context.getTypeId());
+        } else if ("convertValue".equals(method)) {
+            assertEquals("Expected context type differs for convertValue", JsonStreamContext.TYPE_OBJECT, context.getTypeId());
+        } else {
+            fail("Unknown test method");
+        }
+    }
+}

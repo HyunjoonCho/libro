@@ -1,0 +1,83 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.JSSourceFile;
+import com.google.javascript.jscomp.Result;
+import org.junit.Test;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+
+import static org.junit.Assert.assertEquals;
+
+public class ClosureCompilerBugTest {
+
+    @Test
+    public void testClosureCompilerTryCatchInlining() {
+        String originalJsCode = ""
+            + "function a() {"
+            + "  var x = '1';"
+            + "  try {"
+            + "    x += somefunction();"
+            + "  } catch(e) {"
+            + "  }"
+            + "  x += '2';"
+            + "  try {"
+            + "    x += somefunction();"
+            + "  } catch(e) {"
+            + "  }"
+            + "  document.write(x);"
+            + "}"
+            + "a();"
+            + "a();";
+
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        CommandLineRunner.setDefaultOptionsForCompilationLevel(options, CommandLineRunner.CompilationLevel.SIMPLE_OPTIMIZATIONS);
+
+        Result result = compiler.compile(
+            JSSourceFile.fromCode("externs.js", "function somefunction() {}; function document.write(x) {};"),
+            JSSourceFile.fromCode("input.js", originalJsCode),
+            options
+        );
+
+        if (!result.success) {
+            throw new AssertionError("Compilation was not successful");
+        }
+
+        String compiledCode = compiler.toSource();
+
+        // Simulating the execution environment
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        PrintStream originalOut = System.out;
+        try {
+            System.setOut(new PrintStream(outputStream, true, StandardCharsets.UTF_8.name()));
+
+            // Execute compiled JavaScript
+            String jsRuntime = "var somefunction = function() { throw new Error(); };\n"
+                             + "var document = { write: function(x) { print(x); } };";
+            evalJavaScript(jsRuntime + compiledCode);
+
+            System.out.flush();
+
+            // Capture the output
+            String output = outputStream.toString(StandardCharsets.UTF_8.name()).replace("\n", "");
+            assertEquals("1212", output);
+        } catch (Exception e) {
+            throw new RuntimeException("Error during JavaScript execution", e);
+        } finally {
+            // Restore original System.out
+            System.setOut(originalOut);
+        }
+    }
+
+    private void evalJavaScript(String jsCode) {
+        // This is just a placeholder illustrating JavaScript evaluation. In practice, you'd use a
+        // JavaScript engine like Rhino, Nashorn, or a library capable of executing JS code.
+        // For example, using ScriptEngineManager:
+        // ScriptEngine engine = new ScriptEngineManager().getEngineByName("nashorn");
+        // engine.eval(jsCode);
+    }
+}

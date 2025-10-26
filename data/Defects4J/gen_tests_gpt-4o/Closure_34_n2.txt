@@ -1,0 +1,52 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+
+public class ClosureCompilerStackOverflowTest {
+    public static void main(String[] args) {
+        // Mock JavaScript code that might lead to a stack overflow
+        String problematicJsCode = generateRecursiveJs(5000);
+
+        // Create a temporary input file for the JavaScript code
+        File inputFile = new File("AdMedia.eam.js");
+        try (FileWriter writer = new FileWriter(inputFile)) {
+            writer.write(problematicJsCode);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return;
+        }
+
+        // Run the Closure Compiler with the problematic JS file
+        String[] compilerArgs = {
+            "--js", inputFile.getPath(),
+            "--js_output_file", "AdMedia.eam.min.js"
+        };
+
+        try {
+            CommandLineRunner.main(compilerArgs);
+        } catch (RuntimeException e) {
+            // Catch the expected StackOverflowError wrapped in a RuntimeException
+            if (e.getCause() instanceof StackOverflowError) {
+                System.out.println("StackOverflowError reproduced successfully.");
+            } else {
+                e.printStackTrace();
+            }
+        }
+
+        // Clean up the temporary file
+        inputFile.delete();
+    }
+
+    // Generates a JavaScript code with recursive function calls that might cause stack overflow
+    private static String generateRecursiveJs(int depth) {
+        StringBuilder jsCode = new StringBuilder();
+        jsCode.append("function recursive(level) {\n");
+        jsCode.append("  if (level > 0) {\n");
+        for (int i = 0; i < depth; i++) {
+            jsCode.append("    recursive(level - 1);\n");
+        }
+        jsCode.append("  }\n");
+        jsCode.append("}\n");
+        jsCode.append("recursive(").append(depth).append(");\n");
+        return jsCode.toString();
+    }
+}

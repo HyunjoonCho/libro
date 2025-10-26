@@ -1,0 +1,72 @@
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+// Custom Collection class
+class ImmutableStringCollection {
+    private final String[] items;
+
+    public ImmutableStringCollection(String[] items) {
+        this.items = items.clone();
+    }
+
+    public String[] getItems() {
+        return items.clone();
+    }
+
+    // No default constructor
+}
+
+// Class containing custom collection
+class MyDataClass {
+    private ImmutableStringCollection strings;
+
+    public ImmutableStringCollection getStrings() {
+        return strings;
+    }
+
+    public void setStrings(ImmutableStringCollection strings) {
+        this.strings = strings;
+    }
+}
+
+// Test class
+public class CustomCollectionDeserializationTest {
+
+    @Test
+    public void testCustomStringCollectionDeserialization() throws JsonProcessingException {
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        // Register custom deserializer
+        SimpleModule module = new SimpleModule();
+        module.addDeserializer(ImmutableStringCollection.class, new ImmutableStringCollectionDeserializer());
+        objectMapper.registerModule(module);
+
+        String json = "{\"strings\": [\"one\", \"two\", \"three\"]}";
+
+        try {
+            MyDataClass result = objectMapper.readValue(json, MyDataClass.class);
+            assertNotNull(result.getStrings());
+            assertArrayEquals(new String[]{"one", "two", "three"}, result.getStrings().getItems());
+        } catch (Exception e) {
+            fail("Deserialization failed: " + e.getMessage());
+        }
+    }
+}
+
+// Deserializer for ImmutableStringCollection
+class ImmutableStringCollectionDeserializer extends com.fasterxml.jackson.databind.JsonDeserializer<ImmutableStringCollection> {
+
+    @Override
+    public ImmutableStringCollection deserialize(com.fasterxml.jackson.core.JsonParser jsonParser, com.fasterxml.jackson.databind.DeserializationContext deserializationContext) throws IOException {
+        com.fasterxml.jackson.databind.JsonNode node = jsonParser.getCodec().readTree(jsonParser);
+        String[] strings = new String[node.size()];
+        for (int i = 0; i < node.size(); i++) {
+            strings[i] = node.get(i).asText();
+        }
+        return new ImmutableStringCollection(strings);
+    }
+}

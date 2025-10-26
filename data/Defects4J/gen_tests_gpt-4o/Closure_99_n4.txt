@@ -1,0 +1,92 @@
+
+import com.google.javascript.jscomp.CompilationLevel;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.DiagnosticGroups;
+import com.google.javascript.jscomp.JSError;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class PrototypeTest {
+
+    @Test
+    public void testPrototypeWarning() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+
+        // Set options to match the conditions in the bug report
+        CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+        options.setWarningLevel(DiagnosticGroups.GLOBAL_THIS, CompilerOptions.WarningLevel.VERBOSE);
+
+        // Source code that triggers the warning
+        String sourceCode = "/** @constructor */\n" +
+                            "function MyClass() {}\n" +
+                            "MyClass.prototype[\"MyMethod\"] = function(a) {\n" +
+                            "  this.a = a;\n" +
+                            "}\n" +
+                            "window[\"MyClass\"] = MyClass;";
+
+        // Compile the source code
+        Result result = compiler.compile(
+                SourceFile.fromCode("externs.js", ""),
+                SourceFile.fromCode("test.js", sourceCode),
+                options
+        );
+
+        // Check for the specific warning
+        boolean foundWarning = false;
+        for (JSError error : result.warnings) {
+            if (error.getDescription().contains("dangerous use of the global this object")) {
+                foundWarning = true;
+                break;
+            }
+        }
+
+        assertEquals("Expected a warning about the dangerous use of the global 'this' object", true, foundWarning);
+    }
+    
+    @Test
+    public void testInterfaceImplementationWarning() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        
+        // Set options to match the conditions in the bug report
+        CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        // Extern and source code for the second issue
+        String externsCode = "/** @interface */\n" +
+                             "function MyParent() {}\n" +
+                             "/** @param {*} a */\n" +
+                             "MyParent.prototype.MyMethod = function(a) {};";
+
+        String sourceCode = "/**\n" +
+                            " * @constructor\n" +
+                            " * @implements {MyParent}\n" +
+                            " */\n" +
+                            "function MyClass() {}\n" +
+                            "MyClass.prototype[\"MyMethod\"] = function(a) {\n" +
+                            "  this.a2 = a;\n" +
+                            "}\n" +
+                            "window[\"MyClass\"] = MyClass;";
+
+        // Compile the extern and source code
+        Result result = compiler.compile(
+                SourceFile.fromCode("externs.js", externsCode),
+                SourceFile.fromCode("test.js", sourceCode),
+                options
+        );
+
+        // Check for the specific warning
+        boolean foundWarning = false;
+        for (JSError error : result.warnings) {
+            if (error.getDescription().contains("property MyMethod on interface MyParent is not implemented by type MyClass")) {
+                foundWarning = true;
+                break;
+            }
+        }
+
+        assertEquals("Expected a warning about MyMethod not being implemented", true, foundWarning);
+    }
+}

@@ -1,0 +1,52 @@
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.filter.FilteringParserDelegate;
+import com.fasterxml.jackson.core.filter.TokenFilter;
+import com.fasterxml.jackson.core.filter.TokenFilter.Inclusion;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class FilteringParserDelegateTest {
+
+    @Test
+    public void testAllowMultipleMatches() throws Exception {
+        String json = "{\"items\":[{\"name\":\"item1\"},{\"name\":\"item2\"},{\"name\":\"item3\"}]}";
+
+        JsonFactory factory = new JsonFactory();
+        JsonParser parser = factory.createParser(json);
+
+        TokenFilter itemsFilter = new TokenFilter() {
+            @Override
+            public TokenFilter includeProperty(String name) {
+                return "items".equals(name) ? this : null;
+            }
+
+            @Override
+            public TokenFilter filterStartArray() {
+                return TokenFilter.INCLUDE_ALL;
+            }
+
+            @Override
+            public TokenFilter includeElement(int index) {
+                return TokenFilter.INCLUDE_ALL;
+            }
+        };
+
+        // Omitting `_allowMultipleMatches` currently makes no difference due to the bug
+        FilteringParserDelegate filteringParser = new FilteringParserDelegate(
+                parser, itemsFilter, Inclusion.INCLUDE_ALL_AND_PATH, true);
+
+        int matchCount = 0;
+        while (filteringParser.nextToken() != JsonToken.END_ARRAY) {
+            if (filteringParser.getCurrentToken() == JsonToken.START_OBJECT) {
+                matchCount++;
+            }
+        }
+
+        // The filter should allow multiple matches and we expect 3 items
+        assertEquals(3, matchCount);
+    }
+}

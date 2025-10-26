@@ -1,0 +1,60 @@
+
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.WarningLevel;
+import com.google.javascript.jscomp.SourceFile;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.Compiler;
+import org.junit.Test;
+import static org.junit.Assert.assertTrue;
+
+public class ThisWarningTest {
+
+    @Test
+    public void testDangerousUseOfThis() {
+        // Create compiler and options
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        WarningLevel.VERBOSE.setOptionsForWarningLevel(options);
+
+        String code = ""
+                + "/** @constructor */\n"
+                + "function Foo() {\n"
+                + "  this._bar = null;\n"
+                + "};\n"
+                + "\n"
+                + "/** @this {Foo} */\n"
+                + "function writeMethodWithAnnotation() {\n"
+                + "  this._bar = 123; // no warning. ok\n"
+                + "}\n"
+                + "\n"
+                + "/** @this {Foo} */\n"
+                + "function readMethodWithAnnotation() {\n"
+                + "  return this._bar; // no warning. ok\n"
+                + "}\n"
+                + "\n"
+                + "function writeMethodWithoutAnnotation() {\n"
+                + "  this._bar = 123; // warning. ok.\n"
+                + "}\n"
+                + "\n"
+                + "function readMethodWithoutAnnotation() {\n"
+                + "  return this._bar; // <- Expected warning.\n"
+                + "}\n";
+
+        // Compile with the code
+        SourceFile extern = SourceFile.fromCode("externs", "");
+        SourceFile input = SourceFile.fromCode("input", code);
+        Result result = compiler.compile(extern, input, options);
+
+        // Verify the warning count for "dangerous use of the global this object"
+        int warningCount = 0;
+        for (com.google.javascript.jscomp.JSError warning : result.warnings) {
+            if (warning.getDescription().contains("dangerous use of the global this object")) {
+                warningCount++;
+            }
+        }
+
+        // Check if we received warnings for both cases expected
+        assertTrue("Expected warnings for both writeMethodWithoutAnnotation and readMethodWithoutAnnotation.", warningCount == 2);
+    }
+}

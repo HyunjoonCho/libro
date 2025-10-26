@@ -1,0 +1,46 @@
+
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.junit.Test;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
+public class TarArchiveInputStreamTest {
+
+    @Test(expected = NumberFormatException.class)
+    public void testTarArchiveInputStreamWithLargeUID() throws IOException {
+        String tarHeader = createTarHeaderWithLargeUID();
+
+        // Simulate the tar file input stream
+        try (ByteArrayInputStream bais = new ByteArrayInputStream(tarHeader.getBytes(StandardCharsets.UTF_8));
+             TarArchiveInputStream tais = new TarArchiveInputStream(bais)) {
+
+            // This should throw NumberFormatException due to large UID
+            TarArchiveEntry entry = tais.getNextTarEntry();
+        }
+    }
+
+    private String createTarHeaderWithLargeUID() {
+        // A mock tar header with a large UID (> 0x80000000) in PAX format
+        String paxHeader = "30 uid=4294967294\n";  // large uid value causing failure in Integer.parseInt
+        
+        // Creating a fake tar header using PAX headers (for educational purposes only, not a valid tar header)
+        StringBuilder tarHeaderBuilder = new StringBuilder();
+        tarHeaderBuilder.append("path/to/file.txt\0");
+        
+        for (int i = tarHeaderBuilder.length(); i < 100; i++) {
+            tarHeaderBuilder.append('\0');
+        }
+
+        tarHeaderBuilder.append(paxHeader);
+
+        // Rest of the header to fill to expected tar block size of 512 bytes
+        for (int i = tarHeaderBuilder.length(); i < 512; i++) {
+            tarHeaderBuilder.append('\0');
+        }
+
+        return tarHeaderBuilder.toString();
+    }
+}

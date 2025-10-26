@@ -1,0 +1,33 @@
+
+import static org.junit.Assert.assertThrows;
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.rhino.Node;
+import org.junit.Test;
+
+public class TypeCheckTest {
+
+    @Test
+    public void testThisTypeChecking() {
+        String code = "/** @constructor */\n" +
+                      "function F() {}\n" +
+                      "F.prototype.bar = function() { this.baz(); };\n" +
+                      "F.prototype.baz = function() { };\n" +
+                      "\n" +
+                      "/** @constructor */\n" +
+                      "function G() {}\n" +
+                      "G.prototype.bar = F.prototype.bar;";
+
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setWarningLevel(DiagnosticGroups.CHECK_TYPES, CheckLevel.WARNING);
+
+        Node root = compiler.parseTestCode(code);
+        assertNotNull(root);
+
+        compiler.check(root);
+        // Expect a type mismatch warning for 'this' in "G.prototype.bar()"
+        assertTrue(compiler.getWarnings().stream()
+            .anyMatch(warning -> warning.getMessage().contains("Property baz never defined on G")));
+    }
+}

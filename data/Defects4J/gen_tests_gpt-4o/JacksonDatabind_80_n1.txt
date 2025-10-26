@@ -1,0 +1,42 @@
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.NamedType;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class TypeResolutionTest {
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
+    static abstract class BaseType {
+        public String baseField;
+    }
+
+    static class ConcreteType extends BaseType {
+        public String concreteField;
+    }
+
+    @Test
+    public void testExtraneousTypeIdMapping() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        // Register subtypes with a named identifier
+        mapper.registerSubtypes(new NamedType(ConcreteType.class, "ConcreteType"));
+
+        // Serialization
+        ConcreteType concreteInstance = new ConcreteType();
+        concreteInstance.baseField = "baseValue";
+        concreteInstance.concreteField = "concreteValue";
+
+        String json = mapper.writeValueAsString(concreteInstance);
+
+        // This is where the error occurs: if the extraneous type id mapping includes
+        // base type, it would try to decode using BaseType and not ConcreteType.
+        BaseType deserializedInstance = mapper.readValue(json, BaseType.class);
+
+        // Verify that deserialization resulted in an instance of ConcreteType
+        assertEquals(ConcreteType.class, deserializedInstance.getClass());
+        assertEquals("baseValue", ((ConcreteType) deserializedInstance).baseField);
+        assertEquals("concreteValue", ((ConcreteType) deserializedInstance).concreteField);
+    }
+}

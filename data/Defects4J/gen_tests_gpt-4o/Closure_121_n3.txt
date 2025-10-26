@@ -1,0 +1,50 @@
+
+import static org.junit.Assert.fail;
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.Compiler;
+
+public class CompilerOptimizationTest {
+
+    @org.junit.Test
+    public void testOverzealousOptimization() {
+        String originalCode = 
+            "var uid;\n" +
+            "function reset() {\n" +
+            "  uid = Math.random();\n" +
+            "}\n" +
+            "function doStuff() {\n" +
+            "  reset();\n" +
+            "  var _uid = uid;\n" +
+            "  if (uid < 0.5) {\n" +
+            "    doStuff();\n" +
+            "  }\n" +
+            "  if (_uid !== uid) {\n" +
+            "    throw 'reset() was called';\n" +
+            "  }\n" +
+            "}\n" +
+            "doStuff();";
+
+        CompilerOptions options = new CompilerOptions();
+        options.setCompilationLevel(CompilationLevel.ADVANCED_OPTIMIZATIONS);
+
+        Compiler compiler = new Compiler();
+
+        // This will take the original code and apply advanced optimizations
+        String[] externs = CommandLineRunner.getDefaultExterns();
+        compiler.compile(externs, originalCode, options);
+
+        String optimizedCode = compiler.toSource();
+        try {
+            // Execute the optimized code to see if it fails
+            ScriptEngineManager manager = new ScriptEngineManager();
+            ScriptEngine engine = manager.getEngineByName("JavaScript");
+            engine.eval(optimizedCode);
+        } catch (ScriptException e) {
+            // Capture the specific error caused by the incorrect optimization
+            if (e.getMessage().contains("reset() was called")) {
+                fail("Optimization confused variables resulting in 'reset() was called'");
+            }
+        }
+    }
+}

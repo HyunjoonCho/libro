@@ -1,0 +1,55 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import org.junit.Test;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+
+import static org.junit.Assert.assertTrue;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testLendsAnnotationSupport() {
+        String jsCode = ""
+            + "/**\n"
+            + " * @name MyClass\n"
+            + " * @class\n"
+            + " * @extends superClass1\n"
+            + " * @extends superClass2\n"
+            + " */\n"
+            + "dojo.declare('MyClass', [superClass1, superClass2], /** @lends MyClass.prototype */ {\n"
+            + "    foo: function() {\n"
+            + "        this.a = 42;\n"
+            + "    },\n"
+            + "    bar: function() {\n"
+            + "        this.b = 43;\n"
+            + "    }\n"
+            + "});";
+
+        // Create a new ByteArrayOutputStream to capture the error stream.
+        ByteArrayOutputStream errContent = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(errContent));
+        
+        String[] args = {
+            "--js", "input.js",
+            "--compilation_level", "ADVANCED_OPTIMIZATIONS"
+        };
+
+        // Execute the Closure Compiler.
+        CommandLineRunner runner = new CommandLineRunner(args);
+        try {
+            runner.setRunOptions(CodePrinter.DEFAULT_OPTIONS, new PrintStream(errContent));
+            runner.run();
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
+        
+        // Check if the output contains expected errors regarding "dangerous use of this".
+        String errors = errContent.toString();
+        
+        assertTrue("The Closure Compiler output should include errors related to 'dangerous use of this'.", 
+            errors.contains("dangerous use of this"));
+
+        System.setErr(System.err);
+    }
+}

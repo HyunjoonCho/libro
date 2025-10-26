@@ -1,0 +1,49 @@
+
+import static org.junit.Assert.fail;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.ri.model.dom.DOMNodePointer;
+import org.junit.Test;
+import org.w3c.dom.Document;
+
+public class NamespaceHandlingTest {
+
+    @Test
+    public void testUndefinedNamespaceForAttributes() {
+        try {
+            // Prepare XML with namespace declarations
+            String xml = "<ElementA xmlns:A=\"http://example.com/A\" xmlns:B=\"http://example.com/B\" " +
+                         "A:myAttr=\"Mytype\">" +
+                         "<B:ElementB>MY VALUE</B:ElementB>" +
+                         "</ElementA>";
+
+            // Parse the XML
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes()));
+
+            // Create a JXPathContext and register namespaces
+            JXPathContext context = JXPathContext.newContext(doc);
+            context.registerNamespace("A", "http://example.com/A");
+            context.registerNamespace("B", "http://example.com/B");
+
+            // Attempt to access attribute with namespace to trigger issue
+            Object result = context.getValue("//*[local-name()='ElementA']/@A:myAttr");
+
+            // If no exception is thrown, the bug is not reproduced
+            if (result == null || !"Mytype".equals(result)) {
+                fail("Expected an exception due to undefined namespace handling for attributes.");
+            }
+        } catch (DOMNodePointer.UnknownNamespaceException e) {
+            // Expected error due to unhandled namespace for attribute
+            System.out.println("Caught expected UnknownNamespaceException: " + e.getMessage());
+        } catch (Exception e) {
+            // Unexpected exceptions
+            fail("Unexpected exception: " + e.getMessage());
+        }
+    }
+}

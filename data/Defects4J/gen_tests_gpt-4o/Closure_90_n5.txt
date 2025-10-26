@@ -1,0 +1,70 @@
+
+import java.io.*;
+import java.util.concurrent.TimeUnit;
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+public class ClosureCompilerBugTest {
+
+    @Test
+    public void testThisEmitWarningWithTypedef() throws IOException, InterruptedException {
+        // JavaScript code to test
+        String jsCode = 
+            "goog.provide('bug');\n" +
+            "\n" +
+            "/**\n" +
+            " * @this {bug.Thing}\n" +
+            " */\n" +
+            "bug.sharedMethod = function() {};\n" +
+            "\n" +
+            "/**\n" +
+            " * @constructor\n" +
+            " */\n" +
+            "bug.A = function() {};\n" +
+            "\n" +
+            "/**\n" +
+            " * @constructor\n" +
+            " */\n" +
+            "bug.B = function() {};\n" +
+            "\n" +
+            "/**\n" +
+            " * @type {bug.A|bug.B}\n" +
+            " */\n" +
+            "bug.Thing = goog.typedef;\n";
+
+        // Write the JavaScript code to a temporary file
+        File tempFile = File.createTempFile("closure_compiler_test", ".js");
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile))) {
+            writer.write(jsCode);
+        }
+
+        // Run the closure compiler on the temporary file
+        ProcessBuilder processBuilder = new ProcessBuilder(
+            "java", "-jar", "path/to/closure-compiler.jar",
+            "--js", tempFile.getAbsolutePath());
+
+        // Redirect error stream to capture warnings
+        processBuilder.redirectErrorStream(true);
+
+        Process process = processBuilder.start();
+
+        // Capture the output
+        StringBuilder output = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append('\n');
+            }
+        }
+
+        // Wait for the process to complete
+        process.waitFor(10, TimeUnit.SECONDS);
+
+        // Check for specific warning in the output
+        String expectedWarning = "WARNING - @this type of a function must be an object";
+        assertTrue("Expected warning not found in output", output.toString().contains(expectedWarning));
+
+        // Delete the temporary file
+        tempFile.delete();
+    }
+}

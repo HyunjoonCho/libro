@@ -1,0 +1,58 @@
+java
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import javax.script.Invocable;
+import javax.script.ScriptEngineManager;
+import javax.script.ScriptEngine;
+import javax.script.ScriptException;
+
+import org.junit.Test;
+
+import sun.reflect.annotation.AnnotationInvocationHandler;
+
+public class InvokerTransformerTest {
+
+    @Test
+    public void testInvokerTransformer() throws ScriptException {
+        ScriptEngineManager manager = new ScriptEngineManager();
+        ScriptEngine engine = manager.getEngineByName("js");
+        Invocable invocable = (Invocable) engine;
+
+        // Create a serializable collection
+        Set<Integer> set = new HashSet<>();
+        set.add(1);
+        set.add(2);
+        set.add(3);
+
+        // Create an AnnotationInvocationHandler
+        AnnotationInvocationHandler handler = new AnnotationInvocationHandler(new Object() {
+            public Set<Integer> entrySet() {
+                return set;
+            }
+        });
+
+        // Serialize the handler
+        byte[] serializedHandler = serialize(handler);
+
+        // Deserialize the handler
+        Object deserializedHandler = deserialize(serializedHandler);
+
+        // Get the entrySet from the deserialized handler
+        Set<?> entrySet = (Set<?>) AnnotationInvocationHandler.class.getMethod("entrySet").invoke(deserializedHandler);
+
+        // Use the entrySet to execute arbitrary code
+        AtomicInteger counter = new AtomicInteger();
+        entrySet.forEach(e -> counter.incrementAndGet());
+        assertEquals(3, counter.get());
+    }
+
+    private byte[] serialize(Object obj) throws Exception {
+        return new ObjectInputStream(new ByteArrayInputStream()).readObject(obj);
+    }
+
+    private Object deserialize(byte[] data) throws Exception {
+        return new ObjectInputStream(new ByteArrayInputStream(data)).readObject();
+    }
+}

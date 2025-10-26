@@ -1,0 +1,59 @@
+
+import org.apache.commons.lang3.builder.ToStringStyle;
+import org.junit.Test;
+import java.lang.reflect.Field;
+import java.util.Map;
+
+public class MemoryLeakTest {
+
+    @Test
+    public void testForMemoryLeakInToStringStyle() throws Exception {
+        // Access the internal ThreadLocal ToStringStyle class
+        Field threadLocalField = ToStringStyle.class.getDeclaredField("REGISTRY");
+        threadLocalField.setAccessible(true);
+
+        // this represents the ThreadLocal's internal map, storing all values for different threads
+        ThreadLocal<?> threadLocal = (ThreadLocal<?>) threadLocalField.get(null);
+        Field threadLocalMapField = ThreadLocal.class.getDeclaredField("threadLocals");
+        threadLocalMapField.setAccessible(true);
+
+        // Get the ThreadLocal map
+        Object threadLocalMap = threadLocalMapField.get(Thread.currentThread());
+
+        // Check the size of the ThreadLocal map before and after use
+        int sizeBeforeUse = getThreadLocalMapSize(threadLocalMap);
+        triggerToStringStyleUsage();
+        int sizeAfterUse = getThreadLocalMapSize(threadLocalMap);
+
+        // Ensure the size of the ThreadLocal map remains unchanged, indicating no memory leak
+        assertEquals("ThreadLocal map size increased, indicating a potential memory leak.", sizeBeforeUse, sizeAfterUse);
+    }
+
+    private int getThreadLocalMapSize(Object threadLocalMap) throws Exception {
+        if (threadLocalMap == null) {
+            return 0;
+        }
+
+        // The "table" field contains all the entries
+        Field tableField = threadLocalMap.getClass().getDeclaredField("table");
+        tableField.setAccessible(true);
+        Object[] table = (Object[]) tableField.get(threadLocalMap);
+
+        // Count non-null entries
+        int count = 0;
+        if (table != null) {
+            for (Object entry : table) {
+                if (entry != null) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    private void triggerToStringStyleUsage() {
+        // Trigger the use of ToStringStyle to populate the ThreadLocal
+        ToStringStyle style = ToStringStyle.DEFAULT_STYLE;
+        style.append(null, "example", null, null, true);
+    }
+}

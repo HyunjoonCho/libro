@@ -1,0 +1,125 @@
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Random;
+import java.util.logging.Logger;
+
+import static org.junit.Assert.fail;
+
+public class SerializationBugTest {
+
+    private static final Logger logger = Logger.getLogger(SerializationBugTest.class.getName());
+    private final UUID user = UUID.randomUUID();
+
+    @Test
+    public void spamTest() {
+        ObjectMapper mapper = new ObjectMapper();
+        Map<ObjectUserKey, ServerIndexPair> ssip = new ConcurrentHashMap<>();
+        try {
+            for (int i = 0; i < 10000; ++i) {
+                byte[] indexPairBytes = new byte[2080];
+                new Random().nextBytes(indexPairBytes);
+                ServerIndexPair sip = new ServerIndexPair(indexPairBytes);
+
+                byte[] s = mapper.writeValueAsBytes(Map.of(UUID.randomUUID().toString(), sip));
+                Map<String, ServerIndexPair> metadata = mapper.readValue(s, new TypeReference<Map<String, ServerIndexPair>>() {});
+                for (Map.Entry<String, ServerIndexPair> metadataEntry : metadata.entrySet()) {
+                    ServerIndexPair indexPair = metadataEntry.getValue();
+                    ssip.put(new ObjectUserKey(metadataEntry.getKey(), user), indexPair);
+                }
+                logger.info("Iteration: " + i);
+            }
+        } catch (Exception e) {
+            fail("An exception occurred: " + e.getMessage());
+        }
+    }
+}
+
+class ServerIndexPair {
+    public static final String INDEX_PAIR_FIELD = "indexPair";
+    private final byte[] indexPair;
+
+    @JsonCreator
+    public ServerIndexPair(@JsonProperty(INDEX_PAIR_FIELD) byte[] indexPair) {
+        if (indexPair.length != 2080) {
+            throw new IllegalStateException("Index pair must be 2080 bytes long.");
+        }
+        this.indexPair = indexPair;
+    }
+
+    @JsonProperty(INDEX_PAIR_FIELD)
+    public byte[] getIndexPair() {
+        return indexPair;
+    }
+}
+
+class ObjectUserKey {
+    public static final String SEPARATOR = ":";
+    private final String objectId;
+    private final UUID userKey;
+
+    @JsonCreator
+    public ObjectUserKey(@JsonProperty("objectId") String objectId, @JsonProperty("userKey") UUID userKey) {
+        this.objectId = objectId;
+        this.userKey = userKey;
+    }
+
+    @JsonProperty("objectId")
+    public String getObjectId() {
+        return objectId;
+    }
+
+    @JsonProperty("userKey")
+    public UUID getUserKey() {
+        return userKey;
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + ((objectId == null) ? 0 : objectId.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null) return false;
+        if (!(obj instanceof ObjectUserKey)) return false;
+        ObjectUserKey other = (ObjectUserKey) obj;
+        if (objectId == null) {
+            if (other.objectId != null) return false;
+        } else if (!objectId.equals(other.objectId)) return false;
+        if (userKey == null) {
+            if (other.userKey != null) return false;
+        } else if (!userKey.equals(other.userKey)) return false;
+        return true;
+    }
+
+    @Override
+    public String toString() {
+        return userKey + SEPARATOR + objectId;
+    }
+
+    public static ObjectUserKey fromString(String value) {
+        int index = value.lastIndexOf(SEPARATOR);
+        if (index == -1) {
+            throw new IllegalStateException("Separator character " + SEPARATOR + " should be present for ObjectUserKey");
+        }
+        String userKeyString = value.substring(0, index);
+        String objectIdString = value.substring(index + 1);
+        UUID userKey = UUID.fromString(userKeyString);
+        return new ObjectUserKey(objectIdString, userKey);
+    }
+
+    public byte[] asBytes() {
+        return this.toString().getBytes();
+    }
+}

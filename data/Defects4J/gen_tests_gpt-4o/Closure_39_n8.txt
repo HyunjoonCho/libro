@@ -1,0 +1,69 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.Result;
+import org.junit.Test;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+
+import static org.junit.Assert.assertTrue;
+
+public class ExternExportTest {
+
+    @Test
+    public void testExternExportWithTypedef() throws Exception {
+        // JavaScript source simulating the problematic structure
+        String jsSource = ""
+            + "/** @typedef {Object<string, number>} */\n"
+            + "var TypeDef;\n"
+            + "\n"
+            + "/**\n"
+            + " * Function using typedef (above) properly\n"
+            + " * @param {TypeDef} obj\n"
+            + " */\n"
+            + "function useTypeDef(obj) {}\n"
+            + "\n"
+            + "/**\n"
+            + " * Another function with optional param referencing typedef (below)\n"
+            + " * @param {TypeDef=} obj\n"
+            + " */\n"
+            + "function useTypeDefOptional(obj) {}\n";
+
+        // Output stream to capture compiler result
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        PrintStream originalOut = System.out;
+        System.setOut(new PrintStream(output));
+
+        try {
+            // Configuration for Closure Compiler
+            String[] args = {
+                "--js", "-",                  // Read from standard input
+                "--externs", "externs.js",    // Externs output file (simulated in this test)
+                "--externs_export", "",       // Enable extern exports
+                "--output_wrapper",           // Wrapper for output
+                "(function(){%output%})();"
+            };
+
+            // Running the compiler with the test input via stdin
+            CommandLineRunner runner = new CommandLineRunner(args);
+            Result result = runner.run();
+
+            // Check that the compilation was successful
+            assertTrue("Compilation failed", result.success);
+
+            // Check that externs were generated
+            String externsOutput = output.toString();
+            System.out.println(externsOutput);
+
+            // Validate the output
+            // NOTE: Adjust the assertion below based on your exact requirements.
+            // This is to check if the `...` issue appears or not.
+            assertTrue("Externs output should handle typedef correctly",
+                       !externsOutput.contains("..."));
+
+        } finally {
+            // Reset System.out to its original stream
+            System.setOut(originalOut);
+        }
+    }
+}

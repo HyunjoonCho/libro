@@ -1,0 +1,41 @@
+
+import com.google.javascript.jscomp.*;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class DependencySortingTest {
+
+    @Test
+    public void testDependencySortingWithoutClosurePass() {
+        // Setup Compiler and Compiler Options
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        
+        // Disable closure pass
+        options.setClosurePass(false);
+
+        // Enable dependency sorting
+        DependencyOptions dependencyOptions = new DependencyOptions();
+        dependencyOptions.setDependencySorting(true);
+        options.setDependencyOptions(dependencyOptions);
+
+        // Mock JS input files
+        SourceFile input1 = SourceFile.fromCode("input1.js", "goog.require('goog.bar');\nvar foo = 1;");
+        SourceFile input2 = SourceFile.fromCode("input2.js", "goog.provide('goog.bar');\nvar bar = 2;");
+
+        // Compile
+        Result result = compiler.compile(
+                new JSSourceFile[]{},
+                new JSSourceFile[]{input1, input2},
+                options);
+
+        // Check the compilation result
+        String compiledCode = compiler.toSource();
+        
+        // Due to the bug in r1824, the dependency order won't be correct
+        // Check if the compiled code has incorrect order
+        String expectedIncorrectOrderCode = "goog.require('goog.bar'); var foo = 1;goog.provide('goog.bar'); var bar = 2;";
+        
+        assertTrue("Dependency sorting failed with closurePass set to false", compiledCode.equals(expectedIncorrectOrderCode));
+    }
+}

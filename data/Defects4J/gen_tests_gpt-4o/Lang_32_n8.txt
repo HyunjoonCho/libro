@@ -1,0 +1,46 @@
+
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
+import org.junit.Test;
+
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertNull;
+
+public class ToStringStyleMemoryLeakTest {
+
+    private static class MockWebAppClassLoader extends ClassLoader {
+        public MockWebAppClassLoader(ClassLoader parent) {
+            super(parent);
+        }
+    }
+
+    @Test
+    public void testToStringStyleMemoryLeak() throws Exception {
+        // Simulate a context (web app) using ToStringStyle
+        List<WeakReference<ClassLoader>> classLoaders = new ArrayList<>();
+
+        for (int i = 0; i < 10; i++) {
+            MockWebAppClassLoader webAppClassLoader = new MockWebAppClassLoader(getClass().getClassLoader());
+            classLoaders.add(new WeakReference<>(webAppClassLoader));
+
+            // Simulate usage of ToStringStyle in the web app
+            Class<?> clazz = Class.forName("org.apache.commons.lang3.builder.ToStringBuilder", true, webAppClassLoader);
+            Object instance = clazz.getConstructor(Object.class, ToStringStyle.class)
+                                   .newInstance(new Object(), ToStringStyle.DEFAULT_STYLE);
+
+            // Explicitly clear any references that may be held by the class loader
+            webAppClassLoader.clearAssertionStatus();
+        }
+
+        // Force GC and check if any class loaders are still referenced
+        System.gc();
+
+        // Check that all class loaders have been garbage collected
+        for (WeakReference<ClassLoader> ref : classLoaders) {
+            assertNull("ClassLoader should have been garbage collected", ref.get());
+        }
+    }
+}

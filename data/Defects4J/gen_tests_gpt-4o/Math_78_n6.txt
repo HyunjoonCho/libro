@@ -1,0 +1,99 @@
+
+import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
+import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
+import org.apache.commons.math3.ode.sampling.StepHandler;
+import org.apache.commons.math3.ode.sampling.StepInterpolator;
+import org.apache.commons.math3.ode.events.EventHandler;
+import org.junit.Test;
+import static org.junit.Assert.assertTrue;
+
+public class ODEIntegrationTest {
+
+    @Test
+    public void testCloseEventsDetection() {
+        double minStep = 0.001;
+        double maxStep = 10.0;
+        double absTolerance = 1.0e-10;
+        double relTolerance = 1.0e-10;
+        
+        DormandPrince853Integrator integrator = new DormandPrince853Integrator(minStep, maxStep, absTolerance, relTolerance);
+
+        // Define the differential equations
+        FirstOrderDifferentialEquations equations = new ExampleODE();
+
+        // Define initial conditions and time
+        double[] y = new double[] {0.0}; // initial state
+        double t0 = 0.0;  // initial time
+        double t1 = 200.0; // end time
+
+        // Add an event handler for close events
+        CloseEventsHandler handler = new CloseEventsHandler(1e-5);
+        integrator.addEventHandler(handler, 1.0, 1e-10, 100);
+
+        // Set the step handler
+        integrator.addStepHandler(new StepHandler() {
+            @Override
+            public void handleStep(StepInterpolator interpolator, boolean isLast) {
+                // No operation needed for this test
+            }
+
+            @Override
+            public void init(double t0, double[] y0, double t) {
+                // No operation needed for this test
+            }
+        });
+
+        // Integrate
+        integrator.integrate(equations, t0, y, t1, y);
+
+        // The test should ensure both events are detected
+        assertTrue("Both events should have been detected!", handler.isFirstEventDetected && handler.isSecondEventDetected);
+    }
+
+    private static class ExampleODE implements FirstOrderDifferentialEquations {
+        public int getDimension() {
+            return 1;
+        }
+
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = 1.0; // simple derivative that simulates a constant rate of change
+        }
+    }
+
+    private static class CloseEventsHandler implements EventHandler {
+
+        private final double tolerance;
+        public boolean isFirstEventDetected = false;
+        public boolean isSecondEventDetected = false;
+
+        public CloseEventsHandler(double tolerance) {
+            this.tolerance = tolerance;
+        }
+
+        @Override
+        public double g(double t, double[] y) {
+            // Simulate two close events at t = 90.0 and t = 135.0
+            if (Math.abs(t - 90.0) < tolerance) {
+                return t - 90.0;
+            } else if (Math.abs(t - 135.0) < tolerance) {
+                return t - 135.0;
+            }
+            return Double.MAX_VALUE;
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            if (Math.abs(t - 90.0) < tolerance) {
+                isFirstEventDetected = true;
+            } else if (Math.abs(t - 135.0) < tolerance) {
+                isSecondEventDetected = true;
+            }
+            return Action.STOP; // Stop to mark event detection
+        }
+
+        @Override
+        public void resetState(double t, double[] y) {
+            // No operation needed for this test
+        }
+    }
+}

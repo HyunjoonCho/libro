@@ -1,0 +1,62 @@
+
+import org.apache.commons.math3.optim.MaxEval;
+import org.apache.commons.math3.optim.OptimizationData;
+import org.apache.commons.math3.optim.SimpleBounds;
+import org.apache.commons.math3.optim.SimpleValueChecker;
+import org.apache.commons.math3.optim.nonlinear.scalar.GoalType;
+import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.CMAESOptimizer;
+import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.CMAESOptimizer.PopulationSize;
+import org.apache.commons.math3.optim.nonlinear.scalar.ObjectiveFunction;
+import org.junit.Test;
+import static org.junit.Assert.assertTrue;
+
+public class CMAESOptimizerTest {
+
+    private static final double[] START_POINT = {0.0, 0.0};
+    private static final double TOLERANCE = 1e-9;
+    
+    @Test
+    public void testWideBoundsCausingNaN() {
+        CMAESOptimizer optimizer = new CMAESOptimizer(
+            1000, // max iterations
+            0.0,  // stop fitness
+            true, // isActiveCMA
+            100,  // lambda, population size / number of candidate solutions
+            5,    // max condition Epsilon
+            new SimpleValueChecker(TOLERANCE, TOLERANCE),
+            1,    // random generator
+            false // generate statistics
+        );
+
+        OptimizationData[] optimizationData = new OptimizationData[] {
+            GoalType.MINIMIZE,
+            new ObjectiveFunction(point -> {
+                for (double p : point) {
+                    if (Double.isNaN(p)) {
+                        // If any parameter is NaN, fail the test
+                        assertTrue("Received NaN parameter", false);
+                    }
+                }
+                return computeFunction(point);
+            }),
+            new MaxEval(1000),
+            new PopulationSize(50),
+            // Provide reasonably wide bounds
+            new SimpleBounds(
+                new double[]{-Double.MAX_VALUE, -Double.MAX_VALUE},
+                new double[]{Double.MAX_VALUE, Double.MAX_VALUE}
+            )
+        };
+
+        optimizer.optimize(optimizationData);
+    }
+
+    private double computeFunction(double[] point) {
+        // A simple function to optimize, e.g., the sum of squares
+        double sum = 0.0;
+        for (double val : point) {
+            sum += val * val;
+        }
+        return sum;
+    }
+}

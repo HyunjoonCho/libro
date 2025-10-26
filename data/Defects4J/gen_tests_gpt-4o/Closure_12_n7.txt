@@ -1,0 +1,80 @@
+
+import static org.junit.Assert.assertEquals;
+
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
+import com.google.javascript.jscomp.CommandLineRunner;
+
+public class ClosureCompilerBugTest {
+
+    public static void main(String[] args) throws Exception {
+        testTryCatchCompilationIssue();
+    }
+    
+    public static void testTryCatchCompilationIssue() throws Exception {
+        String originalScript = 
+                "function a() {\n" +
+                "    var x = '1';\n" +
+                "    try {\n" +
+                "        x += somefunction();\n" +
+                "    } catch(e) {\n" +
+                "    }\n" +
+                "    x += '2';\n" +
+                "    try {\n" +
+                "        x += somefunction();\n" +
+                "    } catch(e) {\n" +
+                "    }\n" +
+                "    document.write(x);\n" +
+                "}\n" +
+                "a();\n" +
+                "a();\n";
+        
+        String expectedScript = 
+                "function b() {\n" +
+                "    var a;\n" +
+                "    try {\n" +
+                "        a = '1' + somefunction();\n" +
+                "    } catch(c) {\n" +
+                "    }\n" +
+                "    a = a + '2';\n" +  // This line should be outside of try
+                "    try {\n" +
+                "        a = a + somefunction();\n" +
+                "    } catch(d) {\n" +
+                "    }\n" +
+                "    document.write(a);\n" +
+                "}\n" +
+                "b();\n" +
+                "b();\n";
+
+        // Write original script to a temporary file
+        File tempInputFile = File.createTempFile("test", ".js");
+        BufferedWriter writer = new BufferedWriter(new FileWriter(tempInputFile));
+        writer.write(originalScript);
+        writer.close();
+
+        // Prepare output file
+        File tempOutputFile = File.createTempFile("compiled", ".js");
+
+        // Run Closure Compiler
+        String[] compilerArgs = {
+                "--js", tempInputFile.getAbsolutePath(),
+                "--js_output_file", tempOutputFile.getAbsolutePath()
+        };
+        CommandLineRunner.main(compilerArgs);
+
+        // Read compiled code
+        String compiledCode = new String(Files.readAllBytes(Paths.get(tempOutputFile.getAbsolutePath())));
+
+        // Check if the output is as expected
+        assertEquals(expectedScript, compiledCode.trim());
+
+        // Clean up temporary files
+        tempInputFile.delete();
+        tempOutputFile.delete();
+    }
+}

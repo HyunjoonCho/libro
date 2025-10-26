@@ -1,0 +1,42 @@
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.filter.FilteringParserDelegate;
+import com.fasterxml.jackson.core.filter.TokenFilter;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.io.IOException;
+
+import static org.junit.Assert.assertEquals;
+
+public class FilteringParserDelegateTest {
+    
+    @Test
+    public void testAllowMultipleMatches() throws IOException {
+        String json = "{ \"items\": [ { \"id\": 1 }, { \"id\": 2 }, { \"id\": 3 } ] }";
+        
+        JsonFactory factory = new JsonFactory();
+        ObjectMapper mapper = new ObjectMapper(factory);
+        TokenFilter filter = new TokenFilter() {
+            @Override
+            public TokenFilter includeProperty(String name) {
+                if ("id".equals(name)) {
+                    return TokenFilter.INCLUDE_ALL;
+                }
+                return null;
+            }
+        };
+
+        boolean allowMultipleMatches = true;
+        FilteringParserDelegate parser = new FilteringParserDelegate(
+                factory.createParser(json), filter, allowMultipleMatches, false);
+
+        JsonNode filteredNode = mapper.readTree(parser);
+        assertEquals(3, filteredNode.get("items").size());
+        assertEquals(1, filteredNode.get("items").get(0).get("id").asInt());
+        assertEquals(2, filteredNode.get("items").get(1).get("id").asInt());
+        assertEquals(3, filteredNode.get("items").get(2).get("id").asInt());
+    }
+}

@@ -1,0 +1,55 @@
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.Module;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import org.junit.jupiter.api.Test;
+
+public class JsonValuePrecedenceTest {
+
+    static class CustomType {
+        private final String value;
+
+        public CustomType(String value) {
+            this.value = value;
+        }
+
+        @JsonValue
+        public String getValue() {
+            return "Value from JsonValue: " + value;
+        }
+    }
+
+    static class CustomTypeSerializer extends StdSerializer<CustomType> {
+
+        public CustomTypeSerializer() {
+            super(CustomType.class);
+        }
+
+        @Override
+        public void serialize(CustomType customType, com.fasterxml.jackson.core.JsonGenerator gen, SerializerProvider provider) throws IOException {
+            gen.writeString("Value from custom serializer: " + customType.value);
+        }
+    }
+
+    @Test
+    public void testCustomSerializerVsJsonValue() throws JsonProcessingException {
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        // Register custom serializer
+        Module module = new SimpleModule().addSerializer(CustomType.class, new CustomTypeSerializer());
+        objectMapper.registerModule(module);
+
+        CustomType customType = new CustomType("test");
+        String json = objectMapper.writeValueAsString(customType);
+
+        // Assert that the custom serializer should have been used, not the @JsonValue method
+        assertEquals("\"Value from custom serializer: test\"", json);
+    }
+}

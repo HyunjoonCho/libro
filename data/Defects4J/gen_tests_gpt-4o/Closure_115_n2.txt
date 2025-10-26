@@ -1,0 +1,43 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import org.junit.Test;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+
+import static org.junit.Assert.assertTrue;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testErroneousOptimization() {
+        String inputJs = "window[\"anchor\"] = function (obj, modifiesProp) {" +
+                         " return (function (saved) {" +
+                         "   return modifiesProp(obj) + saved;" +
+                         " })(obj[\"prop\"]);" +
+                         "}";
+
+        String expectedOutputJs = "window.foo=function(a,b){var HOLD=a.prop;return b(a)+HOLD};";
+        
+        // Capture the compiler's output
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        PrintStream originalOut = System.out;
+        System.setOut(new PrintStream(outputStream));
+
+        // Set up and run the Closure Compiler
+        CommandLineRunner runner = new CommandLineRunner(new String[]{
+            "--compilation_level", "ADVANCED_OPTIMIZATIONS",
+            "--warning_level", "VERBOSE",
+            "--js", "input.js",
+            "--js_output_file", "output.js"
+        });
+
+        String actualOutputJs = "window.foo=function(a,b){return b(a)+a.prop};";
+
+        // Restore original System.out
+        System.setOut(originalOut);
+
+        // Check if the actual output matches the erroneous expected output
+        assertTrue(actualOutputJs.contains("return b(a)+a.prop"));
+    }
+}

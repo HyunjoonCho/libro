@@ -1,0 +1,67 @@
+
+import org.apache.commons.math3.optim.nonlinear.scalar.GoalType;
+import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.CMAESOptimizer;
+import org.apache.commons.math3.optim.InitialGuess;
+import org.apache.commons.math3.optim.MaxEval;
+import org.apache.commons.math3.optim.SimpleBounds;
+import org.apache.commons.math3.optim.SimpleValueChecker;
+import org.apache.commons.math3.optim.nonlinear.scalar.ObjectiveFunction;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class CMAESOptimizerTest {
+
+    @Test
+    public void testCMAESOptimizerResolution() {
+        // Define a simple quadratic objective function.
+        ObjectiveFunction objectiveFunction = new ObjectiveFunction(point -> {
+            // A simple quadratic function
+            double x = point[0];
+            return (x - 4) * (x - 4);
+        });
+
+        // Set bounds near lower and upper extremes and observe the resolution
+        double[] startPoint = {0.5};
+        double[] lowerBound = {0.0};
+        double[] upperBound = {1.0};
+
+        // Instantiate CMAESOptimizer with high tolerance for detailed differences
+        CMAESOptimizer optimizer = new CMAESOptimizer(10000, 
+            Double.MIN_VALUE, 
+            true, 
+            0, 
+            0, 
+            RandomGeneratorFactory.createRandomGenerator(new Random(0)), 
+            false, 
+            new SimpleValueChecker(1e-9, 1e-9));
+
+        // Lower bound optimization
+        double[] resultNearLower = optimizer.optimize(
+            new MaxEval(10000),
+            objectiveFunction,
+            GoalType.MINIMIZE,
+            new InitialGuess(startPoint),
+            new SimpleBounds(lowerBound, upperBound)
+        ).getPoint();
+
+        // Assert that it fits finely near the lower bound
+        double nearLowerBoundResolution = Math.abs(resultNearLower[0] - 0.0); // Close to 0
+
+        // Upper bound optimization
+        double[] startPointUpper = {0.5 + 1e-9}; // Slightly offset for the upper bound
+        double[] resultNearUpper = optimizer.optimize(
+            new MaxEval(10000),
+            objectiveFunction,
+            GoalType.MINIMIZE,
+            new InitialGuess(startPointUpper),
+            new SimpleBounds(lowerBound, upperBound)
+        ).getPoint();
+
+        // Assert resolution difference between bounds
+        double nearUpperBoundResolution =  Math.abs(resultNearUpper[0] - 1.0); // Close to 1
+
+        // This demonstrates the difference in resolution
+        assertTrue("Resolution at lower bound should be finer than at upper bound",
+                   nearLowerBoundResolution < nearUpperBoundResolution);
+    }
+}

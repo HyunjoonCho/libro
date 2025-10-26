@@ -1,0 +1,45 @@
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.rhino.Node;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class ClosureCompilerBugTest {
+
+    @Test
+    public void testThisWithTypedef() {
+        String jsCode = ""
+            + "goog.provide('bug');"
+            + "/**"
+            + " * @this {bug.Thing}"
+            + " */"
+            + "bug.sharedMethod = function() {};"
+            + "/**"
+            + " * @constructor"
+            + " */"
+            + "bug.A = function() {};"
+            + "/**"
+            + " * @constructor"
+            + " */"
+            + "bug.B = function() {};"
+            + "/**"
+            + " * @typedef {bug.A|bug.B}"
+            + " */"
+            + "bug.Thing;";
+
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        Result result = compiler.compile(
+            CommandLineRunner.getDefaultExterns(), 
+            SourceFile.fromCode("testfile.js", jsCode),
+            options
+        );
+
+        for (JSError error : result.warnings) {
+            assertEquals("WARNING - @this type of a function must be an object", error.description);
+        }
+    }
+}

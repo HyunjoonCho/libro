@@ -1,0 +1,76 @@
+
+import static org.junit.Assert.assertEquals;
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.JSError;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import java.util.Collections;
+
+public class ClosureCompilerBugTest {
+
+    @Test
+    public void testTryCatchCompilation() {
+        String originalJs = "function a() {" +
+                            " var x = '1';" +
+                            " try {" +
+                            " x += somefunction();" +
+                            " } catch(e) {" +
+                            " }" +
+                            " x += '2';" +
+                            " try {" +
+                            " x += somefunction();" +
+                            " } catch(e) {" +
+                            " }" +
+                            " document.write(x);" +
+                            "}" +
+                            "a();" +
+                            "a();";
+
+        // Expected output if processed correctly
+        String expectedOutput = "function a(){" +
+                                " var x = '1';" +
+                                " try{" +
+                                " x += somefunction(); " +
+                                "}catch(e){}" +
+                                " x += '2';" +
+                                " try{" +
+                                " x += somefunction(); " +
+                                "}catch(e){}" +
+                                " document.write(x);" +
+                                "}" +
+                                " a();" +
+                                " a();";
+
+        Compiler compiler = new Compiler();
+
+        // Create the CompilerOptions object
+        CompilerOptions options = new CompilerOptions();
+        // Set options, e.g., options.setWhateverOption(true);
+
+        // Compile!
+        SourceFile input = SourceFile.fromCode("input.js", originalJs);
+        SourceFile extern = SourceFile.fromCode("externs.js", "");
+        Result result = compiler.compile(Collections.singletonList(extern), 
+                                         Collections.singletonList(input),
+                                         options);
+
+        // Ensure the compilation succeeds
+        if (result.success) {
+            // Get the compiled code
+            String compiledOutput = compiler.toSource();
+            
+            // Check the compiled output against the expected output
+            assertEquals(expectedOutput.replaceAll("\\s+", ""), 
+                         compiledOutput.replaceAll("\\s+", ""));
+        } else {
+            // Print compilation errors
+            for (JSError error : result.errors) {
+                System.err.println("Compile error: " + error.toString());
+            }
+            throw new AssertionError("Compilation failed.");
+        }
+    }
+}

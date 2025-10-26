@@ -1,0 +1,54 @@
+
+import com.google.javascript.rhino.head.Context;
+import com.google.javascript.rhino.head.Scriptable;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.JSSourceFile;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import com.google.javascript.jscomp.WarningLevel;
+
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+
+public class GlobalThisWarningTest {
+
+    @Test
+    public void testGlobalThisWarning() throws Exception {
+        Compiler compiler = new Compiler();
+
+        JSSourceFile extern = JSSourceFile.fromCode("externs.js", "");
+        JSSourceFile input = JSSourceFile.fromCode("input.js",
+                "/** @constructor */\n" +
+                "function Foo() {\n" +
+                "   this._bar = null;\n" +
+                "}\n" +
+                "\n" +
+                "/** @this {Foo} */\n" +
+                "function writeMethodWithAnnotation() {\n" +
+                "   this._bar = 123;\n" +
+                "}\n" +
+                "\n" +
+                "/** @this {Foo} */\n" +
+                "function readMethodWithAnnotation() {\n" +
+                "   return this._bar;\n" +
+                "}\n" +
+                "\n" +
+                "function writeMethodWithoutAnnotation() {\n" +
+                "   this._bar = 123;\n" +
+                "}\n" +
+                "function readMethodWithoutAnnotation() {\n" +
+                "   return this._bar;\n" +
+                "}\n"
+        );
+
+        compiler.compile(extern, input, Compiler.getOptionsForCompilationLevel(Compiler.CompilationLevel.ADVANCED_OPTIMIZATIONS));
+
+        Result result = compiler.getResult();
+        String warnings = result.errors.length == 0 ? compiler.toSource() : compiler.toSource() + "\nWarnings:\n" + result;
+
+        // Expect to see a warning for the writeMethodWithoutAnnotation
+        assertTrue("Expected warning for the use of 'this' without annotation in readMethodWithoutAnnotation.\n" + warnings,
+                result.warnings.length > 0 && result.warnings.toString().contains("dangerous use of the global this object"));
+    }
+}

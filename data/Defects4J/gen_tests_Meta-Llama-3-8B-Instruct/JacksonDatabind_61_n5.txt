@@ -1,0 +1,49 @@
+java
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.jsontype.impl.StdTypeResolverBuilder;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
+
+public class JacksonSerializationTest {
+
+    @Test
+    public void testSerialization() throws IOException {
+        Map<String, Object> mapData = new HashMap<>();
+        Data data = new Data();
+        data.key = 1;
+        mapData.put("longInMap", 2L);
+        mapData.put("longAsField", data);
+
+        ObjectMapper mapper = new ObjectMapper();
+        StdTypeResolverBuilder resolver = new StdTypeResolverBuilder();
+        resolver.init(JsonTypeInfo.Id.CLASS, null);
+        resolver.inclusion(JsonTypeInfo.As.PROPERTY);
+        resolver.typeProperty("_t");
+        mapper.setDefaultTyping(resolver);
+        mapper.enable(SerializationFeature.INDENT_OUTPUT);
+
+        String json = mapper.writeValueAsString(mapData);
+
+        // Check that serialization works
+        assertTrue(json.contains("\"longInMap\" : [ \"java.lang.Long\", 2 ]"));
+        assertTrue(json.contains("\"longAsField\" : {\"_t\" : \"com.example.JacksonSerializationTest$Data\", \"key\" : [ \"java.lang.Long\", 1 ]}"));
+
+        // Check that deserialization fails
+        assertThrows(JsonMappingException.class, () -> {
+            mapper.readValue(json, Map.class);
+        });
+    }
+
+    static class Data {
+
+        public long key;
+    }
+}

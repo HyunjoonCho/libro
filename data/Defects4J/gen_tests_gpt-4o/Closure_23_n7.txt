@@ -1,0 +1,43 @@
+
+import org.junit.Test;
+
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.CompilationLevel;
+import com.google.javascript.jscomp.JSSourceFile;
+import com.google.javascript.rhino.Node;
+
+import java.util.List;
+import java.util.ArrayList;
+
+import static org.junit.Assert.assertEquals;
+
+public class PeepholeFoldConstantsTest {
+
+    @Test
+    public void testTryFoldArrayAccessPreservesSideEffects() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        List<JSSourceFile> externs = new ArrayList<>();
+        List<JSSourceFile> inputs = new ArrayList<>();
+
+        // Adding an input that reproduces the bug
+        inputs.add(JSSourceFile.fromCode("input.js", 
+            "console.log([console.log('hello, '), 'world!'][1]);"));
+
+        // Compile the inputs
+        compiler.compile(externs, inputs, options);
+
+        // Retrieve the root of the AST and convert it to a string
+        Node root = compiler.getRoot();
+        String optimizedOutput = compiler.toSource();
+
+        // Expected output checks for side effects
+        String expectedOutput = "console.log((console.log(\"hello, \"), \"world!\"));\n";
+        
+        // Assert that the optimized code preserves side effects
+        assertEquals(expectedOutput, optimizedOutput);
+    }
+}

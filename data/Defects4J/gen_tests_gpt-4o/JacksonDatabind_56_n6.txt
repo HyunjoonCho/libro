@@ -1,0 +1,58 @@
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.deser.std.FromStringDeserializer;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+import java.io.IOException;
+import java.util.Locale;
+
+public class LocaleDeserializationTest {
+
+    public static class LocaleDeserializer extends FromStringDeserializer<Locale> {
+        public static final LocaleDeserializer instance = new LocaleDeserializer();
+
+        protected LocaleDeserializer() {
+            super(Locale.class);
+        }
+
+        @Override
+        protected Locale _deserialize(String value, com.fasterxml.jackson.databind.DeserializationContext ctxt) throws IOException {
+            // Original implementation uses underscore only
+            if (value == null) {
+                return null;
+            }
+            int ix = value.indexOf('_');
+            if (ix < 0) {
+                // Hyphen never considered here
+                return new Locale(value);
+            }
+            String first = value.substring(0, ix);
+            String rest = value.substring(ix+1);
+            ix = rest.indexOf('_');
+            if (ix < 0) {
+                return new Locale(first, rest);
+            }
+            String second = rest.substring(0, ix);
+            String third = rest.substring(ix+1);
+            return new Locale(first, second, third);
+        }
+    }
+
+    @Test
+    public void testLocaleDeserializationWithHyphen() throws IOException {
+        String json = "\"en-US\"";  // Using hyphen as per RFC 5646
+        ObjectMapper mapper = new ObjectMapper();
+        
+        SimpleModule module = new SimpleModule();
+        module.addDeserializer(Locale.class, LocaleDeserializer.instance);
+        mapper.registerModule(module);
+        
+        Locale locale = mapper.readValue(json, Locale.class);
+        
+        // Expected to parse correctly to "en", "US" as language and country
+        assertEquals("en", locale.getLanguage());
+        assertEquals("US", locale.getCountry());
+    }
+}

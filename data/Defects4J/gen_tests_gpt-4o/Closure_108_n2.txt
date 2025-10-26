@@ -1,0 +1,42 @@
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.rhino.Node;
+import org.junit.Test;
+
+import static org.junit.Assert.assertNotNull;
+
+public class GoogScopePreconditionTest {
+
+    @Test
+    public void testPreconditionCrashWithAliasedTypeDeclaration() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        String code = ""
+            + "var goog = {};\n"
+            + "goog.scope;\n"
+            + "\n"
+            + "var ns = {};\n"
+            + "ns.sub = {};\n"
+            + "/** @constructor */\n"
+            + "ns.sub.C = function() {};\n"
+            + "\n"
+            + "goog.scope(function() {\n"
+            + "  var sub = ns.sub;\n"
+            + "  /** @type {sub.C} */\n"
+            + "  var x = null;\n"
+            + "});\n";
+
+        Node root = compiler.parseTestCode(code);
+        assertNotNull(root);
+
+        ScopedAliases scopedAliases = new ScopedAliases(compiler);
+        try {
+            scopedAliases.process(null, root);
+        } catch (IllegalStateException e) {
+            // Validation of the exception message to ensure that the crash is reproducible
+            assertNotNull(e.getMessage());
+        }
+    }
+}

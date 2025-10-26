@@ -1,0 +1,64 @@
+
+import static org.junit.Assert.assertTrue;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.JSError;
+
+import org.junit.Test;
+
+public class CompilerErrorMessageTest {
+
+    @Test
+    public void testInvalidTypeFunctionAnnotation() {
+        // Create a temporary JavaScript file with the problematic annotation
+        String jsCode = "/**\n"
+                      + " * @type function\n"
+                      + " */\n"
+                      + "var callback;\n";
+        String filePath = "test.js";
+        try {
+            Files.write(Paths.get(filePath), jsCode.getBytes());
+        } catch (IOException e) {
+            e.printStackTrace();
+            return;
+        }
+
+        // Setup the compiler options
+        CompilerOptions options = new CompilerOptions();
+        Compiler compiler = new Compiler();
+
+        // Compile the JS file
+        CommandLineRunner runner = new CommandLineRunner(
+            new String[] { "--js", filePath },
+            compiler
+        );
+        runner.run();
+
+        // Check for errors
+        JSError[] errors = compiler.getErrors();
+
+        // We expect a specific kind of parsing error
+        boolean foundExpectedError = false;
+        for (JSError error : errors) {
+            if (error.description.contains("Unexpected end of file")) {
+                foundExpectedError = true;
+            }
+        }
+
+        // Assert we found the error we were looking for
+        assertTrue("Expected parse error about 'unexpected end of file'", foundExpectedError);
+
+        // Clean up
+        try {
+            Files.delete(Paths.get(filePath));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}

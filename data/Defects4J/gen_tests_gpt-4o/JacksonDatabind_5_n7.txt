@@ -1,0 +1,71 @@
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.MapperFeature;
+import junit.framework.TestCase;
+
+public class MixinAnnotationTest extends TestCase {
+
+    public interface Contact {
+        String getCity();
+    }
+
+    public static class ContactImpl implements Contact {
+        private String city;
+
+        public ContactImpl(String city) {
+            this.city = city;
+        }
+
+        public String getCity() {
+            return city;
+        }
+    }
+
+    public static class ContactMixin implements Contact {
+        @JsonProperty
+        public String getCity() {
+            return null;
+        }
+    }
+
+    public interface Person extends Contact {}
+
+    public static class PersonImpl extends ContactImpl implements Person {
+        public PersonImpl(String city) {
+            super(city);
+        }
+    }
+
+    public static abstract class PersonMixin extends ContactMixin implements Person {}
+
+    public void testMixinAnnotationsRetention() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+
+        module.disable(MapperFeature.ALLOW_FINAL_FIELDS_AS_MUTATORS)
+              .disable(MapperFeature.AUTO_DETECT_FIELDS)
+              .disable(MapperFeature.AUTO_DETECT_GETTERS)
+              .disable(MapperFeature.AUTO_DETECT_IS_GETTERS)
+              .disable(MapperFeature.INFER_PROPERTY_MUTATORS);
+        
+        // Only setting mixin for Person, mimicking the bug situation
+        module.setMixInAnnotation(Person.class, PersonMixin.class);
+
+        objectMapper.registerModule(module);
+        objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
+
+        PersonImpl person = new PersonImpl("New York");
+
+        // Serializing PersonImpl
+        String jsonResult = objectMapper.writeValueAsString(person);
+
+        // Assert that the JSON contains the city property
+        assertTrue(jsonResult.contains("\"city\":\"New York\""));
+        
+        // Uncomment the line below for workaround to fix the issue
+        // module.setMixInAnnotation(Contact.class, ContactMixin.class);
+    }
+}

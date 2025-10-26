@@ -1,0 +1,48 @@
+
+import org.mozilla.javascript.Context;
+import org.mozilla.javascript.Scriptable;
+import org.mozilla.javascript.EcmaError;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testVariableRenamingCausesTypeError() {
+        Context context = Context.enter();
+        try {
+            Scriptable scope = context.initStandardObjects();
+            
+            // Original Function
+            String originalFunction = "function example(argument) {" +
+                                      "  var variable = argument + 1;" + 
+                                      "  return variable;" + 
+                                      "}";
+
+            // Obfuscated Function (simulating what the Compiler might produce)
+            String obfuscatedFunction = "function example(a) {" +
+                                        "  var a = a + 1;" + 
+                                        "  return a;" + 
+                                        "}";
+
+            context.evaluateString(scope, originalFunction, "originalFunction", 1, null);
+
+            // Test original function
+            Object resultOriginal = context.evaluateString(scope, "example(5)", "testOriginal", 1, null);
+            assertEquals(6.0, Context.toNumber(resultOriginal), 0);
+
+            // Setup and test obfuscated function
+            context.evaluateString(scope, obfuscatedFunction, "obfuscatedFunction", 1, null);
+
+            try {
+                context.evaluateString(scope, "example(5)", "testObfuscated", 1, null);
+                fail("Expected TypeError due to variable redeclaration");
+            } catch (EcmaError e) {
+                assertTrue(e.toString().contains("TypeError"));
+            }
+
+        } finally {
+            Context.exit();
+        }
+    }
+}

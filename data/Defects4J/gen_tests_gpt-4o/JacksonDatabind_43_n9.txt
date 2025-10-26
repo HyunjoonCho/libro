@@ -1,0 +1,47 @@
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import org.junit.Test;
+
+import java.io.IOException;
+
+import static org.junit.Assert.assertNull;
+
+public class NullTokenDeserializationTest {
+
+    static class CustomObject {
+        @JsonDeserialize(using = CustomDeserializer.class)
+        public String value;
+    }
+
+    static class CustomDeserializer extends JsonDeserializer<String> {
+        @Override
+        public String deserialize(JsonParser p, DeserializationContext ctxt)
+                throws IOException, JsonProcessingException {
+            if (p.currentToken() == null) {
+                throw new IllegalStateException("Unexpected null token");
+            }
+            return p.getText();
+        }
+    }
+
+    @Test
+    public void testNullTokenHandling() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+
+        String json = "{\"value\":null}";
+
+        try {
+            CustomObject result = mapper.readValue(json, CustomObject.class);
+            // The test should not reach here, if it does, it means no exception was thrown
+            assertNull(result.value);
+        } catch (IllegalStateException e) {
+            // Verify that the exception is related to an unexpected null token
+            assert(e.getMessage().contains("Unexpected null token"));
+        }
+    }
+}

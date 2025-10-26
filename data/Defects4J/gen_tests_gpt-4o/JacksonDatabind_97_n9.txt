@@ -1,0 +1,56 @@
+
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+public class ContextAttributesTest {
+
+    private final static ObjectMapper mapper = new ObjectMapper();
+
+    @JsonSerialize(using = CustomSer.class)
+    private static class Data {
+        public String aStr;
+    }
+
+    private static class CustomSer extends StdSerializer<Data> {
+        public CustomSer() {
+            super(Data.class);
+        }
+
+        @Override
+        public void serialize(Data value, JsonGenerator gen, SerializerProvider provider) throws IOException {
+            String attrStr = (String) provider.getAttribute("myAttr");
+            gen.writeStartObject();
+            gen.writeObjectField("aStr", "The value is: " + (attrStr == null ? "NULL" : attrStr));
+            gen.writeEndObject();
+        }
+    }
+
+    @Test
+    public void testContextAttributes() throws IOException {
+        Data data = new Data();
+        data.aStr = "Hello";
+
+        Map<String, Object> mapTest = new HashMap<>();
+        mapTest.put("data", data);
+
+        ObjectNode treeTest = mapper.createObjectNode();
+        treeTest.putPOJO("data", data);
+
+        String mapOut = mapper.writer().withAttribute("myAttr", "Hello!").writeValueAsString(mapTest);
+        assertTrue(mapOut.contains("\"aStr\":\"The value is: Hello!\""), "Context attribute not passed to Map serialization.");
+
+        String treeOut = mapper.writer().withAttribute("myAttr", "Hello!").writeValueAsString(treeTest);
+        assertTrue(treeOut.contains("\"aStr\":\"The value is: Hello!\""), "Context attribute not passed to ObjectNode serialization.");
+    }
+}

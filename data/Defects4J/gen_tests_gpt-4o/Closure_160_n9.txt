@@ -1,0 +1,58 @@
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import org.junit.Assert;
+import org.junit.Test;
+
+public class CommandLineTest {
+
+    @Test
+    public void testClosureCompilerWarningsAndErrors() throws IOException, InterruptedException {
+        // Path to your Closure Compiler jar file
+        String compilerPath = "path/to/compiler.jar";
+        // Create a temporary JavaScript file
+        String testJsPath = "test.js";
+        String jsCode = "foo = {};\nfoo.bar = function() { alert(this.baz); };";
+        java.nio.file.Files.write(java.nio.file.Paths.get(testJsPath), jsCode.getBytes());
+
+        // Run the compiler with different options and capture the output
+        String verboseOutput = runCommand(new String[]{
+            "java", "-jar", compilerPath, "--js", testJsPath, "--warning_level", "VERBOSE"
+        });
+        String globalThisOutput = runCommand(new String[]{
+            "java", "-jar", compilerPath, "--js", testJsPath, "--jscomp_warning", "globalThis"
+        });
+        String checkVarsOutput = runCommand(new String[]{
+            "java", "-jar", compilerPath, "--js", testJsPath, "--jscomp_warning", "checkVars"
+        });
+        String undefinedVarsOutput = runCommand(new String[]{
+            "java", "-jar", compilerPath, "--js", testJsPath, "--jscomp_warning", "undefinedVars"
+        });
+
+        // Assert behavior and output
+        Assert.assertTrue(verboseOutput.contains("variable foo is undefined"));
+        Assert.assertTrue(globalThisOutput.contains("dangerous use of the global this object"));
+        Assert.assertFalse(checkVarsOutput.contains("variable foo is undefined"));
+        Assert.assertFalse(undefinedVarsOutput.contains("variable foo is undefined"));
+        
+        // Clean up the test file
+        java.nio.file.Files.deleteIfExists(java.nio.file.Paths.get(testJsPath));
+    }
+
+    private String runCommand(String[] command) throws IOException, InterruptedException {
+        ProcessBuilder processBuilder = new ProcessBuilder(command);
+        processBuilder.redirectErrorStream(true);
+        Process proc = processBuilder.start();
+
+        StringBuilder output = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append(System.lineSeparator());
+            }
+        }
+        proc.waitFor();
+        return output.toString();
+    }
+}

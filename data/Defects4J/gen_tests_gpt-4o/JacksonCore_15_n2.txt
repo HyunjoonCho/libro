@@ -1,0 +1,54 @@
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.filter.FilteringParserDelegate;
+import com.fasterxml.jackson.core.filter.TokenFilter;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.io.IOException;
+
+import static org.junit.Assert.assertTrue;
+
+public class FilteringParserDelegateTest {
+
+    @Test
+    public void testAllowMultipleMatches() throws IOException {
+        String json = "{\"items\": [{\"name\": \"item1\"}, {\"name\": \"item2\"}], \"count\": 2}";
+
+        JsonFactory jsonFactory = new JsonFactory();
+        JsonParser originalParser = jsonFactory.createParser(json);
+
+        TokenFilter filter = new TokenFilter() {
+            @Override
+            public TokenFilter includeProperty(String name) {
+                return "name".equals(name) ? TokenFilter.INCLUDE_ALL : null;
+            }
+        };
+
+        // Create FilteringParserDelegate with allowMultipleMatches set to true
+        FilteringParserDelegate parser = new FilteringParserDelegate(
+                originalParser,
+                filter,
+                true, // _allowMultipleMatches
+                false
+        );
+
+        int matchCount = 0;
+
+        while (parser.nextToken() != JsonToken.END_OBJECT) {
+            if (parser.currentToken() == JsonToken.FIELD_NAME) {
+                String fieldName = parser.getCurrentName();
+                parser.nextToken(); // move to value
+                if ("name".equals(fieldName)) {
+                    matchCount++;
+                }
+            }
+        }
+
+        // Since _allowMultipleMatches should allow all "name" matches to be counted, we assert they are
+        assertTrue("Expected more than 1 match of 'name'", matchCount > 1);
+    }
+}

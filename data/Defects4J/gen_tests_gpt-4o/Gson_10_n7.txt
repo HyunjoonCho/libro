@@ -1,0 +1,65 @@
+
+import com.google.gson.Gson;
+import com.google.gson.JsonAdapter;
+import com.google.gson.TypeAdapter;
+import com.google.gson.TypeAdapterFactory;
+import com.google.gson.reflect.TypeToken;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonWriter;
+import org.junit.Test;
+
+import java.io.IOException;
+
+import static org.junit.Assert.assertEquals;
+
+public class JsonAdapterAnnotationOnPrimitiveFieldsTest {
+
+    @Test
+    public void testPrimitiveFieldAnnotationTakesPrecedenceOverDefault() {
+        Gson gson = new Gson();
+        // Serializes the object to JSON
+        String json = gson.toJson(new GadgetWithPrimitivePart(42));
+        // Asserts that the JSON output formats the number as a string
+        assertEquals("{\"part\":\"42\"}", json);
+
+        // Deserialize back to object
+        GadgetWithPrimitivePart gadget = gson.fromJson(json, GadgetWithPrimitivePart.class);
+        // Asserts that the deserialized value matches the original
+        assertEquals(42, gadget.part);
+    }
+
+    private static final class GadgetWithPrimitivePart {
+        @JsonAdapter(LongToStringTypeAdapterFactory.class)
+        final long part;
+
+        private GadgetWithPrimitivePart(long part) {
+            this.part = part;
+        }
+    }
+
+    private static final class LongToStringTypeAdapterFactory implements TypeAdapterFactory {
+        static final TypeAdapter<Long> ADAPTER = new TypeAdapter<Long>() {
+            @Override
+            public void write(JsonWriter out, Long value) throws IOException {
+                // Writes the long as a string
+                out.value(value.toString());
+            }
+
+            @Override
+            public Long read(JsonReader in) throws IOException {
+                // Reads the long value
+                return in.nextLong();
+            }
+        };
+
+        @Override
+        public <T> TypeAdapter<T> create(Gson gson, final TypeToken<T> type) {
+            Class<?> cls = type.getRawType();
+            if (Long.class.isAssignableFrom(cls) || long.class.isAssignableFrom(cls)) {
+                return (TypeAdapter<T>) ADAPTER;
+            }
+            throw new IllegalStateException("Non-long field of type " + type
+                    + " annotated with @JsonAdapter(LongToStringTypeAdapterFactory.class)");
+        }
+    }
+}

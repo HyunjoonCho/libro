@@ -1,0 +1,47 @@
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.rhino.Node;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class ClosureCompilerBugTest {
+
+    @Test
+    public void testClosureCompilerLabeledLoops() {
+        // JavaScript source code with labeled loops
+        String jsCode = "var i = 0;" +
+                "lab1: do {" +
+                "    lab2: do {" +
+                "        i++;" +
+                "        if (1) {" +
+                "            break lab2;" +
+                "        } else {" +
+                "            break lab1;" +
+                "        }" +
+                "    } while(false);" +
+                "} while(false);" +
+                "console.log(i);";
+
+        // Expected problematic output that works in all browsers except IE
+        String expectedOutput = "var a=0;do b:do{a++;break b}while(0);while(0);console.log(a);";
+
+        // Initialize the compiler
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        // Use basic optimizations which should normally include this bug (might be advanced)
+        CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        // Create the input source and compile it
+        SourceFile input = SourceFile.fromCode("testCase.js", jsCode);
+        Result result = compiler.compile(CommandLineRunner.getDefaultExterns(), ImmutableList.of(input), options);
+
+        // Get the compiled output
+        Node root = compiler.getRoot();
+        String compiledCode = compiler.toSource(root);
+
+        // Validate that the bug manifests as expected without PRETTY_PRINT in simple optimization level
+        assertEquals(expectedOutput, compiledCode);
+    }
+}

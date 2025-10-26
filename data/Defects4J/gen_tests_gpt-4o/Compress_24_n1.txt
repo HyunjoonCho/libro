@@ -1,0 +1,39 @@
+
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+
+public class TarArchiveInputStreamTest {
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testLargeUserIdInTarEntry() throws IOException {
+        // Create a header for a TAR entry with a large user ID
+        byte[] header = new byte[512];
+        // Set the file name
+        System.arraycopy("test-file.txt".getBytes(), 0, header, 0, "test-file.txt".length());
+        // Set the file size
+        System.arraycopy("00000000000".getBytes(), 0, header, 124, 11);
+        // Set a large user ID at the corresponding position (offset 108, length 8)
+        System.arraycopy("62410554".getBytes(), 0, header, 108, 8);
+        // Add a basic header checksum (incorrect, but we're just testing parsing logic)
+        header[148] = ' ';
+        header[149] = ' ';
+        header[150] = ' ';
+        header[151] = ' ';
+
+        ByteArrayOutputStream tarFileBlob = new ByteArrayOutputStream();
+        tarFileBlob.write(header);
+
+        // Create a ByteArrayInputStream from tarFileBlob
+        ByteArrayInputStream inputStream = new ByteArrayInputStream(tarFileBlob.toByteArray());
+
+        // Now read this using TarArchiveInputStream, expecting it to fail with the reported IllegalArgumentException
+        try (TarArchiveInputStream tarInputStream = new TarArchiveInputStream(inputStream)) {
+            TarArchiveEntry entry = tarInputStream.getNextTarEntry();
+        }
+    }
+}

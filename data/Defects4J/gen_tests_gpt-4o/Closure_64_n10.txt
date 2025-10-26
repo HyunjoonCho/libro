@@ -1,0 +1,57 @@
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import java.io.*;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testStrictModeInsertion() throws IOException, InterruptedException {
+        // JavaScript input files
+        String js1 = "var getNum = function() { return 5; };";
+        String js2 = "alert(getNum());";
+
+        // Write the input JS files
+        writeFile("get_num.js", js1);
+        writeFile("alert.js", js2);
+
+        // Closure Compiler command
+        String command = "java -jar path/to/compiler.jar --language_in=ECMASCRIPT5_STRICT "
+                       + "--compilation_level=ADVANCED_OPTIMIZATIONS --warning_level=VERBOSE "
+                       + "--js get_num.js --js alert.js --js_output_file=output.js";
+        
+        // Execute the command
+        ProcessBuilder processBuilder = new ProcessBuilder(command.split(" "));
+        processBuilder.redirectErrorStream(true);
+        Process process = processBuilder.start();
+
+        // Read the compiler output
+        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        StringBuilder output = new StringBuilder();
+        String line;
+        while ((line = reader.readLine()) != null) {
+            output.append(line).append("\n");
+        }
+
+        // Wait for the process to complete
+        int exitCode = process.waitFor();
+        assertEquals(0, exitCode); // Ensure the compiler execution was successful
+
+        // Read the output .js file
+        String compiledCode = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("output.js")));
+
+        // Expected behavior
+        assertTrue(compiledCode.equals("'use strict';alert(5);") || compiledCode.equals("alert(5);"));
+
+        // Optional cleanup files
+        new File("get_num.js").delete();
+        new File("alert.js").delete();
+        new File("output.js").delete();
+    }
+
+    private void writeFile(String fileName, String content) throws IOException {
+        try (FileWriter writer = new FileWriter(fileName)) {
+            writer.write(content);
+        }
+    }
+}

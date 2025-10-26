@@ -1,0 +1,56 @@
+
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
+import org.junit.Test;
+
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Paths;
+
+import static org.junit.Assert.fail;
+
+public class TarArchiveInputStreamTest {
+
+    @Test
+    public void testCorruptedBzip2() {
+        String archivePath = Paths.get("path", "to", "test.tar.bz2").toString(); // Adjust the path to your test file
+
+        try (InputStream fileInputStream = new FileInputStream(archivePath);
+             BZip2CompressorInputStream bzip2InputStream = new BZip2CompressorInputStream(fileInputStream, true);
+             TarArchiveInputStream input = new TarArchiveInputStream(bzip2InputStream)) {
+
+            ArchiveEntry nextMatchedEntry = input.getNextEntry();
+
+            while (nextMatchedEntry != null) {
+                // Logging can be added here for debugging
+                System.out.println(String.format("Extracting %s", nextMatchedEntry.getName()));
+
+                String outputPath = Paths.get("/tmp/", nextMatchedEntry.getName()).toString();
+                
+                try (OutputStream out = new FileOutputStream(outputPath)) {
+                    copy(input, out);
+                }
+
+                nextMatchedEntry = input.getNextEntry();
+            }
+
+            fail("Expected an IOException due to truncated archive, but none was thrown.");
+
+        } catch (IOException e) {
+            // Check if IOException is thrown as expected due to corrupted BZIP2 data
+            System.out.println("IOException was caught as expected: " + e.getMessage());
+        }
+    }
+
+    private void copy(InputStream input, OutputStream output) throws IOException {
+        byte[] buffer = new byte[1024];
+        int n;
+        while ((n = input.read(buffer)) != -1) {
+            output.write(buffer, 0, n);
+        }
+    }
+}

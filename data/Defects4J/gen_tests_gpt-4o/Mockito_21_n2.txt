@@ -1,0 +1,104 @@
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.when;
+
+interface UserAccount {
+    List<String> getEmails();
+    void addEmail(String email);
+}
+
+interface AccountService {
+    void getAccount(String id, AsyncCallback<UserAccount> callback);
+}
+
+interface AsyncCallback<T> {
+    void onSuccess(T result);
+    void onFailure(Throwable t);
+}
+
+interface AccountRpcService {
+    FutureAccount getAccount(RpcContext context, String id);
+}
+
+class RpcContext {
+    // dummy class for context
+}
+
+class FutureAccount {
+    private final String id;
+
+    FutureAccount(String id) {
+        this.id = id;
+    }
+
+    public String getId() {
+        return id;
+    }
+}
+
+public class MockitoAbstractClassesTest {
+
+    private List<String> emails;
+    private UserAccount userAccount;
+    private AccountService accountService;
+    private AccountRpcService accountRpcService;
+
+    @BeforeEach
+    public void setUp() {
+        emails = new ArrayList<>();
+        userAccount = Mockito.mock(UserAccount.class);
+        accountService = Mockito.mock(AccountService.class);
+        accountRpcService = Mockito.mock(AccountRpcService.class);
+    }
+
+    @Test
+    public void testUserAccountWithMockito() {
+        // Using doAnswer to manually maintain the logic consistency between addEmail and getEmails
+        doAnswer(invocation -> {
+            String email = invocation.getArgument(0);
+            emails.add(email);
+            return null;
+        }).when(userAccount).addEmail(any(String.class));
+
+        when(userAccount.getEmails()).thenReturn(emails);
+
+        userAccount.addEmail("test@example.com");
+        assertEquals(1, userAccount.getEmails().size());
+        assertEquals("test@example.com", userAccount.getEmails().get(0));
+    }
+
+    @Test
+    public void testAccountServiceWithMockito() {
+        AsyncCallback<UserAccount> callback = Mockito.mock(AsyncCallback.class);
+        UserAccount fakeUserAccount = Mockito.mock(UserAccount.class);
+
+        doAnswer(invocation -> {
+            AsyncCallback<UserAccount> cb = invocation.getArgument(1);
+            cb.onSuccess(fakeUserAccount);
+            return null;
+        }).when(accountService).getAccount(eq("id"), any(AsyncCallback.class));
+
+        accountService.getAccount("id", callback);
+        Mockito.verify(callback).onSuccess(fakeUserAccount);
+    }
+
+    @Test
+    public void testAccountRpcServiceWithMockito() {
+        FutureAccount expectedAccount = new FutureAccount("accountId");
+
+        when(accountRpcService.getAccount(any(RpcContext.class), eq("accountId"))).thenReturn(expectedAccount);
+
+        FutureAccount actualAccount = accountRpcService.getAccount(new RpcContext(), "accountId");
+        assertEquals(expectedAccount.getId(), actualAccount.getId());
+    }
+}

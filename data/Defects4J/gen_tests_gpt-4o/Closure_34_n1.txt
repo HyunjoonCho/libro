@@ -1,0 +1,52 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+
+public class ClosureCompilerTest {
+    public static void main(String[] args) {
+        String jsCode = generateLargeJSCode();
+        String[] compilerArgs = {
+            "--js", "-",
+            "--js_output_file", "out.js"
+        };
+
+        CommandLineRunner runner = new CommandLineRunner(compilerArgs) {
+            @Override
+            protected Compiler createCompiler() {
+                return new Compiler(System.err) {
+                    @Override
+                    public void initOptions(CompilerOptions options) {
+                        super.initOptions(options);
+                        // Add any specific options needed to reproduce the bug
+                    }
+                };
+            }
+
+            @Override
+            protected int doRun() {
+                try {
+                    getDefaultExterns();
+                    addInputSource("input", jsCode);
+                    return super.doRun();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    return 1;
+                }
+            }
+        };
+
+        int result = runner.run();
+        System.out.println("Compilation result: " + result);
+    }
+
+    private static String generateLargeJSCode() {
+        // Simulate a JS file that is likely to cause StackOverflowError
+        StringBuilder sb = new StringBuilder();
+        sb.append("function test() {\n");
+        for (int i = 0; i < 10000; i++) {
+            sb.append("  console.log('Line ").append(i).append("');\n");
+        }
+        sb.append("}\n");
+        sb.append("test();");
+        return sb.toString();
+    }
+}

@@ -1,0 +1,61 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.CompilationLevel;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.JSError;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.assertTrue;
+
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testLabeledLoopsInClosureCompiler() {
+        Compiler compiler = new Compiler();
+        
+        // Suppress standard output from the compiler
+        Logger.getLogger(CommandLineRunner.class.getName()).setLevel(Level.OFF);
+
+        // Set compiler options
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        // Input JavaScript code
+        String jsCode = "var i = 0; " +
+                        "lab1: do { " +
+                        "  lab2: do { " +
+                        "    i++; " +
+                        "    if (1) { " +
+                        "      break lab2; " +
+                        "    } else { " +
+                        "      break lab1; " +
+                        "    } " +
+                        "  } while(false); " +
+                        "} while(false); " +
+                        "console.log(i);";
+
+        // Create source file
+        SourceFile input = SourceFile.fromCode("input.js", jsCode);
+
+        // Perform compilation
+        Result result = compiler.compile(SourceFile.fromCode("externs.js", ""), input, options);
+
+        // Check if the compilation was successful
+        assertTrue("Compilation should succeed with no errors", result.success);
+
+        // Get the compiled code
+        String compiledCode = compiler.toSource();
+
+        // Check for the expected output format
+        // Currently expecting incorrect behavior of missing brackets around do-while statements
+        String expectedOutput = "var a=0;do b:do{a++;break b}while(0);while(0);console.log(a);";
+
+        assertTrue("Compiled code should match the expected incorrect format for IE",
+                   compiledCode.equals(expectedOutput));
+    }
+}

@@ -1,0 +1,40 @@
+
+import static org.junit.Assert.*;
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.rhino.Node;
+import org.junit.Test;
+
+public class JSCUsedGlobalThisTest {
+
+    @Test
+    public void testJSCUsedGlobalThisWarning() {
+        String jsCode = "var NS = {"
+                      + "  read: function() {"
+                      + "    return this.foo;"
+                      + "  },"
+                      + "  write: function() {"
+                      + "    this.foo = 123;"
+                      + "  }"
+                      + "};"
+                      + "NS.write2 = function() {"
+                      + "  this.foo = 123;"
+                      + "};";
+
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setWarningLevel(DiagnosticGroups.GLOBAL_THIS, CheckLevel.WARNING);
+        
+        // Compile the script and collect warnings
+        Node root = compiler.compile(SourceFile.fromCode("test.js", jsCode), options).getAST();
+
+        // Analyze the warnings to check for GLOBAL_THIS warnings
+        long globalThisWarnings = compiler.getWarnings()
+            .stream()
+            .filter(warning -> warning.getType().equals(DiagnosticGroups.GLOBAL_THIS.getType()))
+            .count();
+
+        // We expect two warnings for the 'this' used in 'write' and 'read'
+        assertEquals("Expected warning count mismatch; some 'this' usages were not warned", 2, globalThisWarnings);
+    }
+}

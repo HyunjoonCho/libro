@@ -1,0 +1,78 @@
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.JsonMappingException;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class TreeTraversingParserTest {
+
+    public static class IntClass {
+        public int x;
+
+        @Override
+        public String toString() {
+            return String.valueOf(x);
+        }
+    }
+
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    private String readFromTree(String json) {
+        try {
+            JsonNode tree = mapper.readTree(json);
+            return mapper.readerFor(IntClass.class).readValue(tree).toString();
+        } catch (JsonProcessingException e) {
+            return e.getClass().getSimpleName();
+        }
+    }
+
+    private String readFromString(String json) {
+        try {
+            return mapper.readerFor(IntClass.class).readValue(json).toString();
+        } catch (JsonProcessingException e) {
+            return e.getClass().getSimpleName();
+        }
+    }
+
+    @Test
+    public void testTreeAndStringParsingConsistency() {
+        assertOutput("{\"x\": 0}", "0", "0");
+        assertOutput("{\"x\": 10}", "10", "10");
+        assertOutput("{\"x\": 1e4}", "10000", "10000");
+        assertOutput("{\"x\": 1e10}", "2147483647", "JsonMappingException");
+        assertOutput("{\"x\": 1e-1}", "0", "0");
+        assertOutput("{\"x\": 2147483648}", "-2147483648", "JsonMappingException");
+        assertOutput("{\"x\": -2147483649}", "2147483647", "JsonMappingException");
+        // Add more cases as needed.
+    }
+
+    private void assertOutput(String json, String expectedFromTree, String expectedFromString) {
+        String fromTree = readFromTree(json);
+        String fromString = readFromString(json);
+
+        System.out.printf("JSON: %s | From Tree: %s | From String: %s%n", json, fromTree, fromString);
+
+        assertEquals(expectedFromTree, fromTree);
+        assertEquals(expectedFromString, fromString);
+    }
+
+    @Test
+    public void testOverflowForTreeTraversingParser() {
+        String json = "{\"x\": 2147483648}";
+
+        String fromTree = readFromTree(json);
+        assertEquals("-2147483648", fromTree);  // Expect overflow issue
+
+        boolean exceptionThrownForString = false;
+        try {
+            mapper.readerFor(IntClass.class).readValue(json);
+        } catch (JsonMappingException e) {
+            exceptionThrownForString = true;
+        }
+        assertTrue(exceptionThrownForString);  // Expect exception for string
+    }
+}

@@ -1,0 +1,59 @@
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.TypeIdResolver;
+import com.fasterxml.jackson.databind.jsontype.impl.TypeIdResolverBase;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class GenericTypeTest {
+
+    // A generic class to hold data
+    static class Wrapper<T> {
+        public T value;
+    }
+
+    // Custom TypeIdResolver that should handle generic types
+    static class CustomTypeIdResolver extends TypeIdResolverBase {
+
+        @Override
+        public JsonTypeInfo.Id getMechanism() {
+            return JsonTypeInfo.Id.CUSTOM;
+        }
+
+        @Override
+        public JavaType typeFromId(DatabindContext context, String id) {
+            return context.getTypeFactory().constructParametricType(Wrapper.class, String.class);
+        }
+
+        @Override
+        public String idFromValue(Object value) {
+            return "stringWrapper";
+        }
+    }
+
+    @Test
+    public void testGenericTypeSerialization() throws JsonProcessingException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        // Configure ObjectMapper with the custom type resolver
+        objectMapper.activateDefaultTypingAsProperty(
+                objectMapper.getPolymorphicTypeValidator(),
+                ObjectMapper.DefaultTyping.OBJECT_AND_NON_CONCRETE,
+                JsonTypeInfo.As.PROPERTY,
+                "@class"
+        );
+
+        Wrapper<String> wrapper = new Wrapper<>();
+        wrapper.value = "test";
+
+        String json = objectMapper.writeValueAsString(wrapper);
+        System.out.println("Serialized JSON: " + json);
+
+        Wrapper<?> deserialized = objectMapper.readValue(json, Wrapper.class);
+        // Fail-Safe: Expect the restored value to retain its generic type information
+        assertEquals("test", deserialized.value);
+        assertEquals(String.class, deserialized.value.getClass());
+    }
+}

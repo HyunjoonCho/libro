@@ -1,0 +1,42 @@
+
+import com.google.javascript.jscomp.CompilationLevel;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+
+public class ClosureCompilerBugTest {
+
+    @Test
+    public void testSmartNameRemovalCausesCompilerCrash() {
+        // JavaScript code that triggers the bug
+        String jsCode = ""
+            + "var goog = {};\n"
+            + "goog.inherits = function(x, y) {};\n"
+            + "var ns = {};\n"
+            + "/** @constructor */ ns.PageSelectionModel = function(){};\n"
+            + "/** @constructor */ ns.PageSelectionModel.FooEvent = function() {};\n"
+            + "/** @constructor */ ns.PageSelectionModel.SelectEvent = function() {};\n"
+            + "goog.inherits(ns.PageSelectionModel.ChangeEvent, ns.PageSelectionModel.FooEvent);";
+
+        // Set up the compiler and options
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        // Compile the JavaScript code
+        Result result = compiler.compile(
+            SourceFile.fromCode("externs.js", ""), // Externs are required; we pass an empty file for simplicity
+            SourceFile.fromCode("test.js", jsCode),
+            options
+        );
+
+        // Check for expected compiler errors or crashes
+        assertFalse("Compiler should not crash, but should produce errors.", result.success);
+        assertTrue("Errors were expected due to the incorrect inherits call causing a crash.", compiler.getErrors().length > 0);
+    }
+}

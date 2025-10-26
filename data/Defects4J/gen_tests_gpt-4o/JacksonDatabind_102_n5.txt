@@ -1,0 +1,40 @@
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.ser.std.SqlDateSerializer;
+
+import java.sql.Date;
+import java.text.SimpleDateFormat;
+
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class SqlDateSerializerTest {
+
+    @Test
+    public void testCustomSqlDateFormat() throws Exception {
+        // Desired format applied through configOverride (expected to fail as per bug report)
+        ObjectMapper mapper1 = new ObjectMapper();
+        mapper1.configOverride(java.sql.Date.class).setFormat(JsonFormat.Value.forPattern("yyyy-MM-dd"));
+
+        Date sqlDate = new Date(0); // Epoch
+        String expectedDateString = "\"1970-01-01\"";  // Expect this format
+        String actualDateString = mapper1.writeValueAsString(sqlDate);
+
+        // Check if formatting works as expected (it doesn't due to the bug)
+        assertEquals(expectedDateString, actualDateString);
+
+        // Fix applied using SimpleModule registration (expected to succeed)
+        ObjectMapper mapper2 = new ObjectMapper();
+        mapper2.registerModule(new SimpleModule() {{
+            addSerializer(java.sql.Date.class,
+                    new SqlDateSerializer().withFormat(false, new SimpleDateFormat("yyyy-MM-dd")));
+        }});
+
+        String actualFixedDateString = mapper2.writeValueAsString(sqlDate);
+
+        // This assertion should pass with the workaround
+        assertEquals(expectedDateString, actualFixedDateString);
+    }
+}

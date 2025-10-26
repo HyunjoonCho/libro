@@ -1,0 +1,36 @@
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.junit.jupiter.api.Test;
+
+import javax.script.Invocable;
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineManager;
+import javax.script.ScriptException;
+
+public class ClosureCompilerTest {
+
+    private static final String JS_SCRIPT =
+        "function outerFunction() {\n" +
+        "   return function() {\n" + 
+        "       var args = arguments;\n" +
+        "       return function() { return args; };\n" + // Simulate setTimeout by immediate return
+        "   };\n" +
+        "}\n";
+
+    @Test
+    public void testArgumentsNotCollapsed() throws ScriptException, NoSuchMethodException {
+        ScriptEngine engine = new ScriptEngineManager().getEngineByName("nashorn");
+        engine.eval(JS_SCRIPT);
+
+        // Invoking the outer function
+        Invocable invocable = (Invocable) engine;
+        Object innerFunction = invocable.invokeFunction("outerFunction");
+        
+        // Invoking the inner function with parameters
+        Object returnFunction = invocable.invokeMethod(innerFunction, "call", 1, 2, 3); // Simulates arguments
+        Object result = invocable.invokeMethod(returnFunction, "call");
+
+        // Check if the returned result matches the expected "arguments" values
+        assertEquals("[1, 2, 3]", result.toString());
+    }
+}

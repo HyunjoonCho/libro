@@ -1,0 +1,58 @@
+
+import org.apache.commons.jxpath.AbstractFactory;
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.Pointer;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.Assert.assertTrue;
+
+public class JXPathStackOverflowTest {
+
+    private static class TestAbstractFactory extends AbstractFactory {
+        public boolean createObject(JXPathContext context, Pointer pointer, Object parent, String name, int index) {
+            System.out.println("Creating: " + parent + ":" + name + ":" + index);
+            Map<String, Object> parentMap = (Map<String, Object>) parent;
+
+            if (index > -1) {
+                List<Object> list = (List<Object>) parentMap.get(name);
+                if (list == null) {
+                    list = new ArrayList<>();
+                }
+                int size = list.size();
+                for (int i = size; i <= index; i++) {
+                    list.add(i, new HashMap<>());  // Note: Use new HashMap instead of null
+                }
+                parentMap.put(name, list);
+            } else {
+                parentMap.put(name, new HashMap<>());
+            }
+            return true;
+        }
+    }
+
+    @Test
+    public void testCreatePathStackOverflow() {
+        Map<String, Object> map = new HashMap<>();
+        map.put("a", null);
+
+        JXPathContext pathContext = JXPathContext.newContext(map);
+        pathContext.setFactory(new TestAbstractFactory());
+
+        // First create path
+        pathContext.createPath("a/b[1]/c");
+        
+        try {
+            // Try creating a second path, expecting it to run without a stack overflow
+            pathContext.createPath("a/b[2]/c");
+            assertTrue("Successfully created path without stack overflow", true);
+        } catch (StackOverflowError e) {
+            // Fail the test if a StackOverflowError occurs
+            assertTrue("StackOverflowError encountered, indicating a bug", false);
+        }
+    }
+}

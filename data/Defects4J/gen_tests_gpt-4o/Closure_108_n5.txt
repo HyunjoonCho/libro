@@ -1,0 +1,56 @@
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.JSError;
+import com.google.javascript.jscomp.Result;
+
+// Hypothetical test class to demonstrate how you might trigger the described failure
+public class GoogleClosureTest {
+
+    @Test
+    public void testPreconditionCrashWithAliasedTypeDeclaration() {
+        // JavaScript input simulating the issue
+        String jsInput = 
+            "var goog = {};\n" +
+            "goog.scope;\n" +
+            "\n" +
+            "var ns = {};\n" +
+            "ns.sub = {};\n" +
+            "/** @constructor */\n" +
+            "ns.sub.C = function() {};\n" +
+            "\n" +
+            "goog.scope(function() {\n" +
+            " var sub = ns.sub;\n" +
+            " /** @type {sub.C} */\n" +
+            " var x = null;\n" +
+            "});\n";
+
+        // Initialize the Closure compiler
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+
+        // Assume we configure the options here correctly
+        // For example, enable the ScopedAliases pass.
+        options.setLanguageIn(com.google.javascript.jscomp.LanguageMode.ECMASCRIPT5);
+
+        // Compile the JS code. Note this might be different in actual usage.
+        Result result = compiler.compile(
+                com.google.javascript.jscomp.SourceFile.fromCode("externs.js", ""), // External sources
+                com.google.javascript.jscomp.SourceFile.fromCode("input.js", jsInput), // Input JS
+                options);
+
+        // Ensure there was an error due to the bug
+        assertFalse("Compilation should fail due to precondition crash.", result.success);
+
+        // Check for specific errors that indicate the precondition crash
+        for (JSError error : result.errors) {
+            if (error.description.contains("java.lang.IllegalStateException")) {
+                return; // Test passes if we find the expected error
+            }
+        }
+
+        fail("Expected a precondition crash due to alias type declaration.");
+    }
+}

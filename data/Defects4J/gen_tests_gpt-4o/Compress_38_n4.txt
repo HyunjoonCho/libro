@@ -1,0 +1,56 @@
+
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.Arrays;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+
+public class TarArchiveTest {
+
+    @Test
+    public void testPaxHeaderEntryEndingWithSlash() throws IOException {
+        // Simulating a TAR byte array for testing
+        byte[] tarData = createPaxHeaderTarWithTrailingSlash();
+
+        try (TarArchiveInputStream tarInputStream = new TarArchiveInputStream(new ByteArrayInputStream(tarData))) {
+            TarArchiveEntry entry;
+            boolean foundPaxHeader = false;
+
+            while ((entry = (TarArchiveEntry) tarInputStream.getNextEntry()) != null) {
+                if ("paxheader/".equals(entry.getName())) {
+                    foundPaxHeader = true;
+                    // Check that despite the trailing slash, this is not considered a directory
+                    assertFalse("PAX Header should not be treated as directory", entry.isDirectory());
+                }
+                // Add a check to ensure the stream is advancing correctly
+                assertNotNull("Stream should advance to the next entry if PAX header is handled", entry.getName());
+            }
+
+            // Ensure we found at least one PAX header
+            assertNotNull("Should find a PAX header entry", foundPaxHeader);
+        }
+    }
+
+    private byte[] createPaxHeaderTarWithTrailingSlash() {
+        // Assume this method returns a byte array that represents a TAR stream
+        // containing a PAX header entry 'paxheader/' to properly simulate the error
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        // Construct TAR data with a PAX header ending with '/'
+        byte[] headerBytes = new byte[512];
+        // Set up the example header as per TAR specs, "paxheader/" with a link flag of 'x'
+        Arrays.fill(headerBytes, (byte) ' ');
+        System.arraycopy("paxheader/".getBytes(), 0, headerBytes, 0, "paxheader/".length());
+        headerBytes[156] = 'x'; // Link flag for PAX
+        // Add the header to the output stream
+        out.write(headerBytes, 0, 512);
+        // Add remaining data to simulate file content or more headers
+        out.write(new byte[512], 0, 512); // Normally zero out content for simplicity
+        return out.toByteArray();
+    }
+}

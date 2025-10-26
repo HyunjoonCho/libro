@@ -1,0 +1,57 @@
+
+import org.apache.commons.math3.linear.*;
+import org.apache.commons.math3.optimization.linear.*;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
+import static org.junit.Assert.fail;
+
+public class SimplexSolverTest {
+
+    private static final int ENTITIES_COUNT_SMALL = 2;
+    private static final int ENTITIES_COUNT_LARGE = 15;
+
+    @Test
+    public void testUnboundedSolutionExceptionWithSmallEntitiesCount() {
+        try {
+            solveLinearProgrammingProblem(ENTITIES_COUNT_SMALL);
+        } catch (UnboundedSolutionException e) {
+            fail("Unexpected UnboundedSolutionException for small entities count");
+        }
+    }
+
+    @Test
+    public void testUnboundedSolutionExceptionWithLargeEntitiesCount() {
+        try {
+            solveLinearProgrammingProblem(ENTITIES_COUNT_LARGE);
+        } catch (UnboundedSolutionException e) {
+            // This failure is expected based on the bug report
+            System.out.println("UnboundedSolutionException occurred as expected for large entities count");
+        }
+    }
+
+    private void solveLinearProgrammingProblem(int entitiesCount) {
+        // Objective function: min(1*t + 0*L)
+        LinearObjectiveFunction objectiveFunction = new LinearObjectiveFunction(new double[]{1, 0}, 0);
+
+        List<LinearConstraint> constraints = new ArrayList<>();
+
+        // Randomly populated constraints for minimal reproducible example
+        for (int r = 0; r < entitiesCount; r++) {
+            constraints.add(new LinearConstraint(new double[]{-1, 1}, Relationship.GEQ, 0)); // -q(r) + QL >= 0
+            constraints.add(new LinearConstraint(new double[]{r, -1}, Relationship.GEQ, 0)); // x(r)t - XL >= 0
+        }
+
+        constraints.add(new LinearConstraint(new double[]{0, 1}, Relationship.GEQ, 0)); // L >= 0
+
+        SimplexSolver solver = new SimplexSolver();
+        PointValuePair solution = solver.optimize(new LinearObjectiveFunction(objectiveFunction.getCoefficients().toArray(), objectiveFunction.getConstantTerm()),
+            new LinearConstraintSet(constraints), GoalType.MINIMIZE, new NonNegativeConstraint(true));
+
+        System.out.println("Solution: " + Arrays.toString(solution.getPoint()));
+    }
+}

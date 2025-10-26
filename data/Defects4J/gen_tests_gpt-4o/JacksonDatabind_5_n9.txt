@@ -1,0 +1,70 @@
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationConfig;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.introspect.AnnotatedClass;
+import com.fasterxml.jackson.databind.introspect.BasicBeanDescription;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+
+public class MixinAnnotationTest {
+
+    public interface Contact {
+        String getCity();
+    }
+
+    public static class ContactImpl implements Contact {
+        private final String city;
+
+        public ContactImpl(String city) {
+            this.city = city;
+        }
+
+        @Override
+        public String getCity() {
+            return city;
+        }
+    }
+
+    public static class ContactMixin implements Contact {
+        @Override
+        @JsonProperty
+        public String getCity() {
+            return null;
+        }
+    }
+
+    public interface Person extends Contact {}
+
+    public static class PersonImpl extends ContactImpl implements Person {
+        public PersonImpl(String city) {
+            super(city);
+        }
+    }
+
+    public static class PersonMixin extends ContactMixin implements Person {}
+
+    @Test
+    public void testMixinAnnotationsLost() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        SimpleModule module = new SimpleModule();
+        module.setMixInAnnotation(Person.class, PersonMixin.class);
+
+        objectMapper.registerModule(module);
+
+        // Disable auto-detection to ensure that Jackson uses our mix-ins
+        objectMapper.configure(SerializationFeature.AUTO_DETECT_FIELDS, false);
+        objectMapper.configure(SerializationFeature.AUTO_DETECT_GETTERS, false);
+        objectMapper.configure(SerializationFeature.AUTO_DETECT_IS_GETTERS, false);
+
+        PersonImpl person = new PersonImpl("New York");
+        String jsonString = objectMapper.writeValueAsString(person);
+
+        // Check if "city" is included in the serialized JSON
+        assertTrue(jsonString.contains("city"));
+    }
+}

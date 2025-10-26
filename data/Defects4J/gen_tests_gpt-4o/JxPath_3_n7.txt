@@ -1,0 +1,52 @@
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.commons.jxpath.AbstractFactory;
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.Pointer;
+
+public class JXPathStackOverflowTest {
+
+    public static void main(String[] args) {
+        // Set up the initial map with a null value for "a"
+        Map<String, Object> map = new HashMap<>();
+        map.put("a", null);
+
+        // Create a JXPathContext with the map as its base
+        JXPathContext pathContext = JXPathContext.newContext(map);
+        pathContext.setFactory(new AbstractFactory() {
+            @Override
+            public boolean createObject(JXPathContext context, Pointer pointer, Object parent, String name, int index) {
+                Map<String, Object> parentMap = (Map<String, Object>) parent;
+                System.out.println("Creating: " + parentMap + ":" + name + ":" + index);
+
+                if (index > -1) {
+                    // If the index is specified, we are working with a list within the map
+                    List<Object> list = (List<Object>) parentMap.get(name);
+                    if (list == null) {
+                        list = new ArrayList<>();
+                    }
+                    int size = list.size();
+                    for (int i = size; i <= index; i++) {
+                        list.add(i, new HashMap<>()); // Ensure a new HashMap is added instead of null
+                    }
+                    parentMap.put(name, list);
+                } else {
+                    // Simply put a new map into the parentMap under the specified name
+                    parentMap.put(name, new HashMap<>());
+                }
+                return true;
+            }
+        });
+
+        // Use createPath method which ran into stack overflow issue in the bug report
+        pathContext.createPath("a/b[1]/c");
+        // This line would cause StackOverflow before fixing the factory method
+        pathContext.createPath("a/b[2]/c");
+
+        System.out.println("Test completed");
+    }
+}

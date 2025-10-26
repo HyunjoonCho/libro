@@ -1,0 +1,64 @@
+script
+// Import required modules
+const { execSync } = require('child_process');
+const { writeFileSync, unlinkSync } = require('fs');
+const assert = require('assert');
+
+// Define the original JavaScript code that causes issues with advanced compilation
+const originalCode = `
+function A() {
+  this._x = 1;
+}
+
+A.prototype['func1'] = // done to save public reference to func1
+A.prototype.func1 = function() {
+  this._x = 2;
+  this.func2();
+}
+
+A.prototype.func2 = function() {
+  this._x = 3;
+  this.func3();
+}
+
+window['A'] = A;
+`;
+
+// Temporary JavaScript files to hold the code
+const inputFile = 'testInput.js';
+const outputFile = 'testOutput.js';
+
+describe('Closure Compiler Advanced Optimization Test', () => {
+
+  before(() => {
+    // Write the original problem code to a temporary JavaScript file
+    writeFileSync(inputFile, originalCode);
+
+    // Execute the Closure Compiler with advanced optimizations
+    // Make sure `closure-compiler.jar` is in the same directory or give a proper path
+    try {
+      execSync(`java -jar closure-compiler.jar --compilation_level ADVANCED_OPTIMIZATIONS --js ${inputFile} --js_output_file ${outputFile}`);
+    } catch (err) {
+      // Handle errors if compiler fails
+      console.error('Compilation Error: ', err.message);
+      throw err;
+    }
+  });
+
+  after(() => {
+    // Clean up temporary files
+    unlinkSync(inputFile);
+    unlinkSync(outputFile);
+  });
+
+  it('should raise an error or show issue for missing function definition after compilation', () => {
+    const compiledCode = require('./' + outputFile);
+
+    // Check if the "func2" function call resolves properly
+    assert.throws(() => {
+      const instance = new window.A();
+      instance.func1();
+    }, /TypeError: instance\.func2 is not a function/, 'Expecting a TypeError due to missing function definition');
+  });
+});
+

@@ -1,0 +1,54 @@
+
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
+import org.apache.commons.compress.utils.IOUtils;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+
+import static org.junit.Assert.assertNotNull;
+
+public class TarArchiveEntryTest {
+
+    @Test
+    public void testPaxHeaderEntryWithTrailingSlash() throws IOException {
+        // Create a tar with a PAX entry ending with a "/"
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try (TarArchiveOutputStream tarOut = new TarArchiveOutputStream(baos)) {
+            // Create a PAX header entry with a name ending in "/"
+            TarArchiveEntry paxHeaderEntry = new TarArchiveEntry("PAX_ENTRY/", TarArchiveEntry.LF_PAX_EXTENDED_HEADER_LC);
+            tarOut.putArchiveEntry(paxHeaderEntry);
+            tarOut.closeArchiveEntry();
+
+            // Create a normal file entry
+            TarArchiveEntry fileEntry = new TarArchiveEntry("testfile.txt");
+            byte[] fileContent = "Sample Content".getBytes();
+            fileEntry.setSize(fileContent.length);
+            tarOut.putArchiveEntry(fileEntry);
+            tarOut.write(fileContent);
+            tarOut.closeArchiveEntry();
+        }
+
+        // Reading the tar to check for entry parsing
+        try (TarArchiveInputStream tarIn = new TarArchiveInputStream(new ByteArrayInputStream(baos.toByteArray()))) {
+            TarArchiveEntry entry;
+            boolean foundFileEntry = false;
+
+            while ((entry = tarIn.getNextTarEntry()) != null) {
+                if (entry.getName().equals("testfile.txt")) {
+                    foundFileEntry = true;
+                    byte[] content = IOUtils.toByteArray(tarIn);
+                    assertNotNull(content); // Ensure we can read the content
+                }
+            }
+
+            // Assert that the file entry was correctly found and processed
+            if (!foundFileEntry) {
+                throw new AssertionError("Did not find expected file entry 'testfile.txt' after PAX header");
+            }
+        }
+    }
+}

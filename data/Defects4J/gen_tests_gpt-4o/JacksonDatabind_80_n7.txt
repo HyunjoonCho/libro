@@ -1,0 +1,39 @@
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.NamedType;
+import com.fasterxml.jackson.databind.jsontype.TypeResolverBuilder;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class TypeIdMappingTest {
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
+    static abstract class BaseType {
+        // Base type fields and methods
+    }
+
+    static class SubType extends BaseType {
+        // Subtype specific fields and methods
+    }
+
+    @Test
+    public void testExtraneousTypeIdMapping() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        // Register subtype explicitly
+        objectMapper.registerSubtypes(new NamedType(SubType.class, "subtype"));
+
+        // Check the registered subtypes for BaseType
+        TypeResolverBuilder<?> typer = objectMapper.getSerializationConfig().getSubtypeResolver().collectAndResolveSubtypesByClass(
+                objectMapper.getDeserializationConfig(),
+                objectMapper.constructType(BaseType.class)
+        );
+
+        // Check that the base type's id name is not added automatically
+        // when it's not concrete or not explicitly named
+        boolean hasBaseTypeAsNamedType = typer.getNamedTypes().stream()
+                                        .anyMatch(namedType -> namedType.getName().equals("BaseType"));
+        assertFalse(hasBaseTypeAsNamedType, "BaseType should not have a default type id mapping in the list");
+    }
+}

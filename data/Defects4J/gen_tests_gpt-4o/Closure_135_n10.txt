@@ -1,0 +1,70 @@
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.jscomp.CompilerOptions.LanguageMode;
+import com.google.javascript.rhino.Node;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertTrue;
+
+public class InheritanceWarningTest {
+
+    @Test
+    public void testInheritanceWarningWithDirectPrototypeAssignment() {
+        // Setup the Compiler
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setLanguageIn(LanguageMode.ECMASCRIPT5);
+        options.setLanguageOut(LanguageMode.ECMASCRIPT5);
+        options.setCompilationLevel(CompilationLevel.ADVANCED_OPTIMIZATIONS);
+        options.setWarningLevel(DiagnosticGroups.CHECK_TYPES, CheckLevel.WARNING);
+
+        // JavaScript code to test
+        String jsCode =
+                "/**\n" +
+                " * @constructor\n" +
+                " */\n" +
+                "function SuperClass() {}\n" +
+                "\n" +
+                "SuperClass.prototype.CustomMethod = function() {};\n" +
+                "\n" +
+                "/**\n" +
+                " * @constructor\n" +
+                " * @extends {SuperClass}\n" +
+                " */\n" +
+                "function SubClass() {}\n" +
+                "SubClass.prototype = new SuperClass();\n" +
+                "\n" +
+                "/**\n" +
+                " * @override\n" +
+                " */\n" +
+                "SubClass.prototype.CustomMethod = function() {\n" +
+                "  this.myProperty = \"value\";\n" +
+                "};\n" +
+                "\n" +
+                "window['SubClassInstance'] = new SubClass();";
+
+        // Compile the JavaScript code
+        List<SourceFile> externs = CommandLineRunner.getDefaultExterns();
+        List<SourceFile> inputs = new ArrayList<>();
+        inputs.add(SourceFile.fromCode("test.js", jsCode));
+
+        // Capture the warnings/errors
+        compiler.compile(externs, inputs, options);
+
+        // Check for the specific warning
+        List<JSError> warnings = compiler.getWarnings();
+        boolean foundWarning = false;
+        for (JSError warning : warnings) {
+            if (warning.getType().equals(DiagnosticGroups.UNKNOWN_OVERRIDE)) {
+                foundWarning = true;
+                break;
+            }
+        }
+
+        // Use assertion to ensure the warning is produced
+        assertTrue("Expected a warning for the unknown override but found none.", foundWarning);
+    }
+}

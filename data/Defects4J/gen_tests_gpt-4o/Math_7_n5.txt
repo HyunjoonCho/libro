@@ -1,0 +1,83 @@
+
+import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
+import org.apache.commons.math3.ode.FirstOrderIntegrator;
+import org.apache.commons.math3.ode.nonstiff.DormandPrince54Integrator;
+import org.apache.commons.math3.ode.events.EventHandler;
+import org.apache.commons.math3.ode.sampling.StepHandler;
+import org.junit.Test;
+import static org.junit.Assert.assertTrue;
+
+public class ODEEventBugTest {
+
+    @Test
+    public void testEventStateReset() {
+        // Define a simple ODE equation dy/dt = y
+        FirstOrderDifferentialEquations ode = new FirstOrderDifferentialEquations() {
+            public int getDimension() {
+                return 1;
+            }
+
+            public void computeDerivatives(double t, double[] y, double[] yDot) {
+                yDot[0] = y[0];
+            }
+        };
+
+        // Create an ODE integrator
+        FirstOrderIntegrator integrator = new DormandPrince54Integrator(1.0e-8, 1.0, 1.0e-10, 1.0e-10);
+
+        // Event handler 1: Similar to a typical returning CONTINUE event
+        EventHandler event1 = new EventHandler() {
+            public int eventOccurred(double t, double[] y, boolean increasing) {
+                return EventHandler.CONTINUE;
+            }
+
+            public double g(double t, double[] y) {
+                return y[0] - 0.5;  // Event when y = 0.5
+            }
+
+            public void resetState(double t, double[] y) {
+            }
+
+            public void init(double t0, double[] y0, double t) {
+            }
+        };
+
+        // Event handler 2: Triggers a RESET_STATE
+        EventHandler event2 = new EventHandler() {
+            public int eventOccurred(double t, double[] y, boolean increasing) {
+                return EventHandler.RESET_STATE;
+            }
+
+            public double g(double t, double[] y) {
+                return t - 0.5;  // Event at t = 0.5
+            }
+
+            public void resetState(double t, double[] y) {
+                y[0] = 1.0;  // Reset state to y = 1.0
+            }
+
+            public void init(double t0, double[] y0, double t) {
+            }
+        };
+
+        // Add event handlers to the integrator
+        integrator.addEventHandler(event1, 0.1, 1.0e-8, 100);
+        integrator.addEventHandler(event2, 0.1, 1.0e-8, 100);
+
+        // Initial state
+        double[] y = new double[]{1.0};
+
+        // Set a step handler to monitor the integration progress
+        integrator.addStepHandler((StepHandler) (interpolator, isLast) -> {
+            double t = interpolator.getCurrentTime();
+            double yValue = interpolator.getInterpolatedState()[0];
+            // Simulate the check that might go wrong due to unhandled event states
+            if (t > 0.5 && t < 1.0) {
+                assertTrue("Invalid state encountered", yValue >= -1.0 && yValue <= 1.0);
+            }
+        });
+
+        // Integrate from t = 0.0 to t = 1.0
+        integrator.integrate(ode, 0.0, y, 1.0, y);
+    }
+}

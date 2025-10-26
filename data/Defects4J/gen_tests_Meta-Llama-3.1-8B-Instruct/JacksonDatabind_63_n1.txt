@@ -1,0 +1,26 @@
+java
+public class ReferenceChainTest {
+    @Test public void incorrectReferenceChain() throws IOException {
+        JsonMappingException jsonMappingException = expectThrows(JsonMappingException.class, () -> {
+            ObjectMapper objectMapper = new ObjectMapper();
+            objectMapper.readValue(objectMapper.writeValueAsBytes(new Outer()), Outer.class);
+        });
+        JsonMappingException.Reference reference = jsonMappingException.getPath().get(0);
+        // We don't expect the correct class name, as the bug is that it's using the wrong one.
+        // We can verify that the path is at least correct, i.e. it's an instance of Outer and it has a field named "inner".
+        assertThat(reference.getPath().get(0)).isInstanceOf(Outer.class);
+        assertThat(reference.getPath().get(1)).isEqualTo("inner");
+    }
+
+    static class Outer {
+        public Inner inner = new Inner();
+    }
+
+    static class Inner {
+        public int x;
+
+        @JsonCreator public static Inner create(@JsonProperty("x") int x) {
+            throw new RuntimeException("test-exception");
+        }
+    }
+}

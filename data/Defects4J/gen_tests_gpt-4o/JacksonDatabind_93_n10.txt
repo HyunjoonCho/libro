@@ -1,0 +1,50 @@
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.impl.SubTypeValidator;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.*;
+
+public class SubTypeValidatorTest {
+
+    public static class Authentication {
+        private List<GrantedAuthority> authorities = new ArrayList<>();
+
+        public List<GrantedAuthority> getAuthorities() {
+            return this.authorities;
+        }
+
+        public void setAuthorities(List<GrantedAuthority> authorities) {
+            this.authorities = authorities;
+        }
+    }
+
+    public interface GrantedAuthority {
+        String getAuthority();
+    }
+
+    @Test
+    public void validateSubTypeFailsWithNPE() {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            mapper.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
+
+            String json = "{\"@class\":\"org.springframework.security.core.SubTypeValidatorTest$Authentication\",\"authorities\":[\"java.util.ArrayList\",[]]}";
+
+            Authentication authentication = mapper.readValue(json, Authentication.class);
+            
+            // If we get here, the test has not reproduced the issue
+            fail("Expected NullPointerException was not thrown");
+        } catch (NullPointerException e) {
+            // An NPE is expected due to a bug in the SubTypeValidator
+            assertTrue(e.getStackTrace()[0].getClassName().contains(SubTypeValidator.class.getSimpleName()));
+        } catch (Exception e) {
+            // Unexpected exception
+            fail("Unexpected exception: " + e.getMessage());
+        }
+    }
+}

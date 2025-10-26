@@ -1,0 +1,45 @@
+
+import org.apache.commons.compress.archivers.sevenz.SevenZFile;
+import org.apache.commons.compress.archivers.sevenz.SevenZMethod;
+import org.apache.commons.compress.archivers.sevenz.SevenZOutputFile;
+import org.apache.commons.compress.utils.IOUtils;
+import org.junit.Test;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+
+public class SevenZCompressionTest {
+
+    @Test(expected = org.tukaani.xz.UnsupportedOptionsException.class)
+    public void test16MBDictionarySize() throws IOException {
+        File inputDir = new File("src/test/resources/compress-1.7-src");
+        File sevenZFile = new File("target/test-output/compress-1.7.7z");
+        create7zArchive(inputDir, sevenZFile);
+
+        // Attempt to open the file with SevenZFile should throw UnsupportedOptionsException
+        SevenZFile input = new SevenZFile(sevenZFile);
+        input.close();
+    }
+
+    private void create7zArchive(File inputDir, File outputFile) throws IOException {
+        try (SevenZOutputFile sevenZOutputFile = new SevenZOutputFile(outputFile)) {
+            sevenZOutputFile.setContentCompressionMethod(SevenZMethod.LZMA2);
+            sevenZOutputFile.setContentCompressionLevel(SevenZFile.HIGHEST_COMPRESSION);
+
+            for (File file : inputDir.listFiles()) {
+                SevenZFile.addEntry(sevenZOutputFile, file, file.getName());
+            }
+        }
+    }
+
+    private static void addEntry(SevenZOutputFile sevenZOutput, File file, String entryName) throws IOException {
+        try (FileInputStream is = new FileInputStream(file)) {
+            SevenZFile.Entry entry = sevenZOutput.createEntry();
+            entry.setName(entryName);
+            entry.setSize(file.length());
+            sevenZOutput.write(entry, is);
+        }
+    }
+}

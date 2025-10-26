@@ -1,0 +1,55 @@
+
+import static org.junit.Assert.assertTrue;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.stream.Collectors;
+
+import org.junit.Test;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testBadVariableInliningInClosure() throws IOException, InterruptedException {
+        // Compile the provided JavaScript code using the Closure Compiler with SIMPLE_OPTIMIZATIONS
+        String originalCode = """
+            function foo() {
+                var arr = [1, 2, 3, 4, 5];
+                for (var i = 0, l = arr.length; i < l; i++) {
+                    var j = arr[i];
+                    (function() {
+                        var k = j;
+                        setTimeout(function() { console.log(k); }, 0);
+                    })();
+                }
+            }
+            foo();
+            """;
+
+        // Assume you have a method 'runClosureCompiler' that compiles the JavaScript code
+        String compiledCode = runClosureCompiler(originalCode);
+        
+        // Assert that the incorrect inlining has happened
+        // You'll need to look for the specific pattern indicating inlining of variable `k`
+        assertTrue(compiledCode.contains("console.log(1)") || compiledCode.contains("console.log(2)"));
+    }
+
+    private String runClosureCompiler(String code) throws IOException, InterruptedException {
+        // Simulating Closure Compiler invocation. In reality, you should have
+        // an actual Closure Compiler invocation here.
+        ProcessBuilder processBuilder = new ProcessBuilder("java", "-jar", "closure-compiler.jar", "--compilation_level", "SIMPLE_OPTIMIZATIONS", "--js", "-", "--formatting", "pretty_print");
+        processBuilder.redirectErrorStream(true);
+        
+        Process process = processBuilder.start();
+        process.getOutputStream().write(code.getBytes());
+        process.getOutputStream().close();
+        
+        String output;
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            output = reader.lines().collect(Collectors.joining(System.lineSeparator()));
+        }
+        process.waitFor();
+        return output;
+    }
+}

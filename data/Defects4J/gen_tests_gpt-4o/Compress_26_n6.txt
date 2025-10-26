@@ -1,0 +1,51 @@
+
+import org.apache.commons.io.IOUtils;
+import org.junit.Test;
+
+import javax.crypto.Cipher;
+import javax.crypto.CipherInputStream;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
+
+import static org.junit.Assert.assertEquals;
+
+public class IOUtilsSkipTest {
+
+    @Test
+    public void testSkipWithCipherInputStream() throws Exception {
+        // Prepare some test data
+        byte[] data = new byte[100];
+        for (int i = 0; i < 100; i++) {
+            data[i] = (byte) i;
+        }
+
+        // Encrypt the data
+        Cipher cipher = Cipher.getInstance("AES");
+        SecretKey secretKey = generateKey();
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey);
+        byte[] encryptedData = cipher.doFinal(data);
+
+        // Create a CipherInputStream
+        ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(encryptedData);
+        cipher.init(Cipher.DECRYPT_MODE, secretKey);
+        CipherInputStream cipherInputStream = new CipherInputStream(byteArrayInputStream, cipher);
+
+        // Attempt to skip bytes
+        long bytesToSkip = 50;
+        long actualSkipped = IOUtils.skip(cipherInputStream, bytesToSkip);
+
+        // Assert that the actual skipped bytes match the desired value
+        // Based on the bug report, this might not be true
+        assertEquals("Number of skipped bytes does not match the expected value", bytesToSkip, actualSkipped);
+    }
+
+    private SecretKey generateKey() throws NoSuchAlgorithmException {
+        KeyGenerator keyGen = KeyGenerator.getInstance("AES");
+        keyGen.init(128); // AES key size 128, 192, or 256 bits
+        return keyGen.generateKey();
+    }
+}

@@ -1,0 +1,57 @@
+
+import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry;
+import org.apache.commons.compress.archivers.sevenz.SevenZFile;
+import org.junit.Test;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.Collections;
+
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+public class SevenZFileTest {
+
+    @Test
+    public void testReadEmptySevenZArchiveEntryThrowsIllegalStateException() {
+        // Create a temporary 7z file with an empty entry
+        File tempFile = null;
+        try {
+            tempFile = File.createTempFile("test", ".7z");
+            tempFile.deleteOnExit();
+            
+            // Create an empty 7z archive
+            try (FileOutputStream fos = new FileOutputStream(tempFile);
+                 org.apache.commons.compress.archivers.sevenz.SevenZOutputFile sevenZOutput = new org.apache.commons.compress.archivers.sevenz.SevenZOutputFile(fos)) {
+                SevenZArchiveEntry entry = new SevenZArchiveEntry();
+                entry.setName("emptyEntry");
+                entry.setSize(0);
+                sevenZOutput.putArchiveEntry(entry);
+                sevenZOutput.closeArchiveEntry();
+            }
+
+            // Open the 7z archive and attempt to read the empty entry
+            try (SevenZFile sevenZFile = new SevenZFile(tempFile)) {
+                SevenZArchiveEntry entry = sevenZFile.getNextEntry();
+
+                // Ensure the entry is recognized as empty
+                assertTrue(entry.isDirectory() || entry.getSize() == 0);
+
+                byte[] buffer = new byte[1];
+                try {
+                    int bytesRead = sevenZFile.read(buffer);
+                    fail("Expecting IllegalStateException, but read() returned " + bytesRead + " bytes instead.");
+                } catch (IllegalStateException e) {
+                    // Expected outcome, the exception is thrown
+                }
+            }
+        } catch (IOException e) {
+            fail("IOException was thrown during the test setup or execution: " + e.getMessage());
+        } finally {
+            if (tempFile != null && tempFile.exists()) {
+                assertTrue("Failed to delete temporary file", tempFile.delete());
+            }
+        }
+    }
+}

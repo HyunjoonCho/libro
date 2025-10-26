@@ -1,0 +1,68 @@
+
+import org.junit.Test;
+import java.io.IOException;
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.JSError;
+import com.google.javascript.jscomp.SourceFile;
+import java.util.Arrays;
+import static org.junit.Assert.*;
+
+public class ClosureCompilerBugReproductionTest {
+
+    @Test
+    public void testClosureCompilerIllegalStateException() {
+        String crashJsCode = 
+            "var test = {};\n" +
+            "/**\n" +
+            " * @interface\n" +
+            " */\n" +
+            "test.T = function() {};\n" +
+            "/**\n" +
+            " * @constructor\n" +
+            " * @implements {test.T}\n" +
+            " */\n" +
+            "test.A = function() {};\n" +
+            "/**\n" +
+            " * @constructor\n" +
+            " * @implements {test.T}\n" +
+            " */\n" +
+            "test.B = function() {};\n" +
+            "/**\n" +
+            " * @constructor\n" +
+            " */\n" +
+            "test.X = function() {\n" +
+            "  this.type = test.A;\n" +
+            "  this.t = this.f();\n" +
+            "};\n" +
+            "/**\n" +
+            " * @return {test.T}\n" +
+            " */\n" +
+            "test.X.prototype.f = function() {\n" +
+            "  if (this.type === test.A) {\n" +
+            "    return new test.A();\n" +
+            "  } else if (this.type === test.B) {\n" +
+            "    return new test.B();\n" +
+            "  }\n" +
+            "};";
+
+        Compiler compiler = new Compiler();
+        String[] args = new String[]{
+            "--warning_level=VERBOSE",
+            "--compilation_level=SIMPLE_OPTIMIZATIONS"
+        };
+
+        SourceFile extern = SourceFile.fromCode("extern.js", "");
+        SourceFile input = SourceFile.fromCode("crash.js", crashJsCode);
+
+        try {
+            compiler.compile(Arrays.asList(extern), Arrays.asList(input), CommandLineRunner.createOptions(System.err, System.out, false));
+            for (JSError error : compiler.getErrors()) {
+                System.out.println(error.toString());
+            }
+            fail("Expected an IllegalStateException to be thrown during compilation");
+        } catch (RuntimeException e) {
+            assertTrue("Expected cause to be IllegalStateException", e.getCause() instanceof IllegalStateException);
+        }
+    }
+}

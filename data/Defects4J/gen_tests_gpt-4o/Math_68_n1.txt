@@ -1,0 +1,63 @@
+
+import org.apache.commons.math3.fitting.leastsquares.*;
+import org.apache.commons.math3.optim.ConvergenceChecker;
+import org.apache.commons.math3.optim.SimplePointChecker;
+import org.apache.commons.math3.optim.SimpleVectorValueChecker;
+import org.apache.commons.math3.linear.RealMatrix;
+import org.apache.commons.math3.linear.RealVector;
+import org.apache.commons.math3.linear.ArrayRealVector;
+import org.apache.commons.math3.analysis.MultivariateVectorFunction;
+import org.apache.commons.math3.exception.TooManyEvaluationsException;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+
+public class LevenbergMarquardtOptimizerTest {
+
+    @Test
+    public void testCustomConvergenceChecker() {
+        // Use a checker that should stop immediately
+        ConvergenceChecker<LeastSquaresProblem.Evaluation> checker = new SimpleVectorValueChecker(1e-30, 1e-30) {
+            @Override
+            public boolean converged(int iteration, LeastSquaresProblem.Evaluation previous, LeastSquaresProblem.Evaluation current) {
+                // Always true for the first call
+                return iteration == 1;
+            }
+        };
+
+        // Assuming a simple linear model for demonstration
+        MultivariateJacobianFunction model = new MultivariateJacobianFunction() {
+            @Override
+            public Pair<RealVector, RealMatrix> value(RealVector point) {
+                double[] values = { point.getEntry(0) };
+                double[][] jacobian = { { 1.0 } };
+                return new Pair<>(new ArrayRealVector(values), new Array2DRowRealMatrix(jacobian));
+            }
+        };
+
+        // Initial parameters
+        RealVector start = new ArrayRealVector(new double[]{0});
+
+        // Observations
+        LeastSquaresProblem problem = new LeastSquaresBuilder()
+                .start(start)
+                .model(model)
+                .target(new double[]{0})
+                .weight(new DiagonalMatrix(new double[]{1}))
+                .checker(checker)
+                .maxEvaluations(1000)
+                .maxIterations(1000)
+                .build();
+
+        try {
+            // Setup the optimizer with the custom checker
+            LevenbergMarquardtOptimizer optimizer = new LevenbergMarquardtOptimizer();
+            optimizer.optimize(problem);
+        } catch (TooManyEvaluationsException e) {
+            assertTrue("The optimizer did not respect the custom convergence checker", false);
+        }
+
+        // Test should pass if the optimizer respects the custom convergence checker and terminates accordingly
+    }
+}
+

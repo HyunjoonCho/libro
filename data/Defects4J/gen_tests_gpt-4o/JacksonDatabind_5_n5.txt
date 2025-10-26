@@ -1,0 +1,65 @@
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.MapperFeature;
+
+public class MixinAnnotationTest {
+
+    public static void main(String[] args) throws Exception {
+        SimpleModule module = new SimpleModule();
+        module.disable(MapperFeature.ALLOW_FINAL_FIELDS_AS_MUTATORS)
+              .disable(MapperFeature.AUTO_DETECT_FIELDS)
+              .disable(MapperFeature.AUTO_DETECT_GETTERS)
+              .disable(MapperFeature.AUTO_DETECT_IS_GETTERS)
+              .disable(MapperFeature.INFER_PROPERTY_MUTATORS);
+
+        module.setMixInAnnotation(Person.class, PersonMixin.class);
+
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(module);
+
+        PersonImpl person = new PersonImpl();
+        person.setCity("New York");
+
+        // Serialize person to JSON
+        String json = mapper.writeValueAsString(person);
+
+        // Expected to include "city" in the JSON output
+        System.out.println("Serialized JSON: " + json);
+
+        // Test assertion
+        if (!json.contains("\"city\"")) {
+            throw new AssertionError("City was not serialized as expected.");
+        }
+    }
+
+    public interface Contact {
+        String getCity();
+    }
+
+    public static class ContactImpl implements Contact {
+        private String city;
+
+        public String getCity() {
+            return city;
+        }
+
+        public void setCity(String city) {
+            this.city = city;
+        }
+    }
+
+    public static class ContactMixin implements Contact {
+        @JsonProperty
+        public String getCity() {
+            return null;
+        }
+    }
+
+    public interface Person extends Contact {}
+
+    public static class PersonImpl extends ContactImpl implements Person {}
+
+    public static class PersonMixin extends ContactMixin implements Person {}
+}

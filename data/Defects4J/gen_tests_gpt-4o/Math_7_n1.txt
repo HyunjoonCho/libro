@@ -1,0 +1,90 @@
+
+import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
+import org.apache.commons.math3.ode.events.EventHandler;
+import org.apache.commons.math3.ode.events.EventHandler.Action;
+import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class ODEEventTest {
+
+    // Define a simple ODE system (e.g., dy/dt = y)
+    public static class SimpleODE implements FirstOrderDifferentialEquations {
+        @Override
+        public int getDimension() {
+            return 1;
+        }
+
+        @Override
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = y[0];
+        }
+    }
+
+    // Define an event handler that triggers a reset
+    public static class ResetEventHandler implements EventHandler {
+        @Override
+        public double g(double t, double[] y) {
+            return y[0] - 1.0; // Event occurs when y = 1.0
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.RESET_STATE;
+        }
+
+        @Override
+        public void resetState(double t, double[] y) {
+            y[0] = 0.5; // Reset state value
+        }
+    }
+
+    // Define another event handler
+    public static class SimpleEventHandler implements EventHandler {
+        private double lastEventTime = Double.NaN;
+
+        @Override
+        public double g(double t, double[] y) {
+            return t - 0.5; // Event occurs at t = 0.5
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            lastEventTime = t;
+            return Action.CONTINUE;
+        }
+
+        @Override
+        public void resetState(double t, double[] y) {
+            // No specific reset needed
+        }
+
+        public double getLastEventTime() {
+            return lastEventTime;
+        }
+    }
+
+    @Test
+    public void testEventStateResetCorrectly() {
+        FirstOrderDifferentialEquations ode = new SimpleODE();
+        DormandPrince853Integrator integrator = new DormandPrince853Integrator(1.0e-8, 100.0, 1.0e-10, 1.0e-10);
+
+        double[] y = {0.0};
+        double t0 = 0.0;
+        double t1 = 1.0;
+        
+        SimpleEventHandler simpleEventHandler = new SimpleEventHandler();
+        ResetEventHandler resetEventHandler = new ResetEventHandler();
+
+        // Add both events to the integrator
+        integrator.addEventHandler(simpleEventHandler, 1.0e-10, 1.0e-10, 100);
+        integrator.addEventHandler(resetEventHandler, 1.0e-10, 1.0e-10, 100);
+
+        // Integrate
+        integrator.integrate(ode, t0, y, t1, y);
+
+        // Check if the event handler recorded the event correctly
+        assertEquals(0.5, simpleEventHandler.getLastEventTime(), 1.0e-10);
+    }
+}

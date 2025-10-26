@@ -1,0 +1,55 @@
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonTypeName;
+import com.fasterxml.jackson.annotation.JsonTypeResolver;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.TypeIdResolver;
+import com.fasterxml.jackson.databind.jsontype.impl.TypeIdResolverBase;
+import org.junit.jupiter.api.Test;
+
+import java.util.Objects;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class ExternalPropertyDeserializationTest {
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "type")
+    interface Payload { }
+
+    @JsonTypeName("foo")
+    static class FooPayload implements Payload {
+        public String data;
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            FooPayload that = (FooPayload) o;
+            return Objects.equals(data, that.data);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(data);
+        }
+    }
+
+    static class Request {
+        public String type;
+        public Payload payload;
+    }
+
+    @Test
+    public void testExternalPropertyDeserialization() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        
+        String json = "{\"type\":\"foo\",\"payload\":{\"data\":\"testData\"}}";
+        
+        Request request = mapper.readValue(json, Request.class);
+        
+        assertEquals("foo", request.type); // Ensure the type is correctly deserialized
+        assertNotNull(request.payload); // Check that payload is not null
+        assertTrue(request.payload instanceof FooPayload);  // Verify type is as expected
+        assertEquals(new FooPayload() {{ data = "testData"; }}, request.payload); // Validate the content
+    }
+}

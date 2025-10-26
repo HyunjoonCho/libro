@@ -1,0 +1,81 @@
+
+import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
+import org.apache.commons.math3.ode.FirstOrderIntegrator;
+import org.apache.commons.math3.ode.events.EventHandler;
+import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+
+public class ODEEventDetectionTest {
+
+    private static class TestODE implements FirstOrderDifferentialEquations {
+        @Override
+        public int getDimension() {
+            return 1;
+        }
+
+        @Override
+        public void computeDerivatives(double t, double[] y, double[] dot) {
+            dot[0] = 1.0; // Simple derivative, dy/dt = 1
+        }
+    }
+
+    private static class CloseEventDetector implements EventHandler {
+        private final double firstEventTime;
+        private final double secondEventTime;
+        private boolean firstEventDetected = false;
+        private boolean secondEventDetected = false;
+
+        public CloseEventDetector(double firstEventTime, double secondEventTime) {
+            this.firstEventTime = firstEventTime;
+            this.secondEventTime = secondEventTime;
+        }
+
+        @Override
+        public double g(double t, double[] y) {
+            // Switching function that changes sign at predefined event times
+            if (!firstEventDetected && t < firstEventTime) {
+                return t - firstEventTime;
+            } else if (firstEventDetected && t >= firstEventTime && !secondEventDetected) {
+                return t - secondEventTime;
+            }
+            return 1.0; // Default non-zero value
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            if (Math.abs(t - firstEventTime) < 1e-9) {
+                firstEventDetected = true;
+            } else if (Math.abs(t - secondEventTime) < 1e-9) {
+                secondEventDetected = true;
+            }
+            return Action.CONTINUE;
+        }
+
+        @Override
+        public void resetState(double t, double[] y) {
+            // No state resetting needed
+        }
+
+        public boolean isSecondEventDetected() {
+            return secondEventDetected;
+        }
+    }
+
+    @Test
+    public void testCloseEventDetection() {
+        double firstEventTime = 90.0;
+        double secondEventTime = 135.0;
+        double[] y = {0.0};
+
+        FirstOrderIntegrator integrator = new DormandPrince853Integrator(1.0e-8, 10.0, 1.0e-8, 1.0e-8);
+        TestODE ode = new TestODE();
+        CloseEventDetector eventDetector = new CloseEventDetector(firstEventTime, secondEventTime);
+        integrator.addEventHandler(eventDetector, 1.0e-6, 1.0e-8, 1000);
+
+        integrator.integrate(ode, 0.0, y, 200.0, y);
+
+        assertTrue("Second event should have been detected.", eventDetector.isSecondEventDetected());
+    }
+}

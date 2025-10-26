@@ -1,0 +1,54 @@
+
+import static org.junit.Assert.assertEquals;
+import com.google.javascript.jscomp.*;
+import com.google.javascript.rhino.*;
+import org.junit.Test;
+
+public class MissingPropertyErrorTest {
+
+    @Test
+    public void testPropertyErrorOnWrongType() {
+        // Set up the compiler configuration with the necessary options.
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setWarningLevel(
+            DiagnosticGroups.MISSING_PROPERTIES, CheckLevel.WARNING);
+
+        // JavaScript code with incorrect property error.
+        String jsCode = "/**\n" +
+                        " * @constructor\n" +
+                        " */\n" +
+                        "function C2() {}\n" +
+                        "\n" +
+                        "/**\n" +
+                        " * @constructor\n" +
+                        " */\n" +
+                        "function C3(c2) {\n" +
+                        "  /**\n" +
+                        "   * @type {C2}\n" +
+                        "   * @private\n" +
+                        "   */\n" +
+                        "  this.c2_ = c2;\n" +
+                        "\n" +
+                        "  use(this.c2_.prop);\n" +
+                        "}\n";
+
+        // Set up the externs and inputs for the compiler.
+        JSSourceFile extern = JSSourceFile.fromCode("externs", "");
+        JSSourceFile input = JSSourceFile.fromCode("input", jsCode);
+
+        // Compile the code.
+        Result result = compiler.compile(extern, input, options);
+
+        // Check if there are any warnings generated.
+        if (!result.warnings.isEmpty()) {
+            // Check the warning text to ensure it references the correct type.
+            String warningMessage = result.warnings.get(0).description;
+            assertEquals(
+                "Property prop never defined on C2", warningMessage);
+        } else {
+            // Fail the test if no warning was generated, as we expect one.
+            fail("Expected a warning about a missing property on type C2.");
+        }
+    }
+}

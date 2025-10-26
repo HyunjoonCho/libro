@@ -1,0 +1,47 @@
+
+import com.google.javascript.jscomp.CompilationLevel;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testOptimizationFailsWithVariableInCatchClause() {
+        // Original JavaScript code
+        String originalJs = "function getStack() {" +
+                            "  var getErrorObject = function() {" +
+                            "    try {" +
+                            "      throw Error(\"\");" +
+                            "    } catch(err) {" +
+                            "      return err;" +
+                            "    }" +
+                            "  };" +
+                            "  return getErrorObject().stack;" +
+                            "}" +
+                            "window['getStackTrace'] = getStack;";
+
+        // Set up the Closure Compiler
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        // Compile the code
+        SourceFile input = SourceFile.fromCode("input.js", originalJs);
+        Result result = compiler.compile(SourceFile.fromCode("externs.js", ""), input, options);
+
+        // Check if compilation was successful
+        assertTrue("Compilation should be successful", result.success);
+
+        // Check the optimized code
+        String optimizedJs = compiler.toSource();
+
+        // Verify that the variable scoping is incorrect in the optimized code
+        // This would generally fail if the bug is present
+        assertFalse("Optimized code should not incorrectly reference catch variable",
+                    optimizedJs.contains("return a.stack"));
+    }
+}

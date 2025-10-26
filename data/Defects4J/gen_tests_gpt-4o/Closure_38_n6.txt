@@ -1,0 +1,54 @@
+
+import org.junit.Test;
+import java.io.*;
+
+import static org.junit.Assert.*;
+
+public class IdentifierMinusNegativeNumberTest {
+
+    @Test
+    public void testMinusNegativeNumberParsing() {
+        // Path to the closure compiler jar file
+        String closureCompilerPath = "path/to/closure-compiler.jar";
+
+        // JavaScript code containing the issue
+        String jsCode = "var g = 1;\ng--0.0;";
+
+        // Write the JavaScript code to a temporary file
+        File jsFile = new File("bulletfail.js");
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(jsFile))) {
+            writer.write(jsCode);
+        } catch (IOException e) {
+            fail("Failed to write JavaScript file: " + e.getMessage());
+        }
+        
+        // Compile the JavaScript file using closure compiler
+        String command = "java -jar " + closureCompilerPath + " --compilation_level ADVANCED_OPTIMIZATIONS --js bulletfail.js --js_output_file cc.js";
+        try {
+            Process process = Runtime.getRuntime().exec(command);
+            process.waitFor();
+
+            // Read and verify the output
+            File compiledJsFile = new File("cc.js");
+            assertTrue("Compiled file not created", compiledJsFile.exists());
+            
+            BufferedReader reader = new BufferedReader(new FileReader(compiledJsFile));
+            StringBuilder compiledCode = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                compiledCode.append(line);
+            }
+            reader.close();
+
+            // Check if the compiled code contains problematic g--0.0
+            assertTrue("Compiled code does not contain expected minus issue.", compiledCode.toString().contains("g--0.0"));
+
+        } catch (Exception e) {
+            fail("Compilation failed: " + e.getMessage());
+        } finally {
+            // Clean up temporary files
+            jsFile.delete();
+            new File("cc.js").delete();
+        }
+    }
+}

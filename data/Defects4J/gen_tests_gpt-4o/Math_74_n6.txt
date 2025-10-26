@@ -1,0 +1,53 @@
+
+import org.apache.commons.math4.ode.FirstOrderDifferentialEquations;
+import org.apache.commons.math4.ode.nonstiff.DormandPrince853Integrator;
+import org.apache.commons.math4.ode.sampling.StepHandler;
+import org.apache.commons.math4.ode.sampling.StepInterpolator;
+
+public class DormandPrince853IntegratorTest {
+
+    public static class SimpleODE implements FirstOrderDifferentialEquations {
+        public int getDimension() {
+            return 1; // A single equation
+        }
+
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = -y[0]; // Simple exponential decay
+        }
+    }
+
+    @org.junit.Test
+    public void testIncorrectInitialStepSize() {
+        double[] y0 = new double[]{1}; // Initial state
+        double[] y = new double[]{0};  // To hold the result
+        double t0 = 0.0;               // Initial time
+        double t1 = 1.0;               // Final time
+
+        // Tolerances - should trigger the incorrect scaling usage
+        double absTolerance = 1.0e-10;
+        double relTolerance = 1.0e-10;
+
+        DormandPrince853Integrator integrator = new DormandPrince853Integrator(
+                1.0e-8, 1.0, absTolerance, relTolerance);
+
+        StepHandler stepHandler = new StepHandler() {
+            public void handleStep(StepInterpolator interpolator, boolean isLast) {
+                double t = interpolator.getCurrentTime();
+                double[] y = interpolator.getInterpolatedState();
+                if (isLast) {
+                    // Check the final result to ensure correctness
+                    // Expected value at t = 1.0 for exact solution: y(1) = exp(-1) ~ 0.3679
+                    double expected = Math.exp(-1);
+                    assert (Math.abs(y[0] - expected) < 1e-5);
+                }
+            }
+
+            public void init(double t0, double[] y0, double t) {
+            }
+        };
+
+        integrator.addStepHandler(stepHandler);
+
+        integrator.integrate(new SimpleODE(), t0, y0, t1, y);
+    }
+}

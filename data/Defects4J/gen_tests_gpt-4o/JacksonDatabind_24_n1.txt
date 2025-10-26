@@ -1,0 +1,57 @@
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.datatype.joda.JacksonJodaDateFormat;
+import com.fasterxml.jackson.datatype.joda.ser.DateTimeSerializer;
+import org.joda.time.DateTime;
+import org.joda.time.DateTimeZone;
+import org.joda.time.format.DateTimeFormat;
+import org.junit.Test;
+
+import java.text.SimpleDateFormat;
+
+import static org.junit.Assert.assertEquals;
+
+public class ObjectMapperDateFormatTest {
+
+    @Test
+    public void testDateFormatChangesTimeZone() throws JsonProcessingException {
+        ObjectMapper mapper = createObjectMapper();
+        
+        // Serialize DateTime
+        String json = mapper.writeValueAsString(new DateTime(1988, 6, 25, 20, 30, DateTimeZone.UTC));
+        
+        // Jackson 2.5.4 expected output
+        // assertEquals("\"1988-06-25 20:30:00\"", json);
+        
+        // Jackson 2.6.0 expected output
+        assertEquals("\"1988-06-25 21:30:00\"", json);
+    }
+
+    private static ObjectMapper createObjectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(createJodaModule());
+        mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+        
+        // Check default time zone before setting DateFormat
+        System.out.println("Before setting DateFormat: " + mapper.getSerializationConfig().getTimeZone());
+
+        // Set DateFormat, which changes the ObjectMapper's timezone in Jackson 2.6.0 and later
+        mapper.setDateFormat(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"));
+        
+        // Check time zone after setting DateFormat
+        System.out.println("After setting DateFormat: " + mapper.getSerializationConfig().getTimeZone());
+        
+        return mapper;
+    }
+
+    private static SimpleModule createJodaModule() {
+        SimpleModule module = new SimpleModule();
+        module.addSerializer(DateTime.class, new DateTimeSerializer(
+                new JacksonJodaDateFormat(DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss")
+                        .withZoneUTC())));
+        return module;
+    }
+}

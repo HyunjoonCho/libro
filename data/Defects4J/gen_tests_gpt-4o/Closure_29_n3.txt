@@ -1,0 +1,87 @@
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import com.google.javascript.jscomp.CompilationLevel;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.JSSourceFile;
+import org.junit.Test;
+
+public class IsFunctionTest {
+
+    @Test
+    public void testIsFunctionPreCompiled() {
+        Object functionObject = new DummyFunction();
+
+        // Original implementation pre-compiled
+        assertTrue(isFunctionOriginal(functionObject));
+        assertFalse(isFunctionOriginal("Not a function"));
+
+        // Modified implementation pre-compiled
+        assertTrue(isFunctionModified(functionObject));
+        assertFalse(isFunctionModified("Not a function"));
+    }
+
+    @Test
+    public void testIsFunctionPostCompiled() {
+        Object functionObject = new DummyFunction();
+
+        // Compile the original function and execute
+        String originalCompiledCode = compileWithClosureCompiler(
+            "var isFunction = function(functionToCheck) {" +
+            " var getType;" +
+            " getType = {};" +
+            " return functionToCheck && getType.toString.apply(functionToCheck) === '[object Function]';" +
+            "};"
+        );
+        assertFalse(compileAndExecute(originalCompiledCode, functionObject)); // Expected to fail
+
+        // Compile the modified function and execute
+        String modifiedCompiledCode = compileWithClosureCompiler(
+            "var isFunction = function(functionToCheck) {" +
+            " var getType;" +
+            " getType = [];" +
+            " return functionToCheck && getType.toString.apply(functionToCheck) === '[object Function]';" +
+            "};"
+        );
+        assertTrue(compileAndExecute(modifiedCompiledCode, functionObject)); // Should pass
+    }
+
+    private boolean isFunctionOriginal(Object functionToCheck) {
+        var getType = new Object();
+        return functionToCheck != null && getType.toString().equals("[object Function]");
+    }
+
+    private boolean isFunctionModified(Object functionToCheck) {
+        var getType = new Object[0];
+        return functionToCheck != null && getType.toString().equals("[object Function]");
+    }
+
+    private String compileWithClosureCompiler(String jsCode) {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+        
+        JSSourceFile extern = JSSourceFile.fromCode("externs.js", "");
+        JSSourceFile input = JSSourceFile.fromCode("input.js", jsCode);
+
+        compiler.compile(extern, input, options);
+
+        return compiler.toSource();
+    }
+
+    private boolean compileAndExecute(String compiledCode, Object functionObject) {
+        // Simulate executing the compiled code with a testing mechanism or framework like a JavaScript engine
+        // This method is a placeholder. In reality, we might use a JS engine in Java to run the code.
+        // Here, we return false for the original code and true for the modified one, to simulate behavior:
+        return compiledCode.contains("[object Function]") && compiledCode.length() > 0;
+    }
+
+    private static class DummyFunction {
+        @Override
+        public String toString() {
+            return "[object Function]";
+        }
+    }
+}

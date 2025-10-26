@@ -1,0 +1,47 @@
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.rhino.Node;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class LendsAnnotationTest {
+
+    @Test
+    public void testLendsAnnotationSupport() {
+        String jsCode = "/**" +
+                " * @name MyClass" +
+                " * @class" +
+                " * @extends superClass1" +
+                " * @extends superClass2" +
+                " */" +
+                "dojo.declare('MyClass', [superClass1, superClass2], /** @lends MyClass.prototype */ {" +
+                "  foo: function() { this.doSomething(); }," +
+                "  bar: function() { this.doSomethingElse(); }" +
+                "});";
+
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT_NEXT);
+        options.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setWarningLevel(DiagnosticGroups.CHECK_TYPES, CheckLevel.WARNING);
+
+        Result result = compiler.compile(
+                CommandLineRunner.getDefaultExterns(), 
+                CompilerInput.newInputs(jsCode), 
+                options
+        );
+
+        Node root = result.root;
+        assertTrue("Compilation should not have errors", result.success);
+        
+        // Check for warnings or errors related to "dangerous use of this"
+        boolean hasLendsWarning = false;
+        for (JSError message : result.warnings) {
+            if (message.description.contains("dangerous use of this")) {
+                hasLendsWarning = true;
+            }
+        }
+
+        assertFalse("Should not have 'dangerous use of this' warnings when using @lends", hasLendsWarning);
+    }
+}

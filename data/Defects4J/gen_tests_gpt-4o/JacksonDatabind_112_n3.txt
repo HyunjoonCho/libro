@@ -1,0 +1,74 @@
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import org.junit.Test;
+
+import java.util.Collections;
+import java.util.List;
+
+// Define a custom immutable collection class
+class ImmutableStringCollection {
+    private final List<String> strings;
+
+    public ImmutableStringCollection(List<String> strings) {
+        this.strings = Collections.unmodifiableList(strings);
+    }
+
+    public List<String> getStrings() {
+        return strings;
+    }
+}
+
+// Define a mixin to handle the deserialization to the immutable class
+abstract class ImmutableStringCollectionMixin {
+    ImmutableStringCollectionMixin(@JsonDeserialize(using = ImmutableStringCollectionDeserializer.class) List<String> strings) {}
+}
+
+// Define a custom deserializer for the immutable collection
+class ImmutableStringCollectionDeserializer extends com.fasterxml.jackson.databind.JsonDeserializer<ImmutableStringCollection> {
+    @Override
+    public ImmutableStringCollection deserialize(com.fasterxml.jackson.core.JsonParser p, com.fasterxml.jackson.databind.DeserializationContext ctxt)
+            throws java.io.IOException, com.fasterxml.jackson.core.JsonProcessingException {
+        List<String> strings = ctxt.readValue(p, ctxt.getTypeFactory().constructCollectionType(List.class, String.class));
+        return new ImmutableStringCollection(strings);
+    }
+}
+
+// Define a test class that includes another property with the custom collection
+class TestObject {
+    private String name;
+
+    @JsonDeserialize(using = ImmutableStringCollectionDeserializer.class)
+    private ImmutableStringCollection stringCollection;
+
+    // getters and setters
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+
+    public ImmutableStringCollection getStringCollection() { return stringCollection; }
+    public void setStringCollection(ImmutableStringCollection stringCollection) { this.stringCollection = stringCollection; }
+}
+
+public class JacksonCustomCollectionTest {
+
+    @Test
+    public void testCustomCollectionDeserialization() throws JsonProcessingException {
+        String json = "{\"name\":\"Test Object\",\"stringCollection\":[\"item1\",\"item2\"]}";
+
+        ObjectMapper mapper = new ObjectMapper();
+        // Register the mixin
+        mapper.addMixIn(ImmutableStringCollection.class, ImmutableStringCollectionMixin.class);
+        mapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+
+        TestObject testObject = mapper.readValue(json, TestObject.class);
+
+        assertNotNull(testObject);
+        assertEquals("Test Object", testObject.getName());
+        assertNotNull(testObject.getStringCollection());
+        assertEquals(2, testObject.getStringCollection().getStrings().size());
+        assertEquals("item1", testObject.getStringCollection().getStrings().get(0));
+        assertEquals("item2", testObject.getStringCollection().getStrings().get(1));
+    }
+}

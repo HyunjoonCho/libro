@@ -1,0 +1,48 @@
+
+import static org.junit.Assert.fail;
+
+import java.io.*;
+import java.util.Scanner;
+
+public class JsTypeCheckerTest {
+
+    public String compileJs(String jsCode) throws IOException, InterruptedException {
+        // Assume we have a type-checker CLI tool like Closure Compiler
+        ProcessBuilder processBuilder = new ProcessBuilder("js-type-checker", "--warning_level=VERBOSE", "--js_code", jsCode);
+        processBuilder.redirectErrorStream(true);
+        Process process = processBuilder.start();
+        process.waitFor();
+
+        StringBuilder warningMessages = new StringBuilder();
+        try (Scanner scanner = new Scanner(process.getInputStream())) {
+            while (scanner.hasNextLine()) {
+                warningMessages.append(scanner.nextLine()).append("\n"); // Append warnings
+            }
+        }
+        return warningMessages.toString(); // Return the warnings
+    }
+
+    @org.junit.Test
+    public void testTypeCheckerIgnoresParamAnnotationsInIIFE() {
+        String jsCode = 
+            "var ns = {};\n" +
+            "(function() {\n" +
+            "    /** @param {string=} b */\n" +
+            "    ns.a = function(b) {}\n" +
+            "})();\n" +
+            "\n" +
+            "function d() {\n" +
+            "    ns.a();\n" +
+            "    ns.a(123); // This should cause a warning\n" +
+            "}";
+
+        try {
+            String warnings = compileJs(jsCode);
+            if (!warnings.contains("type error")) { // Example pattern to match expected warning
+                fail("Expected a type error warning when passing a number to a function annotated with {string=}, but got: \n" + warnings);
+            }
+        } catch (IOException | InterruptedException e) {
+            fail("Exception during JS compilation: " + e.getMessage());
+        }
+    }
+}

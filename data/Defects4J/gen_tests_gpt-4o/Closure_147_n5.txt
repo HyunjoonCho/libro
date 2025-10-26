@@ -1,0 +1,59 @@
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import java.util.List;
+import com.google.javascript.jscomp.*;
+
+public class GlobalThisWarningTest {
+
+    public void testGlobalThisWarnings() {
+        // Prepare the compiler options
+        CompilerOptions options = new CompilerOptions();
+        options.setWarningLevel(DiagnosticGroups.GLOBAL_THIS, CheckLevel.WARNING);
+
+        // Input JavaScript code
+        String javascript = "var NS = {\n" +
+                "  read: function() {\n" +
+                "    return this.foo;\n" +
+                "  },\n" +
+                "  write: function() {\n" +
+                "    this.foo = 123;\n" +
+                "  }\n" +
+                "};\n" +
+                "NS.write2 = function() {\n" +
+                "  this.foo = 123;\n" +
+                "};";
+
+        // Create a compiler instance
+        Compiler compiler = new Compiler();
+        
+        // Compile the JS code
+        Result result = compiler.compile(SourceFile.fromCode("externs.js", ""), SourceFile.fromCode("input.js", javascript), options);
+        
+        // Collect all warnings
+        List<JSError> warnings = result.warnings;
+
+        // Check for "JSC_USED_GLOBAL_THIS" warning
+        boolean foundGlobalThisWarningInRead = false;
+        boolean foundGlobalThisWarningInWrite = false;
+        boolean foundGlobalThisWarningInWrite2 = false;
+
+        for (JSError warning : warnings) {
+            if (warning.getType().key.equals("JSC_USED_GLOBAL_THIS")) {
+                String sourceLine = warning.sourceName;
+                if (sourceLine.contains("read:")) {
+                    foundGlobalThisWarningInRead = true;
+                } else if (sourceLine.contains("write:")) {
+                    foundGlobalThisWarningInWrite = true;
+                } else if (sourceLine.contains("write2 = function")) {
+                    foundGlobalThisWarningInWrite2 = true;
+                }
+            }
+        }
+
+        // Verify the warnings
+        assertTrue("Expected JSC_USED_GLOBAL_THIS warning in 'write' method.", foundGlobalThisWarningInWrite);
+        assertTrue("Expected JSC_USED_GLOBAL_THIS warning in 'write2' method.", foundGlobalThisWarningInWrite2);
+        assertTrue("Expected JSC_USED_GLOBAL_THIS warning in 'read' method.", foundGlobalThisWarningInRead);
+    }
+}

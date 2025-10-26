@@ -1,0 +1,50 @@
+
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
+import org.junit.jupiter.api.Test;
+
+import java.lang.ref.WeakReference;
+
+import static org.junit.jupiter.api.Assertions.assertNull;
+
+public class ToStringStyleMemoryLeakTest {
+
+    private static class TestObject {
+        private final int id;
+        private final String name;
+
+        public TestObject(int id, String name) {
+            this.id = id;
+            this.name = name;
+        }
+
+        @Override
+        public String toString() {
+            return new ToStringBuilder(this, ToStringStyle.DEFAULT_STYLE)
+                    .append("id", id)
+                    .append("name", name)
+                    .toString();
+        }
+    }
+
+    @Test
+    public void testThreadLocalMemoryLeak() {
+        // Simulate the use of the class, similar to a webapp use
+        TestObject obj1 = new TestObject(1, "Object1");
+        String str = obj1.toString();
+
+        // Capture the object with a weak reference, simulating that it's not strongly referenced anymore after a reload
+        WeakReference<ToStringStyle> styleReference = new WeakReference<>(ToStringStyle.DEFAULT_STYLE);
+
+        // Simulate a webapp or classloader unload scenario:
+        // Clear strong references
+        obj1 = null;
+        str = null;
+
+        // Suggest Garbage Collection
+        System.gc();
+
+        // Verify that the ToStringStyle can be garbage collected
+        assertNull(styleReference.get(), "ToStringStyle should be garbage collectable to avoid memory leaks");
+    }
+}

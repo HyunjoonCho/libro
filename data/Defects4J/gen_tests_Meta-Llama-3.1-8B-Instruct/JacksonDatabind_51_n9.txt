@@ -1,0 +1,32 @@
+java
+public class TestTypeIdResolver {
+    public static class GenericClass<T> {
+        public T value;
+    }
+
+    public static class TypeIdResolver extends TypeIdResolver {
+        @Override
+        public JavaType resolveType(DeserializationConfig config, Type type) {
+            if (type instanceof Class) {
+                Class<?> clazz = (Class<?>) type;
+                if (clazz.isParameterized()) {
+                    ParameterizedType parameterizedType = (ParameterizedType) clazz;
+                    return config.getTypeFactory().constructType(parameterizedType);
+                }
+            }
+            return super.resolveType(config, type);
+        }
+    }
+
+    @Test
+    public void testTypeIdResolver() throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.setTypeIdResolver(new TypeIdResolver());
+        String json = "{\"value\":\"test\"}";
+        GenericClass<String> genericClass = mapper.readValue(json, GenericClass.class);
+        assertNotNull(genericClass.value);
+        assertEquals(String.class, genericClass.value.getClass());
+        // This should pass with the fix
+        // With the current implementation, it will fail because the generic type is not preserved
+    }
+}

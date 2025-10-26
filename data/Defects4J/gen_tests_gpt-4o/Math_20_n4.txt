@@ -1,0 +1,63 @@
+
+import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.CMAESOptimizer;
+import org.apache.commons.math3.optim.MaxEval;
+import org.apache.commons.math3.optim.nonlinear.scalar.GoalType;
+import org.apache.commons.math3.optim.PointValuePair;
+import org.apache.commons.math3.optim.SimpleBounds;
+import org.apache.commons.math3.optim.nonlinear.scalar.ObjectiveFunction;
+
+import static org.junit.Assert.*;
+
+public class CMAESOptimizerBoundsTest {
+
+    // A simple quadratic objective function: f(x) = (x - 3)^2
+    private static double objectiveFunction(double[] x) {
+        double sum = 0;
+        for (double v : x) {
+            sum += (v - 3) * (v - 3);
+        }
+        return sum;
+    }
+
+    @Test
+    public void testCMAESOptimizerRespectBounds() {
+        // Define bounds for the optimizer
+        double[] lowerBounds = {0.0, 0.0};
+        double[] upperBounds = {5.0, 5.0};
+
+        // Initialize the CMA-ES optimizer
+        CMAESOptimizer optimizer = new CMAESOptimizer(
+                10000, // Maximal number of iterations
+                0,     // Stop fitness
+                true,  // isActiveCMA
+                0,     // Check feasible count
+                10,    // Random generator seed
+                null,  // Random generator
+                false, // Generate statistics
+                new CMAESOptimizer.Sigma(new double[] {0.5, 0.5}) // Initial standard deviation
+        );
+
+        // Run the optimization
+        PointValuePair result = optimizer.optimize(
+                new MaxEval(1000),
+                new ObjectiveFunction(CMAESOptimizerBoundsTest::objectiveFunction),
+                GoalType.MINIMIZE,
+                new SimpleBounds(lowerBounds, upperBounds),
+                new CMAESOptimizer.InitialGuess(new double[] {2.0, 2.0})
+        );
+
+        // Get the point that was optimized
+        double[] point = result.getPoint();
+
+        // Perform the assertion checks to ensure the optimizer did not exceed the bounds
+        for (int i = 0; i < point.length; i++) {
+            assertTrue("Optimizer exceeded lower bound", point[i] >= lowerBounds[i]);
+            assertTrue("Optimizer exceeded upper bound", point[i] <= upperBounds[i]);
+        }
+
+        // Ensure the optimizer found the correct minimum
+        // Objective function should be minimized when each variable is 3
+        double expectedValue = objectiveFunction(new double[] {3.0, 3.0});
+        assertEquals("Objective function is not minimized as expected", expectedValue, result.getValue(), 1e-6);
+    }
+}

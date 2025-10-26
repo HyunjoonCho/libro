@@ -1,0 +1,40 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertTrue;
+
+public class ClosureCompilerBugTest {
+
+    @Test
+    public void testFunctionCastingIssueWithAdvancedOptimizations() {
+        String javascriptCode = "/** @type {function(!string):!string} */ "
+                + "((new window.ActiveXObject('ShockwaveFlash.ShockwaveFlash'))['GetVariable'])('$version');";
+
+        CompilerOptions options = new CompilerOptions();
+        CommandLineRunner.setOptionsForCompilationLevel(CommandLineRunner.CompilationLevel.ADVANCED_OPTIMIZATIONS, options);
+
+        List<SourceFile> externs = CommandLineRunner.getDefaultExterns();
+        List<SourceFile> inputs = new ArrayList<>();
+        inputs.add(SourceFile.fromCode("test.js", "console.log(" + javascriptCode + ");"));
+
+        com.google.javascript.jscomp.Compiler compiler = new com.google.javascript.jscomp.Compiler();
+        Result result = compiler.compile(externs, inputs, options);
+
+        // Get the compiled code
+        String compiledCode = compiler.toSource();
+
+        // Check for the erroneous wrapping "(0, ...)" produced by the Closure Compiler
+        boolean hasErroneousWrapping = compiledCode.contains("(0,") && compiledCode.contains(".GetVariable");
+        assertTrue("The compiled code has incorrect wrapping affecting function call.", hasErroneousWrapping);
+
+        // For debugging purposes, output the compiled code
+        System.out.println("Compiled JavaScript: " + compiledCode);
+    }
+}

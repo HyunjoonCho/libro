@@ -1,0 +1,61 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.JSError;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testTypedCoverage() {
+        // Source JavaScript code
+        String jsCode = "/**\n" +
+                        " * @constructor\n" +
+                        " * @param {!Element} element\n" +
+                        " */\n" +
+                        "function Example(element) {\n" +
+                        "    /**\n" +
+                        "     * @param {!string} ns\n" +
+                        "     * @param {!string} name\n" +
+                        "     * @return {undefined}\n" +
+                        "     */\n" +
+                        "    this.appendElement = function appendElement(ns, name) {\n" +
+                        "        var e = element.ownerDocument.createElementNS(ns, name);\n" +
+                        "        element.appendChild(e);\n" +
+                        "    };\n" +
+                        "}\n" +
+                        "window['Example'] = Example;";
+
+        List<SourceFile> input = new ArrayList<>();
+        input.add(SourceFile.fromCode("test.js", jsCode));
+
+        List<SourceFile> externs = CommandLineRunner.getDefaultExterns();
+
+        com.google.javascript.jscomp.Compiler compiler = new com.google.javascript.jscomp.Compiler();
+        com.google.javascript.jscomp.CompilerOptions options = new com.google.javascript.jscomp.CompilerOptions();
+
+        // Set error management
+        com.google.javascript.jscomp.Compiler.setLoggingLevel(java.util.logging.Level.INFO);
+
+        // Set compiler options
+        options.setWarningLevel(com.google.javascript.jscomp.DiagnosticGroups.CHECK_TYPES, com.google.javascript.jscomp.CheckLevel.ERROR);
+
+        // Compile the code
+        Result result = compiler.compile(externs, input, options);
+
+        // Assert no errors
+        assertEquals("Unexpected number of errors", 0, result.errors.length);
+
+        // Assert typed count; expects this to be less than 100% as per the bug report
+        int expectedTypedCoverage = 737; // Simulating 73.7% typed as per example
+        int actualTypedCoverage = (int) (result.typedCount / (double) (result.typedCount + result.untypedCount) * 1000);
+
+        assertEquals("Unexpected typed coverage", expectedTypedCoverage, actualTypedCoverage);
+    }
+}

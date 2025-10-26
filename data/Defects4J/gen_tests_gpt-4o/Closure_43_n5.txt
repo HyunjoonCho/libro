@@ -1,0 +1,52 @@
+
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.JSError;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import com.google.javascript.jscomp.CommandLineRunner; 
+
+public class LendsAnnotationTest {
+
+    @Test
+    public void testJSDocLendsAnnotation() {
+        // JavaScript code to be compiled
+        String jsCode = ""
+            + "/** @constructor */\n"
+            + "function Person() {}\n"
+            + "\n"
+            + "makeClass = function(protoProps, staticProps) {\n"
+            + "  /** @lends {Person.prototype} */\n"
+            + "  var proto = protoProps;\n"
+            + "  for (var key in proto) {\n"
+            + "    Person.prototype[key] = proto[key];\n"
+            + "  }\n"
+            + "};\n"
+            + "\n"
+            + "makeClass({\n"
+            + "  sayHello: function() { return 'Hello'; }\n"
+            + "});";
+
+        // Create a new Compiler instance with advanced optimizations and type checking enabled
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        CommandLineRunner.setDefaultOptionsForCompilationLevel(
+            CompilationLevel.ADVANCED_OPTIMIZATIONS, options);
+        options.setWarningLevel(DiagnosticGroups.CHECK_TYPES, CheckLevel.ERROR);
+
+        // Compile the JavaScript code
+        Result result = compiler.compile(
+            SourceFile.fromCode("externs.js", ""), // Externs
+            SourceFile.fromCode("input.js", jsCode),
+            options);
+
+        // Check for errors and assertions
+        for (JSError error : result.errors) {
+            System.out.println(error.toString());
+        }
+
+        // Assert that there is an error related to the @lends annotation misuse
+        assertFalse("Expected an error due to incorrect @lends usage", result.errors.isEmpty());
+        assertTrue("Expected specific @lends related error", result.errors.stream().anyMatch(
+            error -> error.description.contains("not declared before @lends annotation")));
+    }
+}

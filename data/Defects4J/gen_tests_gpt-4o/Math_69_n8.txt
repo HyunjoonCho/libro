@@ -1,0 +1,34 @@
+
+import org.apache.commons.math3.stat.correlation.PearsonsCorrelation;
+import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
+import org.apache.commons.math3.distribution.TDistribution;
+import org.junit.Test;
+import static org.junit.Assert.assertTrue;
+
+public class PearsonsCorrelationTest {
+
+    @Test
+    public void testPearsonsCorrelationPValuePrecision() {
+        // Sample data with many treatments to demonstrate p-value precision issues
+        double[] x = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+        double[] y = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10.0000001};
+
+        PearsonsCorrelation pears = new PearsonsCorrelation();
+        double[][] correlationMatrix = pears.computeCorrelationMatrix(x, y).getData();
+        int n = x.length;
+        
+        // Access the t-distribution for the given degree of freedom
+        TDistribution tDistribution = new TDistribution(n - 2);
+        double r = correlationMatrix[0][1];
+        double t = r * Math.sqrt((n - 2) / (1.0 - r * r));
+        
+        // Original problematic calculation of p-value
+        double originalPValue = 2 * (1 - tDistribution.cumulativeProbability(t));
+        
+        // Expected/corrected calculation based on MATH-201
+        double correctedPValue = 2 * tDistribution.cumulativeProbability(-t);
+        
+        assertTrue("Original p-value is incorrectly calculated as zero", originalPValue > 0);
+        assertTrue("Corrected p-value should be smaller than the original", correctedPValue < originalPValue);
+    }
+}

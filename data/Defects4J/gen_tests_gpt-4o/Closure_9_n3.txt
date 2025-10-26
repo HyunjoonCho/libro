@@ -1,0 +1,53 @@
+
+import org.junit.Test;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.JSError;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import static org.junit.Assert.assertTrue;
+
+public class CompilerAmdModuleTest {
+
+    @Test
+    public void testCompilerFailsToFindAmdModuleInSubdirectory() throws IOException {
+        // Set up files and directories
+        Files.createDirectories(Paths.get("lib"));
+        Files.write(Paths.get("lib/Foo.js"), "define([], function() { return 'Foo'; });".getBytes());
+        Files.write(Paths.get("Bar.js"), "define(['lib/Foo'], function(Foo) { return Foo + ' and Bar'; });".getBytes());
+
+        // Configure the compiler
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT5);
+        options.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT5);
+        options.setProcessCommonJSModules(true);
+        options.setTransformAMDToCJSModules(true);
+
+        // Compile the files
+        Result result = compiler.compile(
+            SourceFile.fromCode("externs.js", ""),
+            SourceFile.fromFiles(
+                new File("lib/Foo.js"), 
+                new File("Bar.js")
+            ),
+            options
+        );
+
+        // Check for expected error
+        boolean hasExpectedError = false;
+        for (JSError error : result.errors) {
+            if (error.description.contains("required entry point \"module$lib$Foo\" never provided")) {
+                hasExpectedError = true;
+                break;
+            }
+        }
+        
+        // Assert that the expected error is present
+        assertTrue("Expected error 'required entry point \"module$lib$Foo\" never provided' not found", hasExpectedError);
+    }
+}

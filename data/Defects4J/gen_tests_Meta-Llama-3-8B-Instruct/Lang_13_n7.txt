@@ -1,0 +1,57 @@
+
+import org.apache.commons.lang3.SerializationUtils;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
+
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
+
+@RunWith(Parameterized.class)
+public class SerializationUtilsTest {
+
+    @Parameters
+    public static Iterable<Object[]> data() {
+        return Arrays.asList(new Object[][]{
+                {int.class},
+                {int[].class},
+        });
+    }
+
+    private final Class<?> primitiveType;
+
+    public SerializationUtilsTest(Class<?> primitiveType) {
+        this.primitiveType = primitiveType;
+    }
+
+    @Test
+    public void primitiveTypeClassSerialization() {
+        Class<?> clone = SerializationUtils.clone(primitiveType);
+        assertEquals(primitiveType, clone);
+    }
+
+    @Test
+    public void primitiveTypeClassSerializationThrowsClassNotFoundException() {
+        assertThrows(ClassNotFoundException.class, () -> SerializationUtils.clone(primitiveType));
+    }
+
+    @Test
+    public void testOriginalJavaBehavior() throws Exception {
+        Constructor<ObjectInputStream> constructor = ObjectInputStream.class.getConstructor(ClassLoader.class);
+        ObjectInputStream ois = constructor.newInstance(new ClassLoader() {
+            @Override
+            public Class<?> loadClass(String name) throws ClassNotFoundException {
+                if (primitiveType.getName().equals(name)) {
+                    return primitiveType;
+                }
+                return super.loadClass(name);
+            }
+        });
+
+        assertEquals(primitiveType, ois.resolveClass(primitiveType.getName()));
+    }
+}

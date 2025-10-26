@@ -1,0 +1,49 @@
+
+import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
+import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
+import org.apache.commons.math3.ode.sampling.StepHandler;
+import org.apache.commons.math3.ode.sampling.StepInterpolator;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+
+public class AdaptiveStepSizeIntegratorTest {
+
+    @Test
+    public void testTooLargeFirstStep() {
+        // Differential equation dy/dt = -2y, y(0) = 1
+        FirstOrderDifferentialEquations odes = new FirstOrderDifferentialEquations() {
+            public int getDimension() {
+                return 1;
+            }
+
+            public void computeDerivatives(double t, double[] y, double[] yDot) {
+                yDot[0] = -2 * y[0];
+            }
+        };
+
+        // Initial state
+        double[] yStart = new double[]{1.0};
+
+        // Define a step handler to make assertions
+        StepHandler stepHandler = new StepHandler() {
+            @Override
+            public void init(double t0, double[] y0, double t) {
+                assertTrue("Initial time step should be within integration range.", t0 >= 0.0 && t0 <= 1e-10);
+            }
+
+            @Override
+            public void handleStep(StepInterpolator interpolator, boolean isLast) {
+                assertTrue("All steps should be within the integration range.", 
+                           interpolator.getCurrentTime() >= 0.0 && interpolator.getCurrentTime() <= 1e-10);
+            }
+        };
+
+        // Using Dormand-Prince 8(5,3) integrator with a very short integration range [0, 1e-10]
+        DormandPrince853Integrator integrator = new DormandPrince853Integrator(1.0e-12, 1.0, 1.0e-10, 1.0e-10);
+        integrator.addStepHandler(stepHandler);
+
+        // Integrate the ODE
+        integrator.integrate(odes, 0.0, yStart, 1e-10, yStart);
+    }
+}

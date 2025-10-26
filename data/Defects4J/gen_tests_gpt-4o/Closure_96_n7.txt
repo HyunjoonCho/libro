@@ -1,0 +1,56 @@
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions.LanguageMode;
+import com.google.javascript.rhino.Node;
+import org.junit.Test;
+
+import java.util.List;
+
+import static org.junit.Assert.*;
+
+public class MissingTypeCheckTest {
+
+    @Test
+    public void testVarArgsTypeCheck() {
+        // JavaScript code that should generate type warnings
+        String jsCode = "/**\n" +
+                " * @param {...string} var_args\n" +
+                " */\n" +
+                "function foo(var_args) {\n" +
+                "  return arguments.length;\n" +
+                "}\n" +
+                "\n" +
+                "foo('hello'); \n" +
+                "foo(123); \n" +
+                "foo('hello', 123); // should warn about 123\n";
+
+        // Set up the Compiler and CompilerOptions
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setLanguageIn(LanguageMode.ECMASCRIPT5);
+
+        // Set compilation level and warning level
+        CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+        WarningLevel.VERBOSE.setOptionsForWarningLevel(options);
+
+        // Compile the code
+        Node root = compiler.parse(SourceFile.fromCode("test.js", jsCode));
+        assertNotNull("Root node should not be null", root);
+
+        // Run the type checker to gather warnings
+        compiler.check();
+
+        // Check the generated warnings
+        List<JSError> warnings = compiler.getWarnings();
+        
+        // Verify that there is at least one warning
+        assertFalse("Expected to find type mismatch warnings", warnings.isEmpty());
+
+        // Check if there is a warning related to type mismatch for integer in foo('hello', 123)
+        boolean typeMismatchWarning = warnings.stream().anyMatch(warning -> warning.getType().equals(DiagnosticGroups.CHECK_TYPES) 
+            && warning.description.contains("Bad type"));
+
+        assertTrue("Expected a type mismatch warning for 'foo('hello', 123)' call", typeMismatchWarning);
+    }
+}

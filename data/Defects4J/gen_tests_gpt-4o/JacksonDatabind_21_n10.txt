@@ -1,0 +1,71 @@
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class EnumSerializationTest {
+
+    enum TestEnum {
+        // Use @JsonValue to specify the serialized value of the enum
+        VALUE_ONE("value1");
+
+        private String valueInJson;
+
+        private TestEnum(String valueInJson) {
+            this.valueInJson = valueInJson;
+        }
+
+        @JsonValue
+        public String getValueInJson() {
+            return valueInJson;
+        }
+
+        @JsonCreator
+        public static TestEnum forValue(String value) {
+            for (TestEnum testEnum : values()) {
+                if (testEnum.valueInJson.equalsIgnoreCase(value)) {
+                    return testEnum;
+                }
+            }
+            throw new IllegalArgumentException("Unknown enum value: " + value);
+        }
+    }
+
+    // Wrapper class to test serialization and deserialization
+    static class TestWrapper {
+        @JsonDeserialize(using = TestEnumDeserializer.class)
+        private TestEnum testEnum;
+
+        public TestWrapper() {}
+
+        public TestWrapper(TestEnum testEnum) {
+            this.testEnum = testEnum;
+        }
+
+        public TestEnum getTestEnum() {
+            return testEnum;
+        }
+
+        public void setTestEnum(TestEnum testEnum) {
+            this.testEnum = testEnum;
+        }
+    }
+
+    @Test
+    public void testEnumSerialization() throws JsonProcessingException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        TestWrapper wrapper = new TestWrapper(TestEnum.VALUE_ONE);
+
+        // Serialize the enum
+        String json = objectMapper.writeValueAsString(wrapper);
+        assertEquals("{\"testEnum\":\"value1\"}", json);
+
+        // Deserialize the enum
+        TestWrapper deserializedWrapper = objectMapper.readValue("{\"testEnum\":\"value1\"}", TestWrapper.class);
+        assertEquals(TestEnum.VALUE_ONE, deserializedWrapper.getTestEnum());
+    }
+}

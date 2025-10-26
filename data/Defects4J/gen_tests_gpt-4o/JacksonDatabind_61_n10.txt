@@ -1,0 +1,56 @@
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.jsontype.impl.StdTypeResolverBuilder;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.junit.Assert.fail;
+
+public class JacksonDeserializationTest {
+
+    @Test
+    public void testDeserializePrimitiveLongWithTypeResolver() {
+        // Create test data
+        Data data = new Data();
+        data.key = 1L;
+        Map<String, Object> mapData = new HashMap<>();
+        mapData.put("longInMap", 2L);
+        mapData.put("longAsField", data);
+
+        // Configure Jackson to preserve types
+        JsonFactory factory = new JsonFactory();
+        ObjectMapper mapper = new ObjectMapper(factory);
+        StdTypeResolverBuilder resolver = new StdTypeResolverBuilder();
+        resolver.init(JsonTypeInfo.Id.CLASS, null);
+        resolver.inclusion(JsonTypeInfo.As.PROPERTY);
+        resolver.typeProperty("__t");
+        mapper.setDefaultTyping(resolver);
+        mapper.enable(SerializationFeature.INDENT_OUTPUT);
+
+        try {
+            // Serialize
+            String json = mapper.writeValueAsString(mapData);
+            System.out.println("json = " + json);
+
+            // Deserialize
+            Map deserializedData = mapper.readValue(json, Map.class);
+            // If no exception, this test case should fail
+            fail("Expected JsonMappingException not thrown");
+        } catch (IOException e) {
+            // Expected exception due to the bug
+            if (!(e.getCause() instanceof IllegalArgumentException)) {
+                fail("Unexpected exception type: " + e.getCause());
+            }
+        }
+    }
+
+    static class Data {
+        public long key;
+    }
+}

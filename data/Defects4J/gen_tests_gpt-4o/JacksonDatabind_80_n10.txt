@@ -1,0 +1,45 @@
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.NamedType;
+import com.fasterxml.jackson.databind.jsontype.TypeResolverBuilder;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class ExtraneousTypeIdMappingTest {
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
+    static class BaseType {
+    }
+
+    static class SubType extends BaseType {
+    }
+
+    @Test
+    public void testExtraneousTypeIdMapping() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        // Registering SubType with a specific name
+        mapper.registerSubtypes(new NamedType(SubType.class, "subtype"));
+
+        // Instantiating SubType but expecting it to serialize as "subtype"
+        BaseType instance = new SubType();
+        String json = mapper.writeValueAsString(instance);
+
+        // Verify the JSON contains the specific type id "subtype"
+        assertTrue(json.contains("\"type\":\"subtype\""));
+
+        // Deserialize back to SubType
+        BaseType result = mapper.readValue(json, BaseType.class);
+        assertEquals(SubType.class, result.getClass());
+
+        // Additional assertion for unexpected base type inclusion
+        TypeResolverBuilder<?> typer = mapper.getDeserializationConfig().getDefaultTyper(BaseType.class);
+        if (typer != null) {
+            // Ensure base type id is not added automatically
+            assertTrue("Unexpected base type id inclusion", !json.contains("\"type\":\"BaseType\""));
+        }
+    }
+}

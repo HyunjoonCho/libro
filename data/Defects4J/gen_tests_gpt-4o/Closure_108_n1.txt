@@ -1,0 +1,41 @@
+
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.JSSourceFile;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+
+public class ScopedAliasesTest {
+
+    @Test
+    public void testScopedAliasesIssue() {
+        // Initialize the JavaScript compiler
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+
+        // JavaScript code that's designed to trigger the issue
+        String jsCode = ""
+                + "var goog = {};\n"
+                + "goog.scope;\n\n"
+                + "var ns = {};\n"
+                + "ns.sub = {};\n"
+                + "/** @constructor */\n"
+                + "ns.sub.C = function() {};\n\n"
+                + "goog.scope(function() {\n"
+                + "  var sub = ns.sub;\n"
+                + "  /** @type {sub.C} */\n"
+                + "  var x = null;\n"
+                + "});";
+
+        // Compile the JavaScript code
+        SourceFile input = SourceFile.fromCode("test.js", jsCode);
+        SourceFile extern = JSSourceFile.fromCode("externs.js", "var window;"); // Simple extern
+        Result result = compiler.compile(extern, input, options);
+
+        // We expect the compilation to fail due to the bug described
+        assertTrue("Expected compilation errors due to incorrect alias handling.", result.success == false);
+    }
+}

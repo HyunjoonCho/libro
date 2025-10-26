@@ -1,0 +1,64 @@
+
+import com.google.gson.*;
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+
+interface Vehicle {}
+
+class Car implements Vehicle {
+    String model;
+
+    Car(String model) {
+        this.model = model;
+    }
+}
+
+class Truck implements Vehicle {
+    int capacity;
+
+    Truck(int capacity) {
+        this.capacity = capacity;
+    }
+}
+
+class VehicleTypeAdapter implements JsonDeserializer<Vehicle> {
+    @Override
+    public Vehicle deserialize(JsonElement json, java.lang.reflect.Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
+        JsonObject jsonObject = json.getAsJsonObject();
+        if (jsonObject.has("model")) {
+            return context.deserialize(json, Car.class);
+        } else if (jsonObject.has("capacity")) {
+            return context.deserialize(json, Truck.class);
+        }
+        return null; // Or throw exception if an unknown type is found
+    }
+}
+
+public class VehicleAdapterTest {
+
+    @Test
+    public void testVehicleTypeAdapter() {
+        String carJson = "{\"model\": \"Sedan\"}";
+        String truckJson = "{\"capacity\": 1200}";
+        
+        GsonBuilder gsonBuilder = new GsonBuilder();
+        gsonBuilder.registerTypeAdapter(Vehicle.class, new VehicleTypeAdapter());
+        Gson gson = gsonBuilder.create();
+
+        // Correct type deserialization
+        Vehicle car = gson.fromJson(carJson, Vehicle.class);
+        assertTrue(car instanceof Car);
+        
+        Vehicle truck = gson.fromJson(truckJson, Vehicle.class);
+        assertTrue(truck instanceof Truck);
+        
+        // Now let's simulate a decoding error where a Car is expected but a Truck's JSON is provided.
+        try {
+            Car carExpected = gson.fromJson(truckJson, Car.class); // Attempting to decode the Truck JSON as a Car
+            fail("Expected JsonParseException was not thrown");
+        } catch (JsonParseException e) {
+            assertNotNull(e.getMessage()); // Ensure exception contains a message
+        }
+    }
+}

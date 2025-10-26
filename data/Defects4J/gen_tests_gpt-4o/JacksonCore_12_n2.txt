@@ -1,0 +1,52 @@
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.StringReader;
+
+import static org.junit.Assert.assertEquals;
+
+public class JsonParserTest {
+
+    @Test
+    public void testTokenLocationAfterFieldName_Stream() throws Exception {
+        _testTokenLocationAfterFieldName(true);
+    }
+
+    @Test
+    public void testTokenLocationAfterFieldName_Reader() throws Exception {
+        _testTokenLocationAfterFieldName(false);
+    }
+
+    private void _testTokenLocationAfterFieldName(boolean useStream) throws Exception {
+        final String DOC = "{\"name\":123}";
+        JsonFactory jf = new JsonFactory();
+        JsonParser jp = useStream ?
+                jf.createParser(new ByteArrayInputStream(DOC.getBytes("UTF-8")))
+                : jf.createParser(new StringReader(DOC));
+
+        assertEquals(JsonToken.START_OBJECT, jp.nextToken());
+        
+        // After reading the field name
+        assertEquals(JsonToken.FIELD_NAME, jp.nextToken());
+        // Store location after FIELD_NAME
+        int fieldNameLine = jp.getTokenLocation().getLineNr();
+        int fieldNameCol = jp.getTokenLocation().getColumnNr();
+
+        // Reading the value after the field name
+        assertEquals(JsonToken.VALUE_NUMBER_INT, jp.nextToken());
+        // The location should be updated for new token
+        assertEquals(1, jp.getTokenLocation().getLineNr());
+        assertEquals(9, jp.getTokenLocation().getColumnNr());
+        
+        // Ensure that FIELD_NAME token location is different from VALUE_NUMBER_INT location
+        assertEquals(1, fieldNameLine);
+        // Column number for FIELD_NAME should be less than for VALUE_NUMBER_INT
+        assertEquals(8, fieldNameCol);
+
+        jp.close();
+    }
+}

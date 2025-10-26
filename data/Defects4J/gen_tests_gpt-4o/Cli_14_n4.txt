@@ -1,0 +1,70 @@
+
+import org.apache.commons.cli2.CommandLine;
+import org.apache.commons.cli2.Group;
+import org.apache.commons.cli2.builder.ArgumentBuilder;
+import org.apache.commons.cli2.builder.DefaultOptionBuilder;
+import org.apache.commons.cli2.builder.GroupBuilder;
+import org.apache.commons.cli2.commandline.Parser;
+import org.apache.commons.cli2.option.DefaultOption;
+import org.apache.commons.cli2.validation.FileValidator;
+import org.junit.Test;
+
+import java.io.File;
+
+import static org.junit.Assert.assertTrue;
+
+public class CLI2SampleTest {
+
+    @Test(expected = ClassCastException.class)
+    public void testFileValidatorThrowsClassCastException() {
+        final DefaultOptionBuilder obuilder = new DefaultOptionBuilder();
+        final ArgumentBuilder abuilder = new ArgumentBuilder();
+        final GroupBuilder gbuilder = new GroupBuilder();
+
+        DefaultOption fileNameOption = obuilder
+                .withShortName("f")
+                .withLongName("file-name")
+                .withRequired(true)
+                .withDescription("name of an existing file")
+                .withArgument(abuilder
+                        .withName("file-name")
+                        .withValidator(FileValidator.getExistingFileInstance())
+                        .create())
+                .create();
+
+        Group options = gbuilder
+                .withName("options")
+                .withOption(fileNameOption)
+                .create();
+
+        Parser parser = new Parser();
+        parser.setHelpTrigger("--help");
+        parser.setGroup(options);
+
+        // Create a temporary existing file to pass as an argument
+        File tempFile = null;
+        try {
+            tempFile = File.createTempFile("testfile", ".txt");
+            tempFile.deleteOnExit();
+
+            // Prepare command line arguments
+            String[] args = new String[]{"--file-name", tempFile.getAbsolutePath()};
+
+            // This line should throw ClassCastException as described in the bug report
+            CommandLine cl = parser.parseAndHelp(args);
+
+            // The exception is expected, so if no exception occurs, fail the test
+            assertTrue("Expected ClassCastException was not thrown", false);
+
+        } catch (Exception e) {
+            // Catch any unexpected exceptions and fail the test
+            if (!(e instanceof ClassCastException)) {
+                assertTrue("Unexpected exception: " + e.getMessage(), false);
+            }
+        } finally {
+            if (tempFile != null && tempFile.exists()) {
+                assertTrue(tempFile.delete());
+            }
+        }
+    }
+}

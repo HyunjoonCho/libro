@@ -1,0 +1,52 @@
+
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.JSSourceFile;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+
+public class AdvancedCompilationTest {
+
+    @Test
+    public void testFunctionRenameIssue() {
+        // Original JavaScript Source Code
+        String jsCode =
+                "function A() {\n" +
+                "  this._x = 1;\n" +
+                "}\n" +
+                "\n" +
+                "A.prototype['func1'] =\n" +
+                "A.prototype.func1 = function() {\n" +
+                "  this._x = 2;\n" +
+                "  this.func2();\n" +
+                "};\n" +
+                "\n" +
+                "A.prototype.func2 = function() {\n" +
+                "  this._x = 3;\n" +
+                "  this.func3();\n" +
+                "};\n" +
+                "\n" +
+                "window['A'] = A;";
+
+        // Initialize the Closure Compiler
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT5);
+        options.setLanguageOut(CompilerOptions.LanguageOut.ECMASCRIPT5_STRICT);
+        
+        // Set compilation level to ADVANCED_OPTIMIZATIONS
+        com.google.javascript.jscomp.CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+        
+        // Perform the compilation
+        compiler.compile(JSSourceFile.fromCode("externs.js", ""), JSSourceFile.fromCode("test.js", jsCode), options);
+        
+        // Get the compiled code
+        String compiledCode = compiler.toSource();
+
+        // Check for expected function renaming issues
+        // This assertion expects that func2() is renamed, but the definition is missing, as described in the bug
+        assertTrue(compiledCode.contains("this.c()"));  // func2 renamed to c
+        assertTrue(!compiledCode.contains("a.prototype.c"));  // func2 definition is missing
+    }
+}

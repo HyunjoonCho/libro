@@ -1,0 +1,53 @@
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.FileWriter;
+import java.io.IOException;
+
+public class CompilerCaretTest {
+
+    private static final String COMPILER_JAR_PATH = "path/to/compiler.jar";
+    private static final String TEST_FILE_NAME = "test.js";
+
+    public static void main(String[] args) {
+        try {
+            // Create test.js file with a missing closing parenthesis
+            createTestFile("alert(1;");
+            // Run the compiler and check output for missing caret
+            boolean isCaretMissing = !hasCaretInOutput();
+            System.out.println("Test with missing parenthesis: " + (isCaretMissing ? "FAILED" : "PASSED"));
+
+            // Create test.js file with a line break after semicolon
+            createTestFile("alert(1;\n");
+            // Run the compiler and check output for caret
+            boolean isCaretPresent = hasCaretInOutput();
+            System.out.println("Test with line break after semicolon: " + (isCaretPresent ? "PASSED" : "FAILED"));
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void createTestFile(String content) throws IOException {
+        try (FileWriter fileWriter = new FileWriter(TEST_FILE_NAME)) {
+            fileWriter.write(content);
+        }
+    }
+
+    private static boolean hasCaretInOutput() throws IOException, InterruptedException {
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                "java", "-jar", COMPILER_JAR_PATH, "--js", TEST_FILE_NAME);
+        Process process = processBuilder.start();
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.contains("^")) {
+                    return true;
+                }
+            }
+        }
+
+        process.waitFor();
+        return false;
+    }
+}

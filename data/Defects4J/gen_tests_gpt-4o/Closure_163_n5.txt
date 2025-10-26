@@ -1,0 +1,68 @@
+
+import com.google.javascript.jscomp.*;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class VarCheckModuleCrashTest {
+
+    private Compiler compiler;
+    private CompilerOptions options;
+
+    @Before
+    public void setUp() {
+        compiler = new Compiler();
+        options = new CompilerOptions();
+
+        // Set compiler options as per the bug report
+        options.setCompilationLevel(CompilationLevel.ADVANCED_OPTIMIZATIONS);
+        options.setPrettyPrint(true);
+        options.setDebugLogDirectoryModule("../mock_dir");
+    }
+
+    // Mock input files based on the description in the bug report
+    private List<JSModule> createTestModules() {
+        // Create mock inputs for the modules
+        SourceFile externs = SourceFile.fromCode("../mock_dir/qunit_externs.js", "");
+        SourceFile jquery = SourceFile.fromCode("../mock_dir/jquery.js", "");
+        SourceFile core = SourceFile.fromCode("../mock_dir/core.js", "equal( jQuery(' <div/> ').length, 1, 'Make sure whitespace is trimmed.' );");
+
+        // Initializing two modules
+        JSModule moduleJquery = new JSModule("jquery");
+        moduleJquery.add(jquery);
+
+        JSModule moduleCore = new JSModule("core");
+        moduleCore.add(core);
+
+        // Define dependencies between modules
+        moduleCore.addDependency(moduleJquery);
+
+        List<JSModule> modules = new ArrayList<>();
+        modules.add(moduleJquery);
+        modules.add(moduleCore);
+
+        // Setup externs
+        compiler.init(List.of(externs), modules, options);
+
+        return modules;
+    }
+
+    @Test(expected = RuntimeException.class)
+    public void testVarCheckCrashWhenUsingModules() {
+        List<JSModule> modules = createTestModules();
+        try {
+            // Run the compilation process
+            compiler.compileModules(modules);
+        } catch (RuntimeException e) {
+            // Assert the known exception is thrown
+            if (e.getMessage().contains("INTERNAL COMPILER ERROR")
+                    && e.getMessage().contains("Unexpected variable jQuery$$2")) {
+                throw e;
+            } else {
+                throw new AssertionError("Unexpected exception: " + e.getMessage(), e);
+            }
+        }
+    }
+}

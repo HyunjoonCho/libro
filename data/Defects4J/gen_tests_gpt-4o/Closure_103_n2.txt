@@ -1,0 +1,50 @@
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.rhino.Node;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testUnreachableCodeWarning() {
+        // JavaScript code to test
+        String code = 
+                "function instanceOf(value, type) {\n" +
+                "    try {\n" +
+                "        if (value instanceof type) {\n" +
+                "            return true;\n" +
+                "        }\n" +
+                "    } catch (exception) {\n" +
+                "        if (exception instanceof TypeError) {\n" +
+                "            throw exception;\n" +
+                "        }\n" +
+                "        return (type === Object);\n" +
+                "    }\n" +
+                "}";
+
+        // Compiler options
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        // Create and setup the compiler
+        Compiler compiler = new Compiler();
+        SourceFile extern = SourceFile.fromCode("externs.js", "");
+        SourceFile input = SourceFile.fromCode("input.js", code);
+
+        // Compile and test for warnings
+        Result result = compiler.compile(extern, input, options);
+
+        // Check if there's an unreachable code warning
+        boolean hasUnreachableCodeWarning = result.warnings.stream()
+                .anyMatch(diagnostic -> {
+                    JSError error = diagnostic.toJSError();
+                    return error.getType().equals(DiagnosticType.WARNING) && 
+                           "JSC_UNREACHABLE_CODE".equals(error.getType().key);
+                });
+
+        // Assert that the unreachable code warning was produced
+        assertTrue("Expected an unreachable code warning, but it was not found.", hasUnreachableCodeWarning);
+    }
+}

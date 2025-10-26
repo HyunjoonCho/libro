@@ -1,0 +1,37 @@
+java
+public class ReferenceChainTest {
+    // illustrates that jackson's "reference chain" help-text uses incorrect class-names for inner classes
+    @Test public void incorrectReferenceChain() throws IOException {
+        JsonMappingException jsonMappingException = expectThrows(JsonMappingException.class, () -> {
+            ObjectMapper objectMapper = new ObjectMapper();
+            objectMapper.readValue(objectMapper.writeValueAsBytes(new Outer()), Outer.class);
+        });
+        JsonMappingException.Reference reference = jsonMappingException.getPath().get(0);
+        assertThat(reference.toString()).isEqualTo("ReferenceChainTest$Outer[\"inner\"]");
+    }
+
+    static class Outer {
+        public Inner inner = new Inner();
+    }
+
+    static class Inner {
+        public int x;
+
+        @JsonCreator
+        public static Inner create(@JsonProperty("x") int x) {
+            return new Inner();
+        }
+    }
+
+    @Test
+    public void testInnerClassReference() throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        Outer outer = new Outer();
+        outer.inner.x = 10;
+
+        String json = objectMapper.writeValueAsString(outer);
+
+        // test that the reference chain is correctly formatted
+        assertThat(json).isEqualTo("{\"inner\":{\"x\":10}}");
+    }
+}

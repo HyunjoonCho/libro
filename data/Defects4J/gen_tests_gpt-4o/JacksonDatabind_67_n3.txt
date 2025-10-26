@@ -1,0 +1,70 @@
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.deser.BeanDeserializerModifier;
+import com.fasterxml.jackson.databind.deser.KeyDeserializer;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.datatype.guava.GuavaModule;
+import com.google.common.collect.ImmutableMap;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class JacksonEnumKeyDeserializerTest {
+
+    public enum TestEnum {
+        VALUE_ONE, VALUE_TWO;
+    }
+
+    @Test
+    public void testCustomEnumKeyDeserializerIgnored() throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new GuavaModule());
+        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+        // Create and register a custom module to handle enum name case insensitivity.
+        SimpleModule module = new SimpleModule();
+        module.setDeserializerModifier(new BeanDeserializerModifier() {
+            @Override
+            public KeyDeserializer modifyKeyDeserializer(
+                    DeserializationConfig config,
+                    JavaType type,
+                    KeyDeserializer deserializer) {
+                if (!type.isEnumType()) {
+                    return super.modifyKeyDeserializer(config, type, deserializer);
+                }
+                return new KeyDeserializer() {
+                    @Override
+                    @SuppressWarnings("unchecked")
+                    public Object deserializeKey(String key, DeserializationContext ctxt)
+                            throws IOException, JsonProcessingException {
+                        Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                        return Enum.valueOf(rawClass, key.toUpperCase());
+                    }
+                };
+            }
+        });
+        objectMapper.registerModule(module);
+
+        // Define JSON input with enum keys in lowercase
+        String jsonInput = "{\"value_one\":\"someValue\"}";
+
+        // Deserialization target type
+        TypeReference<ImmutableMap<TestEnum, String>> typeRef = new TypeReference<ImmutableMap<TestEnum, String>>() {};
+
+        // Deserialization attempt
+        ImmutableMap<TestEnum, String> result = objectMapper.readValue(jsonInput, typeRef);
+
+        // The expected result should map the lowercase key to the corresponding enum
+        ImmutableMap<TestEnum, String> expected = ImmutableMap.of(TestEnum.VALUE_ONE, "someValue");
+
+        // Verify
+        assertEquals(expected, result);
+    }
+}

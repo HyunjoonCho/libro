@@ -1,0 +1,55 @@
+
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import org.junit.Test;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+
+// Custom serializer that is expected to be used.
+class MySerializer extends com.fasterxml.jackson.databind.JsonSerializer<Map<String, String>> {
+    @Override
+    public void serialize(Map<String, String> value, com.fasterxml.jackson.core.JsonGenerator gen, com.fasterxml.jackson.databind.SerializerProvider serializers) 
+            throws IOException, JsonProcessingException {
+        gen.writeStartObject();
+        for (Map.Entry<String, String> entry : value.entrySet()) {
+            gen.writeStringField(entry.getKey(), "serialized:" + entry.getValue());
+        }
+        gen.writeEndObject();
+    }
+}
+
+public class JsonAnyGetterTest {
+
+    static class TestClass {
+
+        private final Map<String, String> parameters = new HashMap<>();
+
+        public TestClass() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(using = MySerializer.class)
+        @JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+    @Test
+    public void testJsonAnyGetterWithJsonSerialize() throws JsonProcessingException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        String result = objectMapper.writeValueAsString(new TestClass());
+        
+        // We expect custom serialization to prepend "serialized:" to the values
+        String expectedOutput = "{\"key1\":\"serialized:value1\",\"key2\":\"serialized:value2\"}";
+
+        // The test fails showing that the custom serializer MySerializer was not applied
+        assertEquals(expectedOutput, result);
+    }
+}

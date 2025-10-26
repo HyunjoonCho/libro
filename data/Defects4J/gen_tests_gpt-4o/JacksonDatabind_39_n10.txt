@@ -1,0 +1,75 @@
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.annotation.JsonSubTypes.Type;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class CallRecordTest {
+
+    @Test
+    public void testJacksonDeserializationWithInvalidSubtype() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper()
+                .disable(DeserializationFeature.FAIL_ON_INVALID_SUBTYPE,
+                        DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,
+                        DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES);
+
+        String json1 = "{\"version\":0.0,\"application\":\"123\",\"item\":{\"type\":\"xevent\",\"location\":\"location1\"},\"item2\":{\"type\":\"event\",\"location\":\"location1\"}}";
+        CallRecord result1 = objectMapper.readValue(json1, CallRecord.class);
+        
+        assertEquals(0.0f, result1.version, 0.0f);
+        assertEquals("123", result1.application);
+        assertNull(result1.item); // item should be null due to invalid subtype
+        assertNotNull(result1.item2); // item2 should be successfully parsed
+
+        String json2 = "{\"version\":0.0,\"application\":\"123\"},{\"item\":{\"type\":\"xevent\",\"location\":\"location1\"}}";
+        CallRecord result2 = objectMapper.readValue(json2, CallRecord.class);
+
+        assertEquals(0.0f, result2.version, 0.0f);
+        assertEquals("123", result2.application);
+        assertNull(result2.item); // item should be null due to invalid subtype
+
+        String json3 = "{\"item\":{\"type\":\"xevent\",\"location\":\"location1\"}, \"version\":0.0,\"application\":\"123\"}";
+        CallRecord result3 = objectMapper.readValue(json3, CallRecord.class);
+
+        assertEquals(0.0f, result3.version, 0.0f);
+        assertNull(result3.application); // application is missing due to the position and parsing issue
+        assertNull(result3.item); // item should be null due to invalid subtype
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class CallRecord {
+        public float version;
+        public String application;
+        public Item item;
+        public Item item2;
+
+        @Override
+        public String toString() {
+            StringBuilder builder = new StringBuilder();
+            builder.append("CallRecord [version=").append(version).append(", ");
+            if (application != null) {
+                builder.append("application=").append(application).append(", ");
+            }
+            if (item != null) {
+                builder.append("item=").append(item);
+            }
+            builder.append("]");
+            return builder.toString();
+        }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type", visible = true)
+    @JsonSubTypes({@Type(value = Event.class, name = Event.TYPE)})
+    public interface Item {
+    }
+
+    public static final class Event implements Item {
+        public String location;
+        public static final String TYPE = "event";
+    }
+
+}

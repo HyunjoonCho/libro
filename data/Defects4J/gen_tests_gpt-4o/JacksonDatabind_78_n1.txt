@@ -1,0 +1,51 @@
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class DeserializationSecurityTest {
+
+    // Fake class for demonstration
+    public static class Exploit {
+        private String data;
+        
+        public String getData() {
+            return data;
+        }
+
+        public void setData(String data) {
+            this.data = data;
+        }
+
+        @Override
+        public String toString() {
+            return "Exploit{" +
+                    "data='" + data + '\'' +
+                    '}';
+        }
+    }
+
+    @Test
+    public void testDefaultTypingVulnerability() {
+        // Create an ObjectMapper instance with default typing enabled
+        ObjectMapper mapper = new ObjectMapper();
+        
+        // Enable default typing (usually the cause of this vulnerability)
+        mapper.activateDefaultTyping(BasicPolymorphicTypeValidator.builder()
+            .allowIfSubType(Exploit.class)
+            .build(),
+            ObjectMapper.DefaultTyping.NON_FINAL);
+        
+        // Crafted JSON that takes advantage of unsafe default typing
+        String json = "[\"Exploit\", {\"data\": \"This could be malicious code!\"}]";
+
+        try {
+            Object deserializedObject = mapper.readValue(json, Object.class);
+            assertTrue(deserializedObject instanceof Exploit);
+            assertEquals("This could be malicious code!", ((Exploit) deserializedObject).getData());
+        } catch (Exception e) {
+            fail("Deserialization of stored cross-site scripting content should not fail: " + e.getMessage());
+        }
+    }
+}

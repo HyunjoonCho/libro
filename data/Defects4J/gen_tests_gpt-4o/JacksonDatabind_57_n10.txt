@@ -1,0 +1,43 @@
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
+import com.fasterxml.jackson.databind.SequenceWriter;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+
+public class ObjectReaderTest {
+
+    public static class Item {
+        public String name;
+    }
+
+    @Test
+    public void testReadValuesWithOffsetAndLength() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+
+        // Example JSON: [{"name":"item1"}, {"name":"item2"}]
+        String json = "[{\"name\":\"item1\"}, {\"name\":\"item2\"}]";
+        byte[] jsonData = json.getBytes();
+
+        // Prepare data with additional content before and after the actual JSON array
+        byte[] fullData = new byte[jsonData.length + 10]; // Some extra space
+        System.arraycopy(jsonData, 0, fullData, 5, jsonData.length);
+
+        ObjectReader reader = mapper.readerFor(Item.class);
+
+        // Try to read from middle of `fullData` byte array, expecting it to correctly use the offset and length
+        try (ByteArrayInputStream bais = new ByteArrayInputStream(fullData, 5, jsonData.length);
+             SequenceWriter seqReader = reader.readValues(bais)) {
+
+            List<Item> items = seqReader.readAll();
+            assertEquals(2, items.size());
+            assertEquals("item1", items.get(0).name);
+            assertEquals("item2", items.get(1).name);
+        }
+    }
+}

@@ -1,0 +1,62 @@
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.deser.BeanDeserializerModifier;
+import com.fasterxml.jackson.databind.deser.KeyDeserializer;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.type.MapType;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.io.IOException;
+import java.util.Map;
+
+public class CustomEnumKeyDeserializerTest {
+
+    private enum MyEnum {
+        FIRST, SECOND
+    }
+
+    @Test
+    public void testEnumKeyDeserializerModifier() throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+        
+        module.setDeserializerModifier(new BeanDeserializerModifier() {
+            @Override
+            public KeyDeserializer modifyKeyDeserializer(
+                    DeserializationConfig config,
+                    JavaType type,
+                    KeyDeserializer deserializer) {
+                if (!type.isEnumType()) {
+                    return super.modifyKeyDeserializer(config, type, deserializer);
+                }
+                return new KeyDeserializer() {
+                    @Override
+                    @SuppressWarnings("unchecked")
+                    public Object deserializeKey(String key, DeserializationContext ctxt)
+                            throws IOException {
+                        Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                        return Enum.valueOf(rawClass, key.toUpperCase());
+                    }
+                };
+            }
+        });
+
+        mapper.registerModule(module);
+
+        // JSON with keys in lowercase
+        String json = "{\"first\":\"value1\", \"second\":\"value2\"}";
+
+        // Prepare map type: Map<MyEnum, String>
+        JavaType mapType = mapper.getTypeFactory().constructMapType(Map.class, MyEnum.class, String.class);
+
+        // Deserialize JSON into map
+        Map<MyEnum, String> result = mapper.readValue(json, mapType);
+
+        // Assert that deserialization maps "first" and "second" with the respective enum values
+        assertEquals("value1", result.get(MyEnum.FIRST));
+        assertEquals("value2", result.get(MyEnum.SECOND));
+    }
+}

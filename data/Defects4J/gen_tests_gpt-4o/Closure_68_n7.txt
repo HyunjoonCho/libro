@@ -1,0 +1,43 @@
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.io.*;
+import com.google.javascript.jscomp.*;
+
+public class InvalidFunctionAnnotationTest {
+
+    @Test
+    public void testInvalidFunctionAnnotationWarning() throws Exception {
+        // Create a temporary test.js file containing the invalid annotation
+        File testFile = new File("test.js");
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(testFile))) {
+            writer.write("/**\n");
+            writer.write(" * @type function\n");
+            writer.write(" */\n");
+            writer.write("var callback;\n");
+        }
+
+        // Set up the JSCompiler
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setWarningLevel(DiagnosticGroups.ALL_DIAGNOSTICS, CheckLevel.WARNING);
+        SourceFile input = SourceFile.fromFile("test.js");
+        Result result = compiler.compile(SourceFile.fromCode("externs.js", ""), input, options);
+
+        // Check if the expected warning is present in the compiler's messages
+        assertFalse("Compilation should not be successful", result.success);
+        boolean warningFound = false;
+        for (JSError warning : result.warnings) {
+            if ("Parse error. Unexpected end of file".equals(warning.description)) {
+                warningFound = true;
+                break;
+            }
+        }
+
+        assertTrue("Expected a parse error warning about the invalid function annotation", warningFound);
+
+        // Clean up the temporary file
+        testFile.delete();
+    }
+}

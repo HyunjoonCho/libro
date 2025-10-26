@@ -1,0 +1,70 @@
+
+import org.apache.commons.math3.optim.InitialGuess;
+import org.apache.commons.math3.optim.PointValuePair;
+import org.apache.commons.math3.optim.nonlinear.scalar.GoalType;
+import org.apache.commons.math3.optim.nonlinear.scalar.ObjectiveFunction;
+import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.CMAESOptimizer;
+import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.CMAESOptimizer.Sigma;
+import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.CMAESOptimizer.PopulationSize;
+import org.apache.commons.math3.analysis.MultivariateFunction;
+import org.apache.commons.math3.exception.MathIllegalStateException;
+import org.junit.Test;
+
+import static org.junit.Assert.assertFalse;
+
+public class CMAESOptimizerWideBoundsTest {
+
+    @Test
+    public void testWideBoundsCausingNaN() {
+        MultivariateFunction fitnessFunction = new MultivariateFunction() {
+            @Override
+            public double value(double[] point) {
+                // Ensure none of the points are NaN
+                for (double v : point) {
+                    if (Double.isNaN(v)) {
+                        throw new IllegalStateException("NaN value passed to fitness function");
+                    }
+                }
+                // Simple quadratic cost function
+                double sum = 0;
+                for (double v : point) {
+                    sum += v * v;
+                }
+                return sum;
+            }
+        };
+
+        CMAESOptimizer optimizer = new CMAESOptimizer(
+                1000,
+                0.0, // No tolerance
+                true, // allow printing of debug info
+                0, // no check feasible count
+                0, // random generator not relevant here
+                new CMAESOptimizer.Sigma(new double[]{1e-2, 1e-2}),
+                new CMAESOptimizer.PopulationSize(5),
+                null);
+
+        double[] initialGuess = {0.0, 0.0};
+        double[] lowerBound = {-Double.MAX_VALUE, -Double.MAX_VALUE};
+        double[] upperBound = {Double.MAX_VALUE, Double.MAX_VALUE};
+
+        try {
+            PointValuePair result = optimizer.optimize(
+                    new ObjectiveFunction(fitnessFunction),
+                    GoalType.MINIMIZE,
+                    new InitialGuess(initialGuess),
+                    new org.apache.commons.math3.optim.nonlinear.scalar.noderiv.SimpleBounds(lowerBound, upperBound),
+                    new PopulationSize(10),
+                    new Sigma(new double[]{1e-4, 1e-4})
+            );
+            // Check if a valid result has been found
+            assertFalse("Optimization should not have resulted in NaN.", Double.isNaN(result.getValue()));
+        } catch (MathIllegalStateException e) {
+            // Handle cases where optimization fails due to state exceptions
+            System.err.println("Optimization failed due to a math exception: " + e.getMessage());
+        } catch (IllegalStateException e) {
+            // Handle cases where NaN was passed to the fitness function
+            System.err.println("NaN value passed to fitness function: " + e.getMessage());
+        }
+    }
+}

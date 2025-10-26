@@ -1,0 +1,43 @@
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.MappingIterator;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+
+import static org.junit.Assert.assertEquals;
+
+public class ObjectReaderTest {
+
+    public static class TestData {
+        public int id;
+    }
+
+    @Test
+    public void testReadValuesWithOffsetAndLength() throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectReader objectReader = objectMapper.readerFor(TestData.class);
+
+        String jsonArray = "[{\"id\":1},{\"id\":2},{\"id\":3}]";
+        byte[] bytes = jsonArray.getBytes();
+
+        // Intentionally set offset and length to only consider the 2nd JSON object
+        int offset = bytes.indexOf('{', 1); // Find the start of the 2nd object
+        int length = bytes.length - offset;
+
+        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(bytes, offset, length);
+             JsonParser jsonParser = objectMapper.getFactory().createParser(inputStream)) {
+
+            MappingIterator<TestData> it = objectReader.readValues(jsonParser);
+
+            if (it.hasNext()) {
+                TestData data = it.next();
+                // Based on our offset and length, we expect to get the object {"id":2} as the first entry.
+                assertEquals(2, data.id);
+            }
+        }
+    }
+}

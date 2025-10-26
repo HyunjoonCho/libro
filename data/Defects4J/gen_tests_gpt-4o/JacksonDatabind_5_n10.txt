@@ -1,0 +1,61 @@
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import org.junit.Test;
+
+import static org.junit.Assert.assertFalse;
+
+public class MixinAnnotationsTest {
+
+    public interface Contact {
+        String getCity();
+    }
+
+    public class ContactImpl implements Contact {
+        private String city = "New York";
+
+        @Override
+        public String getCity() {
+            return city;
+        }
+    }
+
+    public class ContactMixin implements Contact {
+        @Override
+        @JsonProperty
+        public String getCity() {
+            return null;
+        }
+    }
+
+    public interface Person extends Contact {}
+
+    public class PersonImpl extends ContactImpl implements Person {}
+
+    public class PersonMixin extends ContactMixin implements Person {}
+
+    @Test
+    public void testMixinAnnotationsLost() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        SimpleModule module = new SimpleModule();
+        module.setMixInAnnotation(Person.class, PersonMixin.class);
+
+        objectMapper.registerModule(module);
+
+        // Configure Mapper according to bug report
+        objectMapper.configure(MapperFeature.ALLOW_FINAL_FIELDS_AS_MUTATORS, false);
+        objectMapper.configure(MapperFeature.AUTO_DETECT_FIELDS, false);
+        objectMapper.configure(MapperFeature.AUTO_DETECT_GETTERS, false);
+        objectMapper.configure(MapperFeature.AUTO_DETECT_IS_GETTERS, false);
+        objectMapper.configure(MapperFeature.INFER_PROPERTY_MUTATORS, false);
+
+        PersonImpl person = new PersonImpl();
+        String jsonResult = objectMapper.writeValueAsString(person);
+
+        // Assert that the `city` property is not included
+        assertFalse("City should not be included due to mixin issue", jsonResult.contains("city"));
+    }
+}

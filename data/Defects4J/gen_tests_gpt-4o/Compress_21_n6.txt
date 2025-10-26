@@ -1,0 +1,102 @@
+
+import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry;
+import org.apache.commons.compress.archivers.sevenz.SevenZOutputFile;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+
+import static org.junit.Assert.assertTrue;
+
+public class SevenZArchiveTest {
+
+    private File tempDir;
+    private File archiveFile;
+
+    @Before
+    public void setUp() throws IOException {
+        tempDir = Files.createTempDirectory("testDir").toFile();
+        archiveFile = new File(tempDir, "testArchive.7z");
+    }
+
+    @After
+    public void tearDown() {
+        deleteDirectory(tempDir);
+    }
+
+    @Test
+    public void testSevenEmptyFiles() throws IOException {
+        createFiles(7, false);
+        createAndValidateArchive();
+    }
+
+    @Test
+    public void testSevenFilesSomeEmptySomeNot() throws IOException {
+        createFiles(3, false);
+        createFiles(4, true);
+        createAndValidateArchive();
+    }
+
+    @Test
+    public void testEightEmptyFiles() throws IOException {
+        createFiles(8, false);
+        createAndValidateArchive();
+    }
+
+    @Test
+    public void testEightFilesSomeEmptyLastNot() throws IOException {
+        createFiles(3, false);
+        createFiles(5, true);
+        createAndValidateArchive();
+    }
+
+    @Test
+    public void testEightFilesSomeEmptyLastEmpty() throws IOException {
+        createFiles(4, true);
+        createFiles(4, false);
+        createAndValidateArchive();
+    }
+
+    private void createFiles(int count, boolean nonEmpty) throws IOException {
+        for (int i = 0; i < count; i++) {
+            File file = new File(tempDir, "file" + i + ".txt");
+            try (FileOutputStream fos = new FileOutputStream(file)) {
+                if (nonEmpty) {
+                    fos.write(("Content for file " + i).getBytes());
+                }
+            }
+        }
+    }
+
+    private void createAndValidateArchive() {
+        try (SevenZOutputFile sevenZOutput = new SevenZOutputFile(archiveFile)) {
+            for (File file : tempDir.listFiles()) {
+                SevenZArchiveEntry entry = sevenZOutput.createArchiveEntry(file, file.getName());
+                sevenZOutput.putArchiveEntry(entry);
+                sevenZOutput.closeArchiveEntry();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        // Check if the archive exists
+        assertTrue("Archive should be created", archiveFile.exists());
+
+        // Additional validation can be done here such as checking archive contents or opening the
+        // archive using another library or tool (like the 7-Zip command line tool)
+    }
+
+    private void deleteDirectory(File directory) {
+        File[] files = directory.listFiles();
+        if (files != null) { // Some JVMs return null for empty dirs
+            for (File f : files) {
+                deleteDirectory(f);
+            }
+        }
+        directory.delete();
+    }
+}

@@ -1,0 +1,44 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import com.google.javascript.rhino.head.Context;
+import org.junit.Test;
+import java.util.ArrayList;
+import java.util.List;
+
+public class CompilerBugReproductionTest {
+
+    @Test
+    public void testCompilerAssignStatementError() {
+        // JavaScript code that resembles the bug report scenario
+        String code = "/** @constructor\n" +
+                      " * @param {...Object} params\n" +
+                      " */\n" +
+                      "var dojox = {};\n" +
+                      "dojox.gfx = {};\n" +
+                      "dojox.gfx.shape = {};\n" +
+                      "dojox.gfx.shape.Shape = function(params) {};\n" +
+                      "dojox.gfx.shape.Shape = dojo.declare(\"dojox.gfx.shape.Shape\", null, /** @lends dojox.gfx.shape.Shape.prototype */ {});";
+
+        // Configure compiler options
+        CompilerOptions options = new CompilerOptions();
+        options.setChecksOnly(true);  // We only want to check and catch errors
+
+        // Input this JS code for compilation
+        SourceFile input = SourceFile.fromCode("input.js", code);
+        List<SourceFile> externs = CommandLineRunner.getDefaultExterns();
+
+        com.google.javascript.jscomp.Compiler compiler = new com.google.javascript.jscomp.Compiler(Context.create());
+        compiler.init(externs, List.of(input), options);
+        
+        // Try to compile the source code
+        try {
+            compiler.parseInputs();
+            compiler.check();  // This should trigger the error
+        } catch (RuntimeException e) {
+            // Assert that the error message matches what is expected
+            assert e.getMessage().contains("Unexpected variable dojox$gfx$shape$Shape");
+        }
+    }
+}

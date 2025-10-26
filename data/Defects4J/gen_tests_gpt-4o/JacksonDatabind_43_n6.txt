@@ -1,0 +1,61 @@
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
+import org.junit.Test;
+
+import java.io.IOException;
+
+import static org.junit.Assert.*;
+
+public class ObjectIdHandlingTest {
+
+    private static class CustomObject {
+        public String name;
+    }
+
+    private static class CustomObjectDeserializer extends StdDeserializer<CustomObject> {
+
+        protected CustomObjectDeserializer() {
+            super(CustomObject.class);
+        }
+
+        @Override
+        public CustomObject deserialize(JsonParser jp, DeserializationContext ctxt) throws IOException {
+            if (jp.getCurrentToken() == JsonToken.VALUE_NULL) {
+                // Here is where problem might arise if not handled
+                throw new IllegalArgumentException("Null token not expected");
+            }
+            CustomObject obj = new CustomObject();
+            while (jp.nextToken() != JsonToken.END_OBJECT) {
+                String fieldName = jp.getCurrentName();
+                jp.nextToken(); // Move to the value
+                if ("name".equals(fieldName)) {
+                    obj.name = jp.getText();
+                }
+            }
+            return obj;
+        }
+    }
+
+    @Test
+    public void testExplicitNullTokenHandling() {
+        ObjectMapper mapper = new ObjectMapper();
+        // Register the custom deserializer for our CustomObject class
+        mapper.registerModule(new com.fasterxml.jackson.databind.module.SimpleModule()
+                .addDeserializer(CustomObject.class, new CustomObjectDeserializer()));
+
+        String jsonWithNull = "{\"name\":null}";
+
+        try {
+            CustomObject result = mapper.readValue(jsonWithNull, CustomObject.class);
+            assertNull("Expected deserialization to handle null value properly", result.name);
+        } catch (IllegalArgumentException e) {
+            fail("Deserializer did not handle null token as expected: " + e.getMessage());
+        } catch (IOException e) {
+            fail("IOException occurred: " + e.getMessage());
+        }
+    }
+}

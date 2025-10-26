@@ -1,0 +1,54 @@
+
+import org.apache.commons.jxpath.AbstractFactory;
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.NodePointer;
+import org.apache.commons.jxpath.Pointer;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+public class JXPathTest {
+
+    @Test(expected = StackOverflowError.class)
+    public void testCreatePathStackOverflow() {
+        Map<String, Object> map = new HashMap<>();
+        map.put("a", null);
+
+        JXPathContext pathContext = JXPathContext.newContext(map);
+        pathContext.setFactory(new CustomFactory());
+
+        // This should cause a StackOverflow error due to the issue in JXPath's handling of null elements in lists.
+        pathContext.createPath("a/b[1]/c");
+        pathContext.createPath("a/b[2]/c");
+    }
+
+    private static class CustomFactory extends AbstractFactory {
+        @Override
+        public boolean createObject(JXPathContext context, Pointer pointer, Object parent, String name, int index) {
+            if (pointer instanceof NodePointer) {
+                index = ((NodePointer) pointer).getIndex();
+            }
+
+            System.out.println(parent + ":" + name + ":" + index);
+            Map<String, Object> parentMap = (Map<String, Object>) parent;
+
+            if (index > -1) {
+                List<Object> list = (List<Object>) parentMap.get(name);
+                if (list == null) {
+                    list = new ArrayList<>();
+                }
+                int size = list.size();
+                for (int i = size; i <= index; i++) {
+                    list.add(i, null);  // Initial problematic code leading to StackOverflow
+                }
+                parentMap.put(name, list);
+            } else {
+                parentMap.put(name, new HashMap<>());
+            }
+            return true;
+        }
+    }
+}

@@ -1,0 +1,53 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+
+public class CompilerTest {
+
+    @Test
+    public void testRuntimeExceptionWithExternPrototype() {
+        // Mock content for `prototype.js` and `bootloader.js`
+        String prototypeJs = "(function() {\n"
+                + "  function Str(key, holder, stack) {\n"
+                + "    // Function implementation\n"
+                + "  }\n"
+                + "})();";
+        
+        String bootloaderJs = "// Example JavaScript content\n"
+                + "function initialize() {\n"
+                + "  // Initialization code\n"
+                + "}\n"
+                + "initialize();";
+        
+        // Write the contents to temporary files
+        Path prototypeJsPath = Files.createTempFile("prototype", ".js");
+        Files.write(prototypeJsPath, prototypeJs.getBytes());
+
+        Path bootloaderJsPath = Files.createTempFile("bootloader", ".js");
+        Files.write(bootloaderJsPath, bootloaderJs.getBytes());
+
+        try {
+            String[] args = {
+                "--compilation_level", "ADVANCED_OPTIMIZATIONS",
+                "--externs", prototypeJsPath.toString(),
+                "--js", bootloaderJsPath.toString()
+            };
+            
+            // Execute the command line runner of the Closure Compiler
+            CommandLineRunner runner = new CommandLineRunner(args);
+            int result = runner.run();
+
+            // Check if an exception is thrown
+            assertTrue("Expected a runtime exception due to internal compiler error", result != 0);
+        } catch (Exception e) {
+            // Capture and assert that a RuntimeException is thrown
+            assertTrue("Unexpected exception: " + e.getMessage(), e instanceof RuntimeException);
+        } finally {
+            // Clean up temporary files
+            Files.deleteIfExists(prototypeJsPath);
+            Files.deleteIfExists(bootloaderJsPath);
+        }
+    }
+}

@@ -1,0 +1,49 @@
+
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+
+import static org.junit.Assert.fail;
+
+public class SmartNameRemovalTest {
+
+    @Test
+    public void testSmartNameRemovalCausesCrash() {
+        String sourceCode = ""
+                + "var goog = {};\n"
+                + "goog.inherits = function(x, y) {};\n"
+                + "var ns = {};\n"
+                + "/** @constructor */ ns.PageSelectionModel = function(){};\n"
+                + "/** @constructor */ \n"
+                + "ns.PageSelectionModel.FooEvent = function() {};\n"
+                + "/** @constructor */ \n"
+                + "ns.PageSelectionModel.SelectEvent = function() {};\n"
+                + "goog.inherits(ns.PageSelectionModel.ChangeEvent, ns.PageSelectionModel.FooEvent);";
+
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setLanguage(CompilerOptions.LanguageMode.ECMASCRIPT5);
+        // Enable advanced optimizations which include smartNameRemoval
+        options.setClosurePass(true);
+        options.setEnableInlining(true);
+        options.setEmitUseStrict(true);
+        options.setOptimizeCalls(true);
+
+        try {
+            Result result = compiler.compile(
+                    SourceFile.fromCode("externs.js", ""), // Using empty externs for simplicity
+                    SourceFile.fromCode("test.js", sourceCode),
+                    options
+            );
+            
+            if (result.success) {
+                fail("Expected the compiler to crash with an IllegalStateException, but it succeeded.");
+            }
+        } catch (Exception e) {
+            // We're expecting an exception due to the illegal state in name counting
+            assertTrue(e instanceof IllegalStateException);
+        }
+    }
+}

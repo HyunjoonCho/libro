@@ -1,0 +1,100 @@
+
+import org.apache.commons.compress.archivers.ar.ArArchiveEntry;
+import org.apache.commons.compress.archivers.ar.ArArchiveOutputStream;
+import org.apache.commons.compress.archivers.ar.ArArchiveInputStream;
+import org.junit.Test;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+
+import static org.junit.Assert.assertTrue;
+
+public class ArArchiveTest {
+
+    // Dummy file creation method
+    private void createDummyFile(File file, String contents) throws IOException {
+        try (FileOutputStream fos = new FileOutputStream(file)) {
+            fos.write(contents.getBytes());
+        }
+    }
+
+    // Creates an ar archive from a list of File objects
+    private void createArArchive(File archive, File... files) throws IOException {
+        try (FileOutputStream fos = new FileOutputStream(archive);
+             ArArchiveOutputStream aos = new ArArchiveOutputStream(fos)) {
+
+            for (File file : files) {
+                ArArchiveEntry entry = new ArArchiveEntry(file, file.getName());
+                aos.putArchiveEntry(entry);
+                try (FileInputStream fis = new FileInputStream(file)) {
+                    byte[] buffer = new byte[1024];
+                    int len;
+                    while ((len = fis.read(buffer)) > 0) {
+                        aos.write(buffer, 0, len);
+                    }
+                }
+                aos.closeArchiveEntry();
+            }
+        }
+    }
+
+    @Test
+    public void testDeleteFromArArchive() throws IOException {
+        // Step 1: Setup temporary files
+        File file1 = File.createTempFile("test1", ".xml");
+        File file2 = File.createTempFile("test2", ".xml");
+        File archiveFile = File.createTempFile("bla", ".ar");
+
+        createDummyFile(file1, "<content>test1</content>");
+        createDummyFile(file2, "<content>test2</content>");
+
+        // Step 2: Create Ar archive
+        createArArchive(archiveFile, file1, file2);
+
+        // Step 3: Programmatically delete "test2.xml" from the archive
+        // Assume there is some method to delete an entry from an AR file.
+        deleteFileFromArArchive(archiveFile, "test2.xml");
+
+        // Step 4: Validate programmatic lookup doesn't return test2.xml
+        try (FileInputStream fis = new FileInputStream(archiveFile);
+             ArArchiveInputStream ais = new ArArchiveInputStream(fis)) {
+
+            ArArchiveEntry entry;
+            boolean foundTest2 = false;
+            while ((entry = ais.getNextEntry()) != null) {
+                if ("test2.xml".equals(entry.getName())) {
+                    foundTest2 = true;
+                }
+            }
+
+            // Assert that "test2.xml" is not found by the programmatic API
+            assertTrue("Programmatic API should not find test2.xml", !foundTest2);
+        }
+
+        // Step 5: Check actual content of archive using command line
+        Process process = new ProcessBuilder("ar", "-t", archiveFile.getAbsolutePath())
+                          .redirectErrorStream(true)
+                          .start();
+        try (java.io.BufferedReader reader =
+                     new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream()))) {
+            String line;
+            boolean containsTest2 = false;
+            while ((line = reader.readLine()) != null) {
+                if ("test2.xml".equals(line.trim())) {
+                    containsTest2 = true;
+                }
+            }
+
+            // Assert that "test2.xml" is still found from command line
+            assertTrue("Command line inspection should find 'test2.xml'", containsTest2);
+        }
+    }
+
+    // Dummy method to provoke until feature is implemented
+    private void deleteFileFromArArchive(File archiveFile, String entryName) {
+        // This is where the implementation to remove files from an AR archive should go.
+        // Currently it's a placeholder.
+    }
+}

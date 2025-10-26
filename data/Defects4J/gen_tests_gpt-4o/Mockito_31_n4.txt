@@ -1,0 +1,51 @@
+
+import org.junit.Test;
+import org.junit.Assert;
+import java.io.File;
+import java.net.URL;
+import java.net.URLClassLoader;
+
+public class MockitoBugReproducerTest {
+
+    @Test
+    public void testClassPathSeparatorIssue() {
+        // Simulate path separator issue
+        File fakeFile = new File("C:\\mockito\\src\\org\\mockito\\configuration\\MockitoConfiguration");
+        File root = new File("C:\\mockito\\src");
+        String path = fakeFile.getAbsolutePath().substring(root.getAbsolutePath().length() + 1)
+                .replace('\\', '/'); // Mimic issue with File.separator on Windows
+        Assert.assertEquals("org/mockito/configuration/MockitoConfiguration", path);
+    }
+
+    @Test
+    public void testClassLoaderExclusion() {
+        // Mimic ClassLoader exclusion behavior
+        String className = "junit.framework.Assert";
+        try {
+            ExcludingClassLoader classLoader = new ExcludingClassLoader(new URL[]{}, getClass().getClassLoader(), "junit");
+            classLoader.loadClass(className);
+            Assert.fail("Expected a ClassNotFoundException");
+        } catch (ClassNotFoundException e) {
+            Assert.assertTrue(e.getMessage().contains("classes with prefix : [junit, org.junit] are excluded"));
+        }
+    }
+
+    private static class ExcludingClassLoader extends URLClassLoader {
+        private final String[] excludedPrefixes;
+
+        public ExcludingClassLoader(URL[] urls, ClassLoader parent, String... excludedPrefixes) {
+            super(urls, parent);
+            this.excludedPrefixes = excludedPrefixes;
+        }
+
+        @Override
+        public Class<?> loadClass(String name) throws ClassNotFoundException {
+            for (String prefix : excludedPrefixes) {
+                if (name.startsWith(prefix)) {
+                    throw new ClassNotFoundException("classes with prefix : [junit, org.junit] are excluded");
+                }
+            }
+            return super.loadClass(name);
+        }
+    }
+}

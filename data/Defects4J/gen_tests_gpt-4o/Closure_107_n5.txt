@@ -1,0 +1,59 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import org.junit.Test;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import static org.junit.Assert.assertTrue;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testMsgPrefixVariableError() {
+        // Setup the JavaScript source code
+        String jsCode = "var MSG_foo = 'bar';";
+
+        // Setup the output capturing streams
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        PrintStream printStream = new PrintStream(outputStream);
+        PrintStream originalErr = System.err;
+
+        try {
+            // Redirect the standard error stream to capture compiler output
+            System.setErr(printStream);
+
+            // Setting up Closure Compiler options
+            String[] args = {
+                "--compilation_level", "ADVANCED_OPTIMIZATIONS",
+                "--js", "-",                             // Read from standard input
+                "--js_output_file", "out.js"            // Output to a temporary file
+            };
+
+            // Create a command line runner for the Closure Compiler
+            CommandLineRunner runner = new CommandLineRunner(args);
+
+            // Create a new thread to execute the runner so that it can read from standard input
+            Thread compilerThread = new Thread(() -> runner.run());
+            compilerThread.start();
+
+            // Write the JavaScript code to standard input for the Closure Compiler to process
+            printStream.print(jsCode);
+            printStream.flush();
+
+            // Wait for the compiler thread to terminate
+            compilerThread.join();
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            // Restore the original standard error stream
+            System.setErr(originalErr);
+        }
+
+        // Convert the captured output to a string
+        String compilerOutput = outputStream.toString();
+
+        // Verify that the specific error message exists in the compiler output
+        assertTrue("The output should contain an error about message not initialized using goog.getMsg",
+                compilerOutput.contains("ERROR - message not initialized using goog.getMsg"));
+    }
+}

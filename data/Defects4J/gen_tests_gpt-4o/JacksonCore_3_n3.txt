@@ -1,0 +1,48 @@
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.ObjectCodec;
+import com.fasterxml.jackson.core.io.IOContext;
+import com.fasterxml.jackson.core.json.UTF8StreamJsonParser;
+import com.fasterxml.jackson.core.sym.BytesToNameCanonicalizer;
+import com.fasterxml.jackson.core.util.JsonReadContext;
+import com.fasterxml.jackson.core.util.SimpleIOContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+
+import static org.junit.Assert.assertTrue;
+
+public class UTF8StreamJsonParserTest {
+
+    @Test
+    public void testColumnPositionWithNonZeroStart() {
+        String json = "invalid json"; // An intentionally malformed JSON
+
+        byte[] inputBuffer = json.getBytes();
+        InputStream inputStream = new ByteArrayInputStream(inputBuffer);
+        IOContext context = new SimpleIOContext(JsonReadContext.createRootContext(-1, -1), false);
+        BytesToNameCanonicalizer symbols = BytesToNameCanonicalizer.createRoot();
+
+        // Start at a non-zero position to simulate the bug condition
+        int startPosition = 5; 
+
+        UTF8StreamJsonParser parser = new UTF8StreamJsonParser(
+                context, JsonParser.Feature.collectDefaults(), inputStream, 
+                (ObjectCodec) null, symbols.makeChild(true, false), 
+                inputBuffer, startPosition, inputBuffer.length, true);
+
+        try {
+            parser.nextToken();
+        } catch (Exception e) {
+            // We expect an exception due to malformed JSON
+            String message = e.getMessage();
+            System.out.println(message);
+
+            // Check if the column value is incorrectly calculated in the exception message
+            assertTrue("The error message should indicate an incorrect column position",
+                       message.contains("column") && !message.contains("5")); // Change this to reflect the expected wrong calculation
+        }
+    }
+}

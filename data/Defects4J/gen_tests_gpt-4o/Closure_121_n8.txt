@@ -1,0 +1,58 @@
+
+import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineManager;
+import javax.script.ScriptException;
+
+public class ClosureCompilerOptimizationTest {
+
+    @Test
+    public void testOverzealousOptimization() throws ScriptException {
+        // JavaScript code before optimization
+        String unoptimizedScript = ""
+            + "var uid;"
+            + "function reset() {"
+            + "    uid = Math.random();"
+            + "}"
+            + "function doStuff() {"
+            + "    reset();"
+            + "    var _uid = uid;"
+            + "    if (uid < 0.5) {"
+            + "        doStuff();"
+            + "    }"
+            + "    if (_uid !== uid) {"
+            + "        throw 'reset() was called';"
+            + "    }"
+            + "}"
+            + "doStuff();";
+
+        // JavaScript code after optimization (the problem script)
+        String optimizedScript = ""
+            + "var a;"
+            + "function b() {"
+            + "    a = Math.random();"
+            + "    0.5 > a && b();"
+            + "    if (a !== a)"
+            + "        throw 'reset() was called';"
+            + "}"
+            + "b();";
+
+        // Test both versions using the JavaScript engine
+        ScriptEngineManager manager = new ScriptEngineManager();
+        ScriptEngine engine = manager.getEngineByName("JavaScript");
+
+        try {
+            engine.eval(unoptimizedScript);
+        } catch (ScriptException e) {
+            fail("Unoptimized script failed: " + e.getMessage());
+        }
+
+        ScriptException exception = assertThrows(ScriptException.class, () -> {
+            engine.eval(optimizedScript);
+        });
+        
+        // Verify that the optimized script throws the expected error
+        assertTrue(exception.getMessage().contains("reset() was called"));
+    }
+}

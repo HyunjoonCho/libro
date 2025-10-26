@@ -1,0 +1,107 @@
+
+import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
+import org.apache.commons.math3.ode.FirstOrderIntegrator;
+import org.apache.commons.math3.ode.nonstiff.DormandPrince54Integrator;
+import org.apache.commons.math3.ode.events.EventHandler;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class OdeEventHandlerTest {
+
+    // Simple harmonic oscillator for demonstration
+    static class HarmonicOscillator implements FirstOrderDifferentialEquations {
+        private double omega;
+
+        public HarmonicOscillator(double omega) {
+            this.omega = omega;
+        }
+
+        @Override
+        public int getDimension() {
+            return 2;
+        }
+
+        @Override
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = y[1];
+            yDot[1] = -omega * omega * y[0];
+        }
+    }
+
+    // First event handler
+    static class ResetStateEventHandler implements EventHandler {
+        private boolean stateReset = false;
+
+        @Override
+        public double g(double t, double[] y) {
+            return y[0] - 0.5; // Trigger event when y[0] is 0.5
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            stateReset = true;
+            return Action.RESET_STATE;
+        }
+
+        @Override
+        public void resetState(double t, double[] y) {
+            y[0] = 0.0; // Reset state
+            y[1] = 0.0; // Reset velocity
+        }
+    }
+
+    // Second event handler
+    static class CheckStateEventHandler implements EventHandler {
+        private boolean wasCorrectlyUpdated = true;
+
+        @Override
+        public double g(double t, double[] y) {
+            return y[0] - 0.2; // Trigger event when y[0] is 0.2
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.CONTINUE;
+        }
+
+        public boolean wasUpdatedCorrectly() {
+            return wasCorrectlyUpdated;
+        }
+
+        @Override
+        public void resetState(double t, double[] y) {
+            // Check state correctness post-reset
+            if ((t > 0) && (Math.abs(y[0]) > 1 || Math.abs(y[1]) > 1)) {
+                wasCorrectlyUpdated = false;
+            }
+        }
+    }
+
+    @Test
+    public void testResetStateEventHandlerIssue() {
+        // Create the harmonic oscillator with omega = 1.0
+        FirstOrderDifferentialEquations ode = new HarmonicOscillator(1.0);
+        double[] y = new double[]{1.0, 0.0}; // Initial state
+
+        // Step size
+        double minStep = 0.0001;
+        double maxStep = 0.1;
+        double absTolerance = 1.0e-10;
+        double relTolerance = 1.0e-10;
+        
+        FirstOrderIntegrator integrator = new DormandPrince54Integrator(minStep, maxStep, absTolerance, relTolerance);
+
+        ResetStateEventHandler resetHandler = new ResetStateEventHandler();
+        CheckStateEventHandler checkHandler = new CheckStateEventHandler();
+
+        // Add event handlers
+        integrator.addEventHandler(resetHandler, 1.0e-2, 1.0e-8, 100);
+        integrator.addEventHandler(checkHandler, 1.0e-2, 1.0e-8, 100);
+
+        // Integrate
+        integrator.integrate(ode, 0.0, y, 10.0, y);
+
+        // Validate that other event handler was correctly updated
+        assertTrue(checkHandler.wasUpdatedCorrectly());
+    }
+}

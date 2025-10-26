@@ -1,0 +1,72 @@
+
+import org.junit.Test;
+import org.junit.Assert;
+
+import java.math.BigDecimal;
+
+import com.fasterxml.jackson.annotation.JsonGetter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+public class JacksonTest {
+
+    enum Type { BIG_DECIMAL }
+
+    static class Wrapper {
+
+        @JsonIgnore
+        Type typeEnum;
+
+        @JsonIgnore
+        Object value;
+
+        Wrapper() { }
+
+        @JsonGetter(value = "type")
+        String getTypeString() {
+            return typeEnum.name();
+        }
+
+        @JsonSetter(value = "type")
+        void setTypeString(String type) {
+            this.typeEnum = Type.valueOf(type);
+        }
+
+        @JsonGetter(value = "objectValue") 
+        Object getValue() {
+            return value;
+        }
+
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "type")
+        @JsonSubTypes({ @JsonSubTypes.Type(name = "BIG_DECIMAL", value = BigDecimal.class) })
+        @JsonSetter(value = "objectValue") 
+        private void setValue(Object value) {
+            this.value = value;
+        }
+    }
+
+    @Test
+    public void testBigDecimalSerialization() throws Exception {
+
+        ObjectMapper m = new ObjectMapper();
+        m.configure(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS, true);
+
+        Wrapper w = new Wrapper();
+        w.typeEnum = Type.BIG_DECIMAL;
+        w.value = new BigDecimal("-10000000000.0000000001");
+
+        String json = m.writeValueAsString(w);
+        System.out.println("Serialized JSON: " + json);
+        Wrapper w2 = m.readValue(json, Wrapper.class);
+
+        Assert.assertEquals(w.typeEnum, w2.typeEnum);
+        Assert.assertTrue(String.format("Expected %s = %s; got back %s = %s",
+            w.value.getClass().getSimpleName(), w.value.toString(), 
+            w2.value.getClass().getSimpleName(), w2.value.toString()),
+            w.value.equals(w2.value));
+    }
+}

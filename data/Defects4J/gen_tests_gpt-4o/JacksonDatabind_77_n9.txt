@@ -1,0 +1,46 @@
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
+import com.fasterxml.jackson.databind.exc.InvalidDefinitionException;
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+
+public class JacksonSecurityVulnerabilityTest {
+
+    private static class SafeBean {
+        public String name;
+
+        public SafeBean() { }
+        public SafeBean(String name) {
+            this.name = name;
+        }
+    }
+
+    // Demonstration payload that could exploit default typing
+    private static final String EXPLOIT_JSON = "[\"org.some.malicious.Class\", {}]";
+
+    @Test
+    public void testJacksonVulnerability() {
+        ObjectMapper mapper = new ObjectMapper();
+        
+        // Proper way to guard against the vulnerability:
+        // Use PolymorphicTypeValidator to validate types
+        PolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
+            .allowIfBaseType(SafeBean.class)
+            .build();
+
+        // Enable default typing with validator
+        mapper.activateDefaultTyping(ptv, ObjectMapper.DefaultTyping.NON_FINAL);
+
+        try {
+            Object obj = mapper.readValue(EXPLOIT_JSON, Object.class);
+            fail("Expected to prevent unknown type from deserializing, but it succeeded: " + obj);
+        } catch (InvalidDefinitionException e) {
+            assertTrue(e.getMessage().contains("cannot find class"));
+        } catch (Exception e) {
+            fail("Unexpected exception: " + e.getMessage());
+        }
+    }
+}

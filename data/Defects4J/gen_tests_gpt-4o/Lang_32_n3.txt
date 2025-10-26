@@ -1,0 +1,44 @@
+
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
+import org.junit.Test;
+
+import javax.servlet.Servlet;
+import javax.servlet.ServletConfig;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import java.lang.ref.WeakReference;
+
+import static org.junit.Assert.assertNull;
+
+public class ThreadLocalMemoryLeakTest {
+
+    private static class DummyServlet extends HttpServlet {
+        @Override
+        public void init(ServletConfig config) throws ServletException {
+            super.init(config);
+            // Simulate usage of ToStringStyle in a webapp context
+            ToStringBuilder.reflectionToString(this, ToStringStyle.DEFAULT_STYLE);
+        }
+    }
+
+    @Test
+    public void testThreadLocalMemoryLeak() throws Exception {
+        // Create a servlet and simulate its init call, which uses ToStringStyle
+        Servlet servlet = new DummyServlet();
+        servlet.init(null);
+
+        // Weakly reference the servlet to detect memory leaks
+        WeakReference<Servlet> servletWeakReference = new WeakReference<>(servlet);
+
+        // Clear strong reference to allow for garbage collection
+        servlet = null;
+
+        // Trigger garbage collection
+        System.gc();
+        Thread.sleep(100);  // Waiting briefly to allow garbage collection to take place
+
+        // Assert that the servlet instance is collected, indicating no memory leak
+        assertNull("Servlet should be garbage collected to avoid memory leaks", servletWeakReference.get());
+    }
+}

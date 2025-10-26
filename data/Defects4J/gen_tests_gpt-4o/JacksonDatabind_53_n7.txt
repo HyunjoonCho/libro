@@ -1,0 +1,80 @@
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Map;
+import java.util.UUID;
+
+// The interface that Foo implements
+interface MyCustomIdInterface {
+    UUID getId();
+}
+
+// The custom Map with additional logic
+@JsonDeserialize(as = MyHashMap.class)
+class CustomPojo {
+    private Map<UUID, MyCustomIdInterface> something;
+
+    @JsonCreator
+    public CustomPojo(@JsonProperty("something") Map<UUID, MyCustomIdInterface> something) {
+        this.something = something;
+    }
+
+    public Map<UUID, MyCustomIdInterface> getSomething() {
+        return something;
+    }
+
+    public void setSomething(Map<UUID, MyCustomIdInterface> something) {
+        this.something = something;
+    }
+}
+
+// The concrete implementation of the interface
+class Foo implements MyCustomIdInterface {
+    private UUID id;
+    private String property;
+
+    @JsonCreator
+    public Foo(@JsonProperty("id") UUID id, @JsonProperty("property") String property) {
+        this.id = id;
+        this.property = property;
+    }
+
+    @Override
+    public UUID getId() {
+        return id;
+    }
+
+    public String getProperty() {
+        return property;
+    }
+}
+
+// A placeholder class that extends HashMap and adds some custom logic
+class MyHashMap<K, V extends MyCustomIdInterface> extends java.util.HashMap<K, V> {
+    // Custom logic can be added here
+}
+
+public class CustomDeserializationTest {
+
+    @Test
+    public void testDeserializationWithCustomMap() throws IOException {
+        String json = "{ \"something\": [ { \"id\": \"123e4567-e89b-12d3-a456-426614174000\", \"property\": \"value\" } ] }";
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        
+        try {
+            CustomPojo pojo = objectMapper.readValue(json, CustomPojo.class);
+            MyCustomIdInterface value = pojo.getSomething().get(UUID.fromString("123e4567-e89b-12d3-a456-426614174000"));
+            assertNotNull(value);
+            assertEquals("value", ((Foo) value).getProperty());
+        } catch (JsonProcessingException e) {
+            fail("Deserialization failed: " + e.getMessage());
+        }
+    }
+}

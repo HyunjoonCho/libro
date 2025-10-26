@@ -1,0 +1,55 @@
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
+import com.fasterxml.jackson.databind.MappingIterator;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.List;
+
+import static org.junit.Assert.*;
+
+public class ObjectReaderTest {
+
+    static class SimplePojo {
+        public int id;
+        public String name;
+    }
+
+    @Test
+    public void testReadValuesWithErrorRecovery() {
+        String malformedJson = "[{\"id\":1, \"name\":\"John\"}, {\"id\":2, \"name\": \"Jane\"}, {\"id\":invalidJson, \"name\":\"Error\"}, {\"id\":3, \"name\":\"Doe\"}]";
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectReader reader = objectMapper.readerFor(SimplePojo.class);
+
+        try {
+            MappingIterator<SimplePojo> iterator = reader.readValues(malformedJson);
+
+            // Read the valid entries
+            while (iterator.hasNext()) {
+                SimplePojo pojo = iterator.next();
+                System.out.println("Read entry: id=" + pojo.id + ", name=" + pojo.name);
+            }
+            
+            // If recovery didn’t work, subsequent entries would not be printed or checked here. 
+            // We should have recovered and been able to read 'id=3, name=Doe'
+            
+            // Expected to catch an exception due to the error in JSON
+            // However, the test should ensure that item with "id=3" has been read too
+            
+            // Check the last valid element to ensure recovery
+            SimplePojo lastPojo = iterator.next();
+            assertEquals(3, lastPojo.id);
+            assertEquals("Doe", lastPojo.name);
+
+        } catch (JsonProcessingException e) {
+            // This is expected to show the error handling isn’t complete
+            fail("JsonProcessingException thrown due to malformed JSON: " + e.getMessage());
+        } catch (IOException e) {
+            fail("IOException thrown: " + e.getMessage());
+        }
+    }
+
+}

@@ -1,0 +1,37 @@
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.rhino.Node;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import static org.junit.Assert.*;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testClosureCompilerCrash() throws IOException {
+        // JavaScript code with the issue
+        String jsCode = "var g=function(m){return m*Math.random()|0},d=document,h=d.getElementById('h'),c=d.getElementById('c'),l;"
+                + "(l=function(){requestAnimationFrame(l);h.style.textShadow=\"0 0 1px #000,\"+(g(10)-5)+\"px \"+(g(10)-5)+\"px 0 #888,0 0 180px rgb(\"+g(255)+\",\"+g(255)+\",\"+g(255)+\")\"})();"
+                + "d.addEventListener('mousemove',function(v){c.style.marginTop=(v.pageY/10+15|0)+'px'});";
+
+        // Set up the compiler options
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        // Initialize the Compiler
+        Compiler compiler = new Compiler();
+        SourceFile input = SourceFile.fromInputStream("input.js", new ByteArrayInputStream(jsCode.getBytes()));
+        SourceFile externs = SourceFile.fromCode("externs.js", "var document; function requestAnimationFrame(f) {}");
+
+        // Compile the code
+        try {
+            Result result = compiler.compile(externs, input, options);
+            assertTrue("Compiler should not crash. Errors: " + compiler.getErrors(), result.success);
+
+        } catch (RuntimeException e) {
+            fail("Expected no crash, but got an exception: " + e.getMessage());
+        }
+    }
+}

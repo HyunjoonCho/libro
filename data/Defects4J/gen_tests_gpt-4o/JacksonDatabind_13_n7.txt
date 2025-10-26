@@ -1,0 +1,62 @@
+
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.InvalidDefinitionException;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.fail;
+
+public class NullObjectIdDeserializationTest {
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id", scope = Person.class)
+    static class Person {
+        public Integer id;
+        public String name;
+
+        public Person() { }
+
+        public Person(Integer id, String name) {
+            this.id = id;
+            this.name = name;
+        }
+    }
+
+    @Test
+    public void testDeserializationWithNullObjectIdAllowed() {
+        String json = "{\"id\":null,\"name\":\"John Doe\"}";
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        // Default is to allow null Object Ids
+        try {
+            Person person = objectMapper.readValue(json, Person.class);
+            assertNotNull(person);
+            assertNull(person.id);
+            assertEquals("John Doe", person.name);
+        } catch (Exception e) {
+            fail("Deserialization should not fail with null Object Id by default: " + e.getMessage());
+        }
+    }
+
+    @Test
+    public void testDeserializationWithNullObjectIdNotAllowed() {
+        String json = "{\"id\":null,\"name\":\"Jane Doe\"}";
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        // Enable the feature to not allow null/missing Object Ids
+        objectMapper.disable(DeserializationFeature.READ_NULL_FOR_PRIMITIVES);
+
+        try {
+            objectMapper.readValue(json, Person.class);
+            fail("Deserialization should fail due to null Object Id");
+        } catch (InvalidDefinitionException e) {
+            // Expected behavior
+        } catch (Exception e) {
+            fail("Deserialization failed with unexpected exception: " + e.getMessage());
+        }
+    }
+}

@@ -1,0 +1,85 @@
+
+import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
+import org.apache.commons.math3.ode.events.EventHandler;
+import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
+import org.apache.commons.math3.ode.sampling.StepHandler;
+import org.apache.commons.math3.ode.sampling.StepInterpolator;
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+
+public class ODEEventDetectionTest {
+
+    private class SimpleOscillator implements FirstOrderDifferentialEquations {
+        @Override
+        public int getDimension() {
+            return 2;
+        }
+
+        @Override
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = y[1];
+            yDot[1] = -y[0];
+        }
+    }
+
+    private class OscillatorEvent implements EventHandler {
+        private final double eventTime1 = 90.0;
+        private final double eventTime2 = 135.0;
+        private boolean firstEventOccurred = false;
+        private boolean secondEventOccurred = false;
+
+        @Override
+        public double g(double t, double[] y) {
+            if (!firstEventOccurred && t >= eventTime1) {
+                return t - eventTime1;
+            } else if (!secondEventOccurred && t >= eventTime2) {
+                return t - eventTime2;
+            }
+            return -1; // No event
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            if (!firstEventOccurred) {
+                firstEventOccurred = true;
+                return Action.CONTINUE;
+            } else if (!secondEventOccurred) {
+                secondEventOccurred = true;
+                return Action.STOP;
+            }
+            return Action.CONTINUE;
+        }
+
+        @Override
+        public void resetState(double t, double[] y) {
+            // No need to reset state
+        }
+    }
+
+    @Test
+    public void testVeryCloseEventsDetected() {
+        // Setup differential solver with a step handler
+        double[] y = new double[] { 1.0, 0.0 };
+        DormandPrince853Integrator integrator = new DormandPrince853Integrator(1.0e-8, 200.0, 1.0e-10, 1.0e-10);
+        SimpleOscillator equations = new SimpleOscillator();
+        OscillatorEvent eventHandler = new OscillatorEvent();
+        integrator.addEventHandler(eventHandler, 1.0e-9, 1.0e-9, 1000);
+
+        integrator.addStepHandler(new StepHandler() {
+            @Override
+            public void init(double t0, double[] y0, double t) {
+            }
+
+            @Override
+            public void handleStep(StepInterpolator interpolator, boolean isLast) {
+            }
+        });
+
+        integrator.integrate(equations, 0.0, y, 200.0, y);
+
+        // Assert that both events were detected
+        assertTrue("First event was not detected", eventHandler.firstEventOccurred);
+        assertTrue("Second event was not detected", eventHandler.secondEventOccurred);
+    }
+}

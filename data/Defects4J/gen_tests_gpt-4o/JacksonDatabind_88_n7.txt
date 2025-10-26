@@ -1,0 +1,78 @@
+
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+// Base class
+@JsonTypeInfo(
+  use = JsonTypeInfo.Id.NAME,
+  include = JsonTypeInfo.As.PROPERTY,
+  property = "type")
+@JsonSubTypes({
+  @JsonSubTypes.Type(value = SubTypeA.class, name = "A"),
+  @JsonSubTypes.Type(value = SubTypeB.class, name = "B")
+})
+static abstract class BaseType {
+    public abstract String getName();
+}
+
+// First subclass
+static class SubTypeA extends BaseType {
+    private String name;
+    
+    public SubTypeA() {}
+    
+    @Override
+    public String getName() {
+        return name;
+    }
+    
+    public void setName(String name) {
+        this.name = name;
+    }
+}
+
+// Incorrect subclass
+static class SubTypeB extends BaseType {
+    private int number;
+
+    public SubTypeB() {}
+
+    @Override
+    public String getName() {
+        return null;
+    }
+
+    public int getNumber() {
+        return number;
+    }
+
+    public void setNumber(int number) {
+        this.number = number;
+    }
+}
+
+public class PolymorphicTypeIdTest {
+
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    @Test
+    public void testPolymorphicTypeMismatch() throws JsonProcessingException {
+        String json = "{ \"type\": \"A\", \"number\": 10 }";
+
+        // Deserializing a JSON intended for SubTypeB into SubTypeA
+        BaseType result = null;
+        try {
+            result = mapper.readValue(json, BaseType.class);
+            fail("Expected incompatible type to cause an Exception");
+        } catch (Exception e) {
+            // Verify that this error is due to type incompatibility
+            assertTrue(e.getMessage().contains("Cannot deserialize"));
+        }
+
+        assertNull(result); // Make sure that the result is null due to failure
+    }
+}

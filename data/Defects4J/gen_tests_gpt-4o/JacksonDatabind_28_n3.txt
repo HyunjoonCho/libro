@@ -1,0 +1,51 @@
+
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.junit.Test;
+
+public class DeserializationTest {
+
+    public static class MyValue {
+        private final ObjectNode object;
+
+        @JsonCreator
+        public MyValue(ObjectNode object) {
+            this.object = object;
+        }
+
+        @JsonValue
+        public ObjectNode getObject() {
+            return object;
+        }
+    }
+
+    @Test
+    public void testDeserializationFromEmptyJson() throws JsonProcessingException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectNode emptyObjectNode = new ObjectNode(JsonNodeFactory.instance);
+
+        String json = objectMapper.writeValueAsString(emptyObjectNode);
+        System.out.println("json: " + json);
+
+        // Deserialization to ObjectNode should work
+        JsonNode deserializedObjectNode = objectMapper.readValue(json, ObjectNode.class);
+        assertEquals(emptyObjectNode, deserializedObjectNode);
+        System.out.println("Deserialized to ObjectNode: " + deserializedObjectNode);
+
+        // Deserialization to MyValue should fail, reproducing the bug
+        try {
+            MyValue deserializedMyValue = objectMapper.readValue(json, MyValue.class);
+            fail("Expected JsonMappingException was not thrown");
+        } catch (Exception ex) {
+            assertTrue(ex.getMessage().contains("Can not deserialize instance of com.fasterxml.jackson.databind.node.ObjectNode out of END_OBJECT token"));
+            System.out.println("Caught expected exception: " + ex.getMessage());
+        }
+    }
+}

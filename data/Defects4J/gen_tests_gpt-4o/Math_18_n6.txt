@@ -1,0 +1,61 @@
+
+import org.apache.commons.math3.optimization.GoalType;
+import org.apache.commons.math3.optimization.SimpleBounds;
+import org.apache.commons.math3.optimization.direct.CMAESOptimizer;
+import org.apache.commons.math3.analysis.MultivariateFunction;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+
+public class CMAESOptimizerBoundsTest {
+
+    @Test
+    public void testCMAESOptimizerBoundsBehavior() {
+        // Define a simple quadratic function as the objective function
+        MultivariateFunction objectiveFunction = new MultivariateFunction() {
+            @Override
+            public double value(double[] point) {
+                // Aim is to minimize x^2
+                return point[0] * point[0];
+            }
+        };
+
+        // Initialize the CMAES optimizer
+        CMAESOptimizer optimizer = new CMAESOptimizer(
+                10000, // max evaluations
+                0, // fTol
+                true, // isActiveCMA
+                0, // diagonalOnly
+                10, // checkFeasableCount
+                100, // randomGeneratorSeed
+                null, // customChecker
+                new CMAESOptimizer.Sigma(new double[]{0.5}) // sigma
+        );
+
+        // Define the bounds, lower bound is 0, upper bound is 10
+        double[] lowerBound = new double[]{0};
+        double[] upperBound = new double[]{10};
+
+        // Initial guess far from bounds
+        double[] startPoint = new double[]{5};
+
+        // Optimize the quadratic function
+        CMAESOptimizer.Result result = optimizer.optimize(
+                new CMAESOptimizer.OptimizationData[]{
+                        GoalType.MINIMIZE,
+                        new CMAESOptimizer.MaxEval(10000),
+                        new CMAESOptimizer.InitialGuess(startPoint),
+                        new SimpleBounds(lowerBound, upperBound),
+                        new CMAESOptimizer.Sigma(new double[]{1}),
+                        objectiveFunction
+                }
+        );
+
+        // The optimal point should be closer to the lower bound because of the optimizer's resolution bias
+        double[] optimalPoint = result.getPointRef();
+        System.out.println("Optimal Point: " + optimalPoint[0]);
+
+        // Assert that the optimizer converged towards the lower half of the interval
+        assertTrue("The optimizer should favor the lower bound due to resolution bias.", optimalPoint[0] < 5);
+    }
+}

@@ -1,0 +1,37 @@
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.async.ByteArrayFeeder;
+import org.junit.Test;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.Assert.assertEquals;
+
+public class FeedingOffsetTest {
+
+    @Test
+    public void inputOffsetShouldNotAffectLocations() throws Exception {
+        JsonFactory jsonFactory = new JsonFactory();
+        JsonParser parser = jsonFactory.createNonBlockingByteArrayParser();
+        ByteArrayFeeder feeder = (ByteArrayFeeder) parser.getNonBlockingInputFeeder();
+
+        byte[] input = "[[[".getBytes(UTF_8);
+
+        // Feeding input that starts with an offset of 2
+        feeder.feedInput(input, 2, 1);
+        assertEquals(JsonToken.START_ARRAY, parser.nextToken());
+        // Expected location is 1, but bug causes it to be 3
+        assertEquals(1, parser.getCurrentLocation().getByteOffset());
+        // Expected token location is also 1, but affected by the bug
+        assertEquals(1, parser.getTokenLocation().getByteOffset());
+
+        // Now feed the entire input starting from offset 0
+        feeder.feedInput(input, 0, 3);
+        assertEquals(JsonToken.START_ARRAY, parser.nextToken());
+        // Current location should now be 2
+        assertEquals(2, parser.getCurrentLocation().getByteOffset());
+        // Token location should also now be 2
+        assertEquals(2, parser.getTokenLocation().getByteOffset());
+    }
+}

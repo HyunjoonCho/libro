@@ -1,0 +1,84 @@
+
+import org.apache.commons.compress.archivers.ArArchiveEntry;
+import org.apache.commons.compress.archivers.ar.ArArchiveInputStream;
+import org.apache.commons.compress.archivers.ar.ArArchiveOutputStream;
+import org.apache.commons.compress.archivers.ArArchiveEntry;
+import org.apache.commons.compress.archivers.ar.ArArchiveInputStream;
+import org.apache.commons.compress.archivers.ar.ArArchiveOutputStream;
+import org.junit.jupiter.api.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+public class ArArchiveTest {
+
+    @Test
+    public void testDeleteFromArArchive() throws IOException, InterruptedException {
+        // Create sample content
+        byte[] content1 = "Content of test1.xml".getBytes();
+        byte[] content2 = "Content of test2.xml".getBytes();
+
+        // Create an AR archive with two entries
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ArArchiveOutputStream arOutput = new ArArchiveOutputStream(baos);
+        arOutput.putArchiveEntry(new ArArchiveEntry("test1.xml", content1.length));
+        arOutput.write(content1);
+        arOutput.closeArchiveEntry();
+        arOutput.putArchiveEntry(new ArArchiveEntry("test2.xml", content2.length));
+        arOutput.write(content2);
+        arOutput.closeArchiveEntry();
+        arOutput.finish();
+
+        byte[] archiveData = baos.toByteArray();
+
+        // Simulate deletion of "test2.xml" by creating a new archive without this entry
+        ByteArrayOutputStream baosDeleted = new ByteArrayOutputStream();
+        ArArchiveOutputStream arOutputDeleted = new ArArchiveOutputStream(baosDeleted);
+        List<String> remainingEntries = new ArrayList<>();
+        
+        try (ArArchiveInputStream arInput = new ArArchiveInputStream(new ByteArrayInputStream(archiveData))) {
+            ArArchiveEntry entry;
+            while ((entry = arInput.getNextArEntry()) != null) {
+                if (!entry.getName().equals("test2.xml")) {
+                    remainingEntries.add(entry.getName());
+                    arOutputDeleted.putArchiveEntry(new ArArchiveEntry(entry.getName(), entry.getLength()));
+                    arOutputDeleted.write(arInput.readAllBytes());
+                    arOutputDeleted.closeArchiveEntry();
+                }
+            }
+        }
+
+        arOutputDeleted.finish();
+
+        byte[] updatedArchiveData = baosDeleted.toByteArray();
+
+        // Write the updated archive to a temporary file
+        Path tempArchivePath = Files.createTempFile("bla", ".ar");
+        Files.write(tempArchivePath, updatedArchiveData);
+
+        try {
+            // Verify using the Java method
+            assertTrue(remainingEntries.contains("test1.xml"));
+            assertFalse(remainingEntries.contains("test2.xml"));
+
+            // Verify using command line tool (assuming 'ar' command is available on the system)
+            Process process = new ProcessBuilder("ar", "-t", tempArchivePath.toString()).start();
+            process.waitFor();
+            ByteArrayOutputStream commandOutput = new ByteArrayOutputStream();
+            process.getInputStream().transferTo(commandOutput);
+            String commandResult = commandOutput.toString();
+
+            assertTrue(commandResult.contains("test1.xml"));
+            assertFalse(commandResult.contains("test2.xml"));
+        } finally {
+            Files.deleteIfExists(tempArchivePath);
+        }
+    }
+}

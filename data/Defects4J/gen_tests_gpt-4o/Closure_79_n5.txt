@@ -1,0 +1,52 @@
+
+import org.junit.Test;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+
+public class CompilerTest {
+
+    @Test(expected = RuntimeException.class)
+    public void testCompilerErrorWithExternsAndAdvancedOptimizations() throws IOException {
+        // Create a temporary file for prototype.js
+        File externFile = File.createTempFile("prototype", ".js");
+        FileWriter externWriter = new FileWriter(externFile);
+
+        // Write a JavaScript content similar to what might cause the error
+        externWriter.write("(function() {\n" +
+                "    function Str(key, holder, stack) {}\n" +
+                "})();\n");
+        externWriter.close();
+
+        // Create a temporary file for bootloader.js
+        File jsFile = File.createTempFile("bootloader", ".js");
+        FileWriter jsWriter = new FileWriter(jsFile);
+
+        // Write JavaScript code - can be simple as nothing is executed
+        jsWriter.write("console.log('Bootloader');\n");
+        jsWriter.close();
+
+        // Assuming compiler.jar is located in the working directory
+        String command = "java -jar compiler.jar --compilation_level ADVANCED_OPTIMIZATIONS --externs "
+                + externFile.getAbsolutePath() + " --js " + jsFile.getAbsolutePath();
+
+        // Run the command and expect a RuntimeException
+        ProcessBuilder processBuilder = new ProcessBuilder(command.split(" "));
+        try {
+            Process process = processBuilder.start();
+            int exitCode = process.waitFor();
+
+            // Check if error output contains "INTERNAL COMPILER ERROR"
+            if (exitCode != 0) {
+                throw new RuntimeException("Compiler failed with exit code " + exitCode);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Internal compiler error occurred", e);
+        } finally {
+            // Clean up temporary files
+            externFile.delete();
+            jsFile.delete();
+        }
+    }
+}

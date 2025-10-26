@@ -1,0 +1,47 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertTrue;
+
+public class ClosureCompilerBugTest {
+
+    @Test
+    public void testFunctionCastProducesBadCode() {
+        // Original JavaScript code with function cast
+        String jsCodeWithCast = "/** @type {function(!string):!string} */ " +
+                "((new window.ActiveXObject('ShockwaveFlash.ShockwaveFlash'))['GetVariable'])('$version');";
+
+        // Expected output pattern for the bad transformation: it includes `(0,...)`
+        String expectedBadPattern = "(0,(new window.ActiveXObject";
+
+        // Compile the code using Closure Compiler with ADVANCED_OPTIMIZATIONS
+        String compiledOutput = compileWithAdvancedOptimizations(jsCodeWithCast);
+
+        // Assert that the compiled output contains the bad transformation pattern
+        assertTrue("The compiled code should contain `(0,...)` pattern, indicating the bad transformation was applied.",
+                compiledOutput.contains(expectedBadPattern));
+    }
+
+    private String compileWithAdvancedOptimizations(String jsCode) {
+        List<SourceFile> externs = CommandLineRunner.getBuiltinExterns(CompilerOptions.Environment.BROWSER);
+        SourceFile input = SourceFile.fromCode("test.js", jsCode);
+
+        CompilerOptions options = new CompilerOptions();
+        options.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT5);
+        options.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT5);
+        options.setOptimizationLevel(CompilerOptions.OptimizationLevel.ADVANCED_OPTIMIZATIONS);
+
+        com.google.javascript.jscomp.Compiler compiler = new com.google.javascript.jscomp.Compiler();
+        Result result = compiler.compile(externs, List.of(input), options);
+
+        // Returning the compiled result as a string
+        return compiler.toSource();
+    }
+}

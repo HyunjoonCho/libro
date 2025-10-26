@@ -1,0 +1,54 @@
+
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import com.google.javascript.jscomp.WarningLevel;
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+
+public class GlobalThisWarningTest {
+
+    @Test
+    public void testGlobalThisWarning() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        
+        // Enable all standard warning checks, including check for global this usage
+        WarningLevel.VERBOSE.setOptionsForWarningLevel(options);
+        
+        // JavaScript code to test
+        String jsCode = "var NS = {\n" +
+                "    read: function() {\n" +
+                "        return this.foo; // Expect warning\n" +
+                "    },\n" +
+                "    write: function() {\n" +
+                "        this.foo = 123; // Expect warning\n" +
+                "    }\n" +
+                "};\n" +
+                "NS.write2 = function() {\n" +
+                "    this.foo = 123; // Expect warning\n" +
+                "};";
+
+        // Compile the test code
+        Result result = compiler.compile(SourceFile.fromCode("externs.js", ""), 
+                                         SourceFile.fromCode("test.js", jsCode), 
+                                         options);
+
+        // Assert no unexpected errors
+        assertEquals(0, result.errors.length);
+
+        // Assert the number of warnings related to global this usage
+        int globalThisWarningsCount = 0;
+        for (com.google.javascript.jscomp.JSError warning : result.warnings) {
+            if (warning.description.contains("JSC_USED_GLOBAL_THIS")) {
+                globalThisWarningsCount++;
+            }
+        }
+
+        // Since both cases were expected to issue a warning in the 0514 release, 
+        // we expect at least two warnings for all uses of this in the test case.
+        assertEquals("Expected warnings for global this usage", 3, globalThisWarningsCount);
+    }
+}

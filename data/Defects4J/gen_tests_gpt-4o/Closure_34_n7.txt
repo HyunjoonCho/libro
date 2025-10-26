@@ -1,0 +1,50 @@
+
+import com.google.javascript.jscomp.*;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testStackOverflowError() {
+        // JavaScript code that presumably causes the stack overflow
+        String jsCode = "function longRecursiveFunction() {" +
+                        "  return longRecursiveFunction();" +
+                        "}";
+
+        // Initialize compiler
+        Compiler compiler = new Compiler();
+        
+        // Create compiler options
+        CompilerOptions options = new CompilerOptions();
+
+        // Add a simple extern
+        JSSourceFile extern = JSSourceFile.fromCode("externs.js", "");
+
+        // Add the JavaScript source code
+        JSSourceFile input = JSSourceFile.fromCode("input.js", jsCode);
+
+        try {
+            // Compile the input with externs
+            compiler.initOptions(options);
+            Result result = compiler.compile(extern, input, options);
+
+            // We expect failure due to StackOverflowError
+            assertFalse(result.success);
+            assertTrue(result.errors.length > 0);
+        } catch (RuntimeException e) {
+            // Check if the error is indeed StackOverflowError
+            Throwable cause = e.getCause();
+            boolean foundStackOverflow = false;
+            while (cause != null) {
+                if (cause instanceof StackOverflowError) {
+                    foundStackOverflow = true;
+                    break;
+                }
+                cause = cause.getCause();
+            }
+            assertTrue("Expected StackOverflowError", foundStackOverflow);
+        }
+    }
+}

@@ -1,0 +1,63 @@
+
+import org.junit.Test;
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.Result;
+
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+public class ClosureCompilerBugTest {
+
+    @Test
+    public void testInvalidPropertyNotReported() {
+        String jsCode =
+            "var makeClass = function(protoMethods) {" +
+            " var clazz = function() {" +
+            " this.initialize.apply(this, arguments);" +
+            " }" +
+            " for (var i in protoMethods) {" +
+            " clazz.prototype[i] = protoMethods[i];" +
+            " }" +
+            " return clazz;" +
+            "};" +
+            "/** @constructor" +
+            " * @param {{name: string, height: number}} options" +
+            " */" +
+            "var Person = function(options){};" +
+            "Person = makeClass(/** @lends Person.prototype */ {" +
+            " /**" +
+            " * @this {Person}" +
+            " * @param {{name: string, height: number}} options" +
+            " */" +
+            " initialize: function(options) {" +
+            " /** @type {string} */ this.name_ = options.thisPropDoesNotExist;" +
+            " }," +
+            " /**" +
+            " * @param {string} message" +
+            " * @this {Person}" +
+            " */" +
+            " say: function(message) {" +
+            " window.console.log(this.name_ + ' says: ' + message);" +
+            " }" +
+            "});" +
+            "var joe = new Person({name: 'joe', height: 300});" +
+            "joe.say('hi');";
+
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setPrettyPrint(true);
+        options.setCheckTypes(true);
+        options.setStrictModeInput(true);
+        
+        // Suppressing the logging output of the Closure Compiler to focus on results
+        Logger.getLogger(CommandLineRunner.class.getName()).setLevel(Level.WARNING);
+
+        Result result = compiler.compile(SourceFile.fromCode("externs.js", ""), SourceFile.fromCode("test.js", jsCode), options);
+
+        // Check result errors and warnings
+        assertFalse("Unexpected errors found", result.success);
+        assertTrue("Expected type-checking errors", result.hasTypeCheckingErrors());
+    }
+}

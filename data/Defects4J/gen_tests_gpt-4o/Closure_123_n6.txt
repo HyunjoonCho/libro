@@ -1,0 +1,51 @@
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineManager;
+import javax.script.ScriptException;
+
+import org.junit.Test;
+
+public class ClosureCompilerBugTest {
+    
+    @Test
+    public void testInvalidForInLeftHandAssignment() {
+        // JavaScript code to reproduce the issue
+        String originalCode = 
+            "window.Foo = function(A, B, C, D) {\n" +
+            "  if (A) {\n" +
+            "    if (B) {\n" +
+            "      C = 0;\n" +
+            "    } else {\n" +
+            "      C = 0 in D;\n" +
+            "    }\n" +
+            "    while (C--) {}\n" +
+            "  }\n" +
+            "}";
+
+        // This would be the expected minified code without the syntax error
+        String expectedMinifiedCode = 
+            "window.Foo=function(b,c,a,d){if(b)for(a=c?0:(0 in d);a--;);}";
+
+        // This is the actual output which has the syntax error
+        String actualMinifiedCode = 
+            "window.Foo=function(b,c,a,d){if(b)for(a=c?0:0 in d;a--;);}";
+
+        // Setup a JavaScript engine
+        ScriptEngine engine = new ScriptEngineManager().getEngineByName("nashorn");
+
+        // Try to execute the actual minified code
+        try {
+            engine.eval(actualMinifiedCode);
+            fail("Expected a syntax error in actual minified code");
+        } catch (ScriptException e) {
+            String expectedMessagePart = "Invalid left-hand side";
+            // Check that we indeed hit the syntax error
+            if (!e.getMessage().contains(expectedMessagePart)) {
+                throw new AssertionError("Expected a syntax error message containing: " + expectedMessagePart, e);
+            }
+        }
+    }
+}

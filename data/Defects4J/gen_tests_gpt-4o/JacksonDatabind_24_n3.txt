@@ -1,0 +1,68 @@
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import org.joda.time.DateTime;
+import org.joda.time.DateTimeZone;
+import org.joda.time.format.DateTimeFormat;
+import org.junit.Assert;
+import org.junit.Test;
+
+import java.text.SimpleDateFormat;
+import java.util.TimeZone;
+
+public class DateTimeSerializationTest {
+
+    @Test
+    public void testDateTimeSerialization() throws JsonProcessingException {
+        ObjectMapper objectMapper = createObjectMapper();
+
+        // Expected output string when using Jackson 2.5.4 behavior
+        String expectedSerializedDate_2_5_4 = "\"1988-06-25 20:30:00\"";
+        
+        // Serialize the DateTime object
+        String jsonOutput = objectMapper.writeValueAsString(new DateTime(1988, 6, 25, 20, 30, DateTimeZone.UTC));
+        
+        // Check if the serialized DateTime is as expected
+        // Note: The expected output can vary depending on the timezone issue under investigation
+        if (isJacksonVersion26OrLater()) {
+            String expectedSerializedDate_2_6_0 = "\"1988-06-25 21:30:00\""; // Adjusted for timezone offset
+            Assert.assertEquals(expectedSerializedDate_2_6_0, jsonOutput);
+        } else {
+            Assert.assertEquals(expectedSerializedDate_2_5_4, jsonOutput);
+        }
+    }
+
+    private ObjectMapper createObjectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(createJodaModule());
+        mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+        
+        // Before setting DateFormat
+        System.out.println("Before setDateFormat: " + mapper.getSerializationConfig().getTimeZone());
+        
+        // Set a DateFormat which triggers a timezone change in 2.6.0
+        mapper.setDateFormat(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"));
+        
+        // After setting DateFormat
+        System.out.println("After setDateFormat: " + mapper.getSerializationConfig().getTimeZone());
+        
+        return mapper;
+    }
+
+    private SimpleModule createJodaModule() {
+        SimpleModule module = new SimpleModule();
+        module.addSerializer(DateTime.class, new DateTimeSerializer(
+                new JacksonJodaDateFormat(DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss")
+                        .withZoneUTC())));
+        return module;
+    }
+
+    private boolean isJacksonVersion26OrLater() {
+        // A simple mechanism to determine if Jackson 2.6 or later is being used for demonstration purposes
+        // Implement a more robust version checking if necessary
+        String version = com.fasterxml.jackson.databind.cfg.PackageVersion.VERSION.toString();
+        return version.compareTo("2.6.0") >= 0;
+    }
+}

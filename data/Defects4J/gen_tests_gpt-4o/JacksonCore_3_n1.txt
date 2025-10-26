@@ -1,0 +1,43 @@
+
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.ObjectCodec;
+import com.fasterxml.jackson.core.io.IOContext;
+import com.fasterxml.jackson.core.sym.BytesToNameCanonicalizer;
+import com.fasterxml.jackson.core.util.BufferRecycler;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+
+import static org.junit.Assert.assertEquals;
+
+public class UTF8StreamJsonParserTest {
+
+    @Test
+    public void testCurrentLocationColumnCalculation() {
+        // Set up the necessary components for creating the UTF8StreamJsonParser
+        InputStream input = new ByteArrayInputStream("{ malformedJson".getBytes());
+        ObjectCodec codec = null; // assume codec is not necessary for this test
+        IOContext ctxt = new IOContext(new BufferRecycler(), input, false);
+        BytesToNameCanonicalizer sym = BytesToNameCanonicalizer.createRoot();
+
+        // Given a start position offset of 5
+        int startOffset = 5;
+
+        UTF8StreamJsonParser parser = new UTF8StreamJsonParser(ctxt, 0, input, codec, sym, new byte[1024], startOffset, 1024, false);
+        
+        try {
+            // Trigger parsing to evoke the issue
+            while (parser.nextToken() != JsonToken.END_OBJECT) {
+                // no-op, we expect a parsing error before reaching this step
+            }
+        } catch (JsonParseException e) {
+            // Verify the reported column position
+            // Here '6' is the expected column position to be verified manually
+            int expectedColumn = 6; // "{" is at position 6 when considering startOffset
+            assertEquals("Unexpected column calculation after the initial offset", expectedColumn, e.getLocation().getColumnNr());
+        }
+    }
+}

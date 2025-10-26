@@ -1,0 +1,61 @@
+
+import com.fasterxml.jackson.annotation.*;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.impl.StdTypeResolverBuilder;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class ObjectIdAndTypeIdTest {
+
+    // Base interface for the type hierarchy
+    interface BaseType {
+    }
+
+    static class ConcreteType implements BaseType {
+        public int value = 42;
+    }
+
+    @JsonTypeInfo(
+            use = JsonTypeInfo.Id.CLASS,
+            include = JsonTypeInfo.As.WRAPPER_OBJECT
+    )
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class, property = "@id")
+    static class Wrapper {
+        public BaseType baseType;
+
+        public Wrapper() {
+        }
+
+        public Wrapper(BaseType baseType) {
+            this.baseType = baseType;
+        }
+    }
+
+    @Test
+    public void testSerializeDeserialize() throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        StdTypeResolverBuilder typer = new StdTypeResolverBuilder();
+        typer.init(JsonTypeInfo.Id.CLASS, null);
+        typer.inclusion(JsonTypeInfo.As.WRAPPER_OBJECT);
+        
+        Wrapper original = new Wrapper(new ConcreteType());
+
+        // Serializing the object to JSON
+        String json = mapper.writeValueAsString(original);
+        
+        // Verify that the serialized string contains the type information as a wrapper
+        assertTrue(json.contains(ConcreteType.class.getName()));
+
+        // Deserializing the object from JSON
+        Wrapper deserialized = mapper.readValue(json, Wrapper.class);
+        
+        // Assertions
+        assertEquals(original.baseType.getClass(), deserialized.baseType.getClass());
+        assertTrue(deserialized.baseType instanceof ConcreteType);
+        assertEquals(((ConcreteType) original.baseType).value, ((ConcreteType) deserialized.baseType).value);
+    }
+}

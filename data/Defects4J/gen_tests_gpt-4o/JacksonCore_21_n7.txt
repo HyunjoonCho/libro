@@ -1,0 +1,61 @@
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.filter.FilteringParserDelegate;
+import com.fasterxml.jackson.core.filter.NameMatchFilter;
+import org.junit.Test;
+
+import java.io.IOException;
+
+import static org.junit.Assert.*;
+
+public class FilteringParserDelegateTest {
+
+    @Test
+    public void testMissingEndObject() throws IOException {
+        // Prepare JSON input
+        String jsonInput = "{\n"
+                + "  \"a\":123,\n"
+                + "  \"array\":[1,2],\n"
+                + "  \"ob\": {\n"
+                + "    \"value0\":2,\n"
+                + "    \"value\":3,\n"
+                + "    \"value2\":4\n"
+                + "  },\n"
+                + "  \"b\":true\n"
+                + "}";
+
+        JsonFactory jsonFactory = new JsonFactory();
+        JsonParser originalParser = jsonFactory.createParser(jsonInput);
+        
+        // Configure the FilteringParserDelegate
+        JsonParser filteredParser = new FilteringParserDelegate(
+                originalParser,
+                new NameMatchFilter("value"),
+                true, // includePath
+                false // multipleMatches
+        );
+
+        // Read and collect the filtered JSON
+        StringBuilder result = new StringBuilder();
+        while (!filteredParser.isClosed()) {
+            JsonToken token = filteredParser.nextToken();
+            if (token == null) {
+                break;
+            }
+            
+            // Append tokens to the result for validation
+            result.append(token.asString());
+            if (token == JsonToken.FIELD_NAME || token == JsonToken.VALUE_STRING
+                    || token == JsonToken.VALUE_NUMBER_INT || token == JsonToken.VALUE_TRUE
+                    || token == JsonToken.VALUE_FALSE) {
+                result.append(":").append(filteredParser.getText());
+            }
+        }
+        
+        // Expected the result to be a valid JSON object
+        String expectedResult = "{\"ob\":{\"value\":3}}";
+        assertEquals(expectedResult, result.toString());
+    }
+}

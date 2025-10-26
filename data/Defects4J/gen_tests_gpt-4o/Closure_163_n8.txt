@@ -1,0 +1,56 @@
+
+import com.google.javascript.jscomp.*;
+
+import java.util.List;
+
+public class CompilerTest {
+
+    public static void main(String[] args) {
+        testVarCheckCrashWithModules();
+    }
+
+    public static void testVarCheckCrashWithModules() {
+        // Prepare compiler
+        Compiler compiler = new Compiler();
+
+        // Create compilation options
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+        options.setPrettyPrint(true);
+        options.setDebugLogDirectory(new java.io.File("."));
+        options.setDebugLogPath(".log");
+        
+        // Set module options
+        List<JSModule> modules = List.of(
+                new JSModule("jquery"),
+                new JSModule("core")
+        );
+
+        // Add JS files to modules
+        modules.get(0).add(SourceFile.fromCode("jquery.js", "var jQuery = {};"));
+        modules.get(1).add(SourceFile.fromCode("core.js", "equal(jQuery(' <div/> ').length, 1, 'Make sure whitespace is trimmed.');"));
+
+        // Define externs (dummy externs)
+        List<SourceFile> externs = List.of(
+                SourceFile.fromCode("externs.js", "function equal(a, b, c) {}")
+        );
+
+        // Compile the modules
+        try {
+            Result result = compiler.compileModules(externs, modules, options);
+            if (!result.success) {
+                throw new AssertionError("Compilation failed: " + result.errors);
+            }
+        } catch (RuntimeException e) {
+            // The error tuple the bug refers to
+            if (e.getMessage().contains("INTERNAL COMPILER ERROR")) {
+                System.out.println("Successfully reproduced: " + e.getMessage());
+            } else {
+                throw e; // Re-throw if it's not the error we're looking for
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new AssertionError("Test setup encountered an unexpected issue.");
+        }
+    }
+}

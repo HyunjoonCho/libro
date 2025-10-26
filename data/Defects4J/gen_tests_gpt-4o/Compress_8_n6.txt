@@ -1,0 +1,32 @@
+
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarUtils;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class TarArchiveEntryTest {
+
+    @Test
+    public void testParseTarHeaderWithTrailingSpaceInSize() {
+        // Create a tar header with an octal size followed by a space
+        byte[] header = new byte[TarArchiveEntry.LENGTH];
+        System.arraycopy("00000000777 ".getBytes(), 0, header, TarArchiveEntry.OFFSET_SIZE, 12);
+        
+        // Additional tar header fields need to be properly formed for parsing
+        header[TarArchiveEntry.OFFSET_NAME] = (byte) 'a'; // Just to ensure the header is valid
+        header[TarArchiveEntry.OFFSET_MAGIC] = (byte) 'u'; // 'ustar' magic values
+        header[TarArchiveEntry.OFFSET_MAGIC + 1] = (byte) 's';
+        header[TarArchiveEntry.OFFSET_MAGIC + 2] = (byte) 't';
+        header[TarArchiveEntry.OFFSET_MAGIC + 3] = (byte) 'a';
+        header[TarArchiveEntry.OFFSET_MAGIC + 4] = (byte) 'r'; 
+        
+        // Compute the checksum
+        TarUtils.formatCheckSumOctalBytes(TarUtils.computeCheckSum(header), header, TarArchiveEntry.OFFSET_CHECKSUM, TarArchiveEntry.CHECKSUM_LENGTH);
+
+        TarArchiveEntry entry = new TarArchiveEntry(header);
+        
+        // The size should be correctly parsed as 511 (octal 777) without considering trailing space/NUL
+        assertEquals(511L, entry.getSize());
+    }
+}

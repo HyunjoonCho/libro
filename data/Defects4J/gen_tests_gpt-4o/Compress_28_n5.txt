@@ -1,0 +1,44 @@
+
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
+import org.junit.Test;
+
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+// Ensure necessary imports are included
+
+public class TarArchiveInputStreamTest {
+
+    @Test(expected = IOException.class)
+    public void testCorruptedBzip2() throws IOException {
+        // Path to the intentionally corrupted tar.bz2 file
+        Path archivePath = Paths.get("path/to/corrupted/test.tar.bz2");
+        
+        try (InputStream fileStream = Files.newInputStream(archivePath);
+             BZip2CompressorInputStream bz2Input = new BZip2CompressorInputStream(fileStream, true);
+             TarArchiveInputStream tarInput = new TarArchiveInputStream(bz2Input)) {
+
+            ArchiveEntry entry = tarInput.getNextEntry();
+            while (entry != null) {
+                System.out.printf("Extracting %s%n", entry.getName());
+                Path outputPath = Paths.get("/tmp/", entry.getName());
+                try (OutputStream out = new FileOutputStream(outputPath.toFile())) {
+                    final byte[] buffer = new byte[1024];
+                    int n;
+                    while ((n = tarInput.read(buffer)) != -1) {
+                        out.write(buffer, 0, n);
+                    }
+                }
+                
+                entry = tarInput.getNextEntry();
+            }
+        }
+    }
+}

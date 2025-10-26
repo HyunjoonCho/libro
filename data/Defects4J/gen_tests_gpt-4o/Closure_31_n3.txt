@@ -1,0 +1,44 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.CompilationLevel;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertTrue;
+
+public class DependencyManagementTest {
+
+    @Test
+    public void testManageClosureDependenciesWhitespaceOnly() {
+        List<SourceFile> externs = CommandLineRunner.getDefaultExterns();
+        List<SourceFile> inputs = new ArrayList<>();
+        
+        inputs.add(SourceFile.fromCode("input1", "goog.provide('example'); var a = 1;"));
+        inputs.add(SourceFile.fromCode("input2", "goog.require('example'); var b = 2;"));
+
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.WHITESPACE_ONLY.setOptionsForCompilationLevel(options);
+        
+        options.setManageClosureDependencies(true);
+
+        CommandLineRunner runner = new CommandLineRunner(new String[]{
+            "--compilation_level", "WHITESPACE_ONLY",
+            "--manage_closure_dependencies"
+        });
+
+        runner.setArgsForTesting(externs, inputs, options);
+
+        if (runner.shouldRunCompiler()) {
+            runner.run();
+        }
+
+        // Verify that the output contains the dependency-managed order
+        String output = runner.getLastCompiler().toSource();
+        assertTrue(output.contains("goog.provide('example')"));
+        assertTrue(output.indexOf("goog.provide('example')") < output.indexOf("goog.require('example')"));
+    }
+}

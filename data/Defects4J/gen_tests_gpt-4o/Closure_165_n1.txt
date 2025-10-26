@@ -1,0 +1,66 @@
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import com.google.javascript.jscomp.*;
+
+public class PropertyWarningTest {
+
+    @Test
+    public void testPropertyWarningOnDifferentRecordTypes() {
+        String jsInput1 = 
+            "/** @typedef {{name: string, id: number}} */\n" +
+            "var RecordType1;\n" +
+            "\n" +
+            "/**\n" +
+            " * @param {RecordType1} rec\n" +
+            " */\n" +
+            "var func = function(rec) {\n" +
+            "  alert(rec.name2);\n" +
+            "};\n" +
+            "func({name: 'jim', id: 0});\n";
+
+        String jsInput2 = 
+            "/** @typedef {{name: string, id: number}} */\n" +
+            "var RecordType1;\n" +
+            "\n" +
+            "/** @typedef {{name2: string}} */\n" +
+            "var RecordType2;\n" +
+            "\n" +
+            "/**\n" +
+            " * @param {RecordType1} rec\n" +
+            " */\n" +
+            "var func = function(rec) {\n" +
+            "  alert(rec.name2);\n" +
+            "};\n" +
+            "func({name: 'jim', id: 0});\n";
+
+        // First compilation (should error)
+        testCompilation(jsInput1, false);  // Expect warning/error
+
+        // Second compilation (should also error but does not)
+        testCompilation(jsInput2, true);  // No error/warning, which is the issue
+    }
+
+    private void testCompilation(String jsCode, boolean expectSuccess) {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        // Enabling specific checks
+        options.setWarningLevel(DiagnosticGroups.ACCESS_CONTROLS, CheckLevel.ERROR);
+        options.setWarningLevel(DiagnosticGroups.CHECK_TYPES, CheckLevel.ERROR);
+        options.setWarningLevel(DiagnosticGroups.CHECK_VARIABLES, CheckLevel.ERROR);
+        
+        Result result = compiler.compile(
+            CommandLineRunner.getDefaultExterns(),
+            ImmutableList.of(SourceFile.fromCode("input.js", jsCode)),
+            options
+        );
+
+        if (expectSuccess) {
+            assertTrue("Expected compilation to succeed without errors or warnings", result.success);
+        } else {
+            assertFalse("Expected compilation to fail with errors or warnings", result.success);
+        }
+    }
+}

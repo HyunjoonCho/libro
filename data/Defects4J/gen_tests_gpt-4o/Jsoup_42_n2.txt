@@ -1,0 +1,126 @@
+
+import org.jsoup.Jsoup;
+import org.jsoup.Connection;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.parser.Parser;
+import org.jsoup.select.Elements;
+import org.jsoup.select.Evaluator;
+import org.jsoup.Connection.*;
+import org.jsoup.helper.*;
+import org.jsoup.select.*;
+
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.parser.Tag;
+import org.junit.jupiter.api.Test;
+import org.jsoup.select.Elements;
+import java.io.IOException;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+public class JsoupFormElementTest {
+
+    @Test
+    public void testCheckboxWithNoValueShouldSubmitDefaultOn() {
+        // HTML to parse
+        final String html = "<html>\n"
+                + "    <head>\n"
+                + "        <title>Test Form</title>\n"
+                + "    </head>\n"
+                + "    <body>\n"
+                + "    <form name=\"myForm\" method=\"POST\">\n"
+                + "        <input type=\"checkbox\" name=\"testCheckBox\" checked=\"checked\" /> Something<br/>\n"
+                + "        <input type=\"submit\" value=\"Submit\" />\n"
+                + "    </form>\n"
+                + "    </body>\n"
+                + "</html>";
+
+        // Parse the HTML
+        final Document document = Jsoup.parse(html);
+
+        // Select the form element
+        final FormElement formElement = (FormElement) document.select("form[name=myForm]").first();
+
+        // Get form data
+        List<Connection.KeyVal> formData = formElement.formData();
+
+        // Check that the form data includes the expected key-value pair for the checkbox
+        boolean foundCheckBox = false;
+        for (Connection.KeyVal keyVal : formData) {
+            if (keyVal.key().equals("testCheckBox") && keyVal.value().equals("on")) {
+                foundCheckBox = true;
+                break;
+            }
+        }
+        assertTrue(foundCheckBox, "Checked checkbox without a value should submit 'on' as the value.");
+    }
+    
+    @Test
+    public void testUncheckedCheckboxShouldNotSubmit() {
+        final String html = "<html>\n"
+                + "    <head>\n"
+                + "        <title>Test Form</title>\n"
+                + "    </head>\n"
+                + "    <body>\n"
+                + "    <form name=\"myForm\" method=\"POST\">\n"
+                + "        <input type=\"checkbox\" name=\"uncheckedBox\" value=\"uncheckedValue\" />\n"
+                + "        <input type=\"submit\" value=\"Submit\" />\n"
+                + "    </form>\n"
+                + "    </body>\n"
+                + "</html>";
+
+        final Document document = Jsoup.parse(html);
+        final FormElement formElement = (FormElement) document.select("form[name=myForm]").first();
+        List<Connection.KeyVal> formData = formElement.formData();
+        
+        boolean foundUncheckedBox = false;
+        for (Connection.KeyVal keyVal : formData) {
+            if (keyVal.key().equals("uncheckedBox")) {
+                foundUncheckedBox = true;
+                break;
+            }
+        }
+        
+        assertTrue(!foundUncheckedBox, "Unchecked checkboxes should not submit any value.");
+    }
+
+    @Test
+    public void testRadioAndButtonHandling() {
+        // HTML with a radio button and a disabled button
+        final String html = "<html>\n"
+                + "    <head>\n"
+                + "        <title>Test Form</title>\n"
+                + "    </head>\n"
+                + "    <body>\n"
+                + "    <form name=\"myForm\" method=\"POST\">\n"
+                + "        <input type=\"radio\" name=\"testRadio\" value=\"value1\" checked=\"checked\" />\n"
+                + "        <input type=\"radio\" name=\"testRadio\" value=\"value2\" />\n"
+                + "        <input type=\"button\" name=\"testButton\" value=\"shouldBeIgnored\" disabled=\"disabled\" />\n"
+                + "        <input type=\"submit\" value=\"Submit\" />\n"
+                + "    </form>\n"
+                + "    </body>\n"
+                + "</html>";
+
+        // Parse the HTML
+        final Document document = Jsoup.parse(html);
+
+        // Select the form element
+        final FormElement formElement = (FormElement) document.select("form[name=myForm]").first();
+
+        // Get form data
+        List<Connection.KeyVal> formData = formElement.formData();
+
+        // Validate form data
+        for (Connection.KeyVal keyVal : formData) {
+            // Ensure the checked radio button's value is submitted
+            if (keyVal.key().equals("testRadio")) {
+                assertEquals("value1", keyVal.value(), "Checked radio button should submit its value.");
+            }
+            // Ensure the disabled button is ignored
+            assertTrue(!keyVal.key().equals("testButton"), "Disabled button should not be submitted.");
+        }
+    }
+}

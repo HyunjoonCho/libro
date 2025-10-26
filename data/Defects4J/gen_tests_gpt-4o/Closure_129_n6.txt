@@ -1,0 +1,50 @@
+
+import static org.junit.Assert.*;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+
+import org.junit.Test;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testFunctionCastingProducesBadCode() throws IOException {
+        // Paths to the Closure Compiler JAR, input JS file, and expected output file
+        String closureCompilerJar = "path/to/closure-compiler.jar";
+        String inputJsFile = "path/to/input.js";
+        
+        // Write the faulty JavaScript code to a file to be compiled
+        String jsCode = "/** @type {function(!string):!string} */ ((new window.ActiveXObject('ShockwaveFlash.ShockwaveFlash'))['GetVariable'])('$version');";
+        Files.write(Paths.get(inputJsFile), jsCode.getBytes(StandardCharsets.UTF_8));
+
+        // Build the command to run Closure Compiler with advanced optimizations
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                "java", "-jar", closureCompilerJar,
+                "--compilation_level", "ADVANCED_OPTIMIZATIONS",
+                "--js", inputJsFile);
+
+        // Start the process
+        Process process = processBuilder.start();
+        String compiledCode = getOutput(process.getInputStream());
+
+        // Check that the compiled output contains the unexpected (0, ...) wrapping
+        String expectedErroneousPattern = "(0,(new window.ActiveXObject('ShockwaveFlash.ShockwaveFlash')).GetVariable)";
+        assertTrue("The compiled code should contain the erroneous pattern", 
+            compiledCode.contains(expectedErroneousPattern));
+    }
+
+    // Utility method to read input stream (process output)
+    private String getOutput(InputStream inputStream) throws IOException {
+        StringBuilder output = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append(System.lineSeparator());
+            }
+        }
+        return output.toString();
+    }
+}

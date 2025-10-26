@@ -1,0 +1,102 @@
+
+import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
+import org.apache.commons.math3.ode.FirstOrderIntegrator;
+import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
+import org.apache.commons.math3.ode.events.EventHandler;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+
+public class MultiEventODETest {
+
+    @Test
+    public void testEventStateNotUpdated() {
+        // Define the ODE
+        FirstOrderDifferentialEquations ode = new SimpleODE();
+
+        // Create an integrator
+        FirstOrderIntegrator integrator = new DormandPrince853Integrator(1.0e-8, 100.0, 1.0e-10, 1.0e-10);
+
+        // Event handler that triggers a reset of state
+        EventHandler resetStateEvent = new EventHandler() {
+            @Override
+            public int eventOccurred(double t, double[] y, boolean increasing) {
+                // request a reset state to reproduce the bug
+                return EventHandler.RESET_STATE;
+            }
+
+            @Override
+            public double g(double t, double[] y) {
+                return t - 0.5; // event occurs at t = 0.5
+            }
+
+            @Override
+            public void resetState(double t, double[] y) {
+                // reset state logic
+                y[0] = 1.0;
+            }
+
+            @Override
+            public double getMaxCheckInterval() { return 1.0; }
+
+            @Override
+            public int getMaxIterationCount() { return 1000; }
+
+            @Override
+            public double getConvergence() { return 1.0e-12; }
+        };
+
+        // Second event handler to monitor state
+        EventHandler monitorEvent = new EventHandler() {
+            @Override
+            public int eventOccurred(double t, double[] y, boolean increasing) {
+                return EventHandler.CONTINUE;
+            }
+
+            @Override
+            public double g(double t, double[] y) {
+                return y[0] - 2.0; // Event condition for checking state
+            }
+
+            @Override
+            public void resetState(double t, double[] y) {}
+
+            @Override
+            public double getMaxCheckInterval() { return 1.0; }
+
+            @Override
+            public int getMaxIterationCount() { return 1000; }
+
+            @Override
+            public double getConvergence() { return 1.0e-12; }
+        };
+
+        // Add handlers
+        integrator.addEventHandler(resetStateEvent, resetStateEvent.getMaxCheckInterval(), resetStateEvent.getConvergence(), resetStateEvent.getMaxIterationCount());
+        integrator.addEventHandler(monitorEvent, monitorEvent.getMaxCheckInterval(), monitorEvent.getConvergence(), monitorEvent.getMaxIterationCount());
+
+        // Initial conditions
+        double[] yStart = new double[] { 0.0 };
+        double[] yEnd = new double[yStart.length];
+
+        // Integrate from time 0 to 1
+        integrator.integrate(ode, 0.0, yStart, 1.0, yEnd);
+
+        // The state should have been reset by the resetStateEvent
+        assertTrue("The state was not reset properly after RESET_STATE", yEnd[0] <= 2.0);
+    }
+
+    // A simple ODE representing dy/dt = 1
+    private static class SimpleODE implements FirstOrderDifferentialEquations {
+
+        @Override
+        public int getDimension() {
+            return 1;
+        }
+
+        @Override
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = 1.0;
+        }
+    }
+}

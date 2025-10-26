@@ -1,0 +1,57 @@
+
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
+import org.apache.commons.io.IOUtils;
+import org.junit.Test;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.zip.ZipInputStream;
+
+import static org.junit.Assert.assertTrue;
+
+public class ZipFileTest {
+
+    @Test
+    public void testZipWithPotentialHashCollisions() throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try (ZipArchiveOutputStream zos = new ZipArchiveOutputStream(baos)) {
+            // Add entries with intentional hash collision potential
+            addEntryToZip(zos, "entry1.txt", "This is the content of entry 1.");
+            addEntryToZip(zos, "entry2.txt", "This is the content of entry 2.");
+            // Add more entries if needed to force a hash collision scenario
+            addEntryToZip(zos, "eNrTy3.txt", "This is another entry with potential hash collision.");
+        }
+
+        // Attempt to read back the created zip archive
+        try (ZipInputStream zis = new ZipInputStream(IOUtils.toInputStream(new String(baos.toByteArray(), StandardCharsets.UTF_8), StandardCharsets.UTF_8))) {
+            boolean entry1Found = false;
+            boolean entry2Found = false;
+            boolean entry3Found = false;
+            while (zis.getNextEntry() != null) {
+                if ("entry1.txt".equals(zis.getNextEntry().getName())) {
+                    entry1Found = true;
+                }
+                if ("entry2.txt".equals(zis.getNextEntry().getName())) {
+                    entry2Found = true;
+                }
+                if ("eNrTy3.txt".equals(zis.getNextEntry().getName())) {
+                    entry3Found = true;
+                }
+            }
+
+            // The test verifies that all entries are correctly indexed and retrievable
+            assertTrue("Entry 1 was not found in the zip file", entry1Found);
+            assertTrue("Entry 2 was not found in the zip file", entry2Found);
+            assertTrue("Entry 3 was not found in the zip file", entry3Found);
+        }
+    }
+
+    private void addEntryToZip(ZipArchiveOutputStream zos, String entryName, String content) throws IOException {
+        ZipArchiveEntry entry = new ZipArchiveEntry(entryName);
+        zos.putArchiveEntry(entry);
+        zos.write(content.getBytes(StandardCharsets.UTF_8));
+        zos.closeArchiveEntry();
+    }
+}

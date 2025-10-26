@@ -1,0 +1,47 @@
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+import com.google.javascript.rhino.jstype.UnionType;
+import junit.framework.TestCase;
+
+import java.util.Collections;
+
+public class ClosureCompilerTest extends TestCase {
+
+    public void testResolveTypesIssue() {
+        // Configuration of the compiler with options that might reproduce the error
+        CompilerOptions options = new CompilerOptions();
+        options.setCreateNameMapFiles(true);
+        options.setWarningLevel(DiagnosticGroups.MISSING_PROPERTIES, CheckLevel.WARNING);
+        options.setWarningLevel(DiagnosticGroups.UNDEFINED_VARIABLES, CheckLevel.WARNING);
+        options.setWarningLevel(DiagnosticGroups.CHECK_TYPES, CheckLevel.WARNING);
+        options.setWarningLevel(DiagnosticGroups.STRICT_MODULE_DEP_CHECK, CheckLevel.ERROR);
+        options.setWarningLevel(DiagnosticGroups.INVALID_CASTS, CheckLevel.ERROR);
+        options.setLoggingLevel(Level.ALL);
+        options.setCompilationLevel(CompilationLevel.ADVANCED_OPTIMIZATIONS);
+        options.setProcessClosurePrimitives(true);
+        
+        Compiler compiler = new Compiler();
+
+        // Assume some hypothetical JavaScript source code that might use union types inappropriately.
+        String jsCode = "function example() {" +
+                        "  /** @type {Object|undefined} */ var x;" +
+                        "  console.log(x.propertyThatDoesNotExist);" +
+                        "}";
+
+        // Wrap the JavaScript source code in a SourceFile
+        SourceFile input = SourceFile.fromCode("test.js", jsCode);
+        
+        // Empty externs (part of the necessary setup, typically needed for the compiler env)
+        SourceFile externs = SourceFile.fromCode("externs.js", "");
+
+        // Run the compiler
+        try {
+            compiler.compile(Collections.singletonList(externs), Collections.singletonList(input), options);
+        } catch (RuntimeException e) {
+            // Check if the specific ClassCastException is thrown
+            assertTrue(e.getCause() instanceof ClassCastException);
+            assertTrue(e.getCause().getMessage().contains("UnionType cannot be cast to ObjectType"));
+        }
+    }
+}

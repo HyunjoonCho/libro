@@ -1,0 +1,88 @@
+
+import org.apache.commons.math3.optim.nonlinear.scalar.GoalType;
+import org.apache.commons.math3.optim.linear.LinearConstraint;
+import org.apache.commons.math3.optim.linear.LinearObjectiveFunction;
+import org.apache.commons.math3.optim.linear.Relationship;
+import org.apache.commons.math3.optim.linear.SimplexSolver;
+import org.apache.commons.math3.optim.linear.PointValuePair;
+import org.junit.Test;
+import org.apache.commons.math3.optim.nonlinear.scalar.MultivariateOptimizer;
+import org.apache.commons.math3.optim.linear.NonNegativeConstraint;
+import org.apache.commons.math3.optim.MaxIter;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.fail;
+
+public class SimplexSolverTest {
+
+    private static final int ENTITIES_COUNT_LOW = 2;
+    private static final int ENTITIES_COUNT_HIGH = 15;
+
+    @Test
+    public void testSolverWithLowEntitiesCount() {
+        try {
+            solveLinearProblem(ENTITIES_COUNT_LOW);
+        } catch (Exception e) {
+            // This shouldn't throw an exception
+            fail("An exception was not expected for low entities count: " + e.getMessage());
+        }
+    }
+
+    @Test
+    public void testSolverWithHighEntitiesCount() {
+        try {
+            solveLinearProblem(ENTITIES_COUNT_HIGH);
+            fail("Expected UnboundedSolutionException for high entities count");
+        } catch (org.apache.commons.math3.optim.linear.UnboundedSolutionException e) {
+            // Exception expected, you can log or assert message here
+        } catch (Exception e) {
+            fail("Unexpected exception: " + e.getMessage());
+        }
+    }
+
+    private void solveLinearProblem(int entitiesCount) {
+        double[] coefficients = new double[entitiesCount + 1]; // +1 for objective variable 't'
+        coefficients[0] = 1.0; // minimize 't'
+        // All other coefficients are 0 by default
+
+        // Goal: min(1*t + 0*L)
+        LinearObjectiveFunction objectiveFunction = new LinearObjectiveFunction(coefficients, 0);
+
+        List<LinearConstraint> constraints = new ArrayList<>();
+
+        for (int i = 1; i <= entitiesCount; i++) {
+            double[] qConstraints = new double[entitiesCount + 1];
+            qConstraints[i] = 1.0; // q(r) + QL >= 0
+            constraints.add(new LinearConstraint(qConstraints, Relationship.GEQ, 0.0));
+        }
+
+        for (int i = 1; i <= entitiesCount; i++) {
+            double[] xConstraints = new double[entitiesCount + 1];
+            xConstraints[0] = -1.0; // -x(r)t + XL >= 0
+            xConstraints[i] = 1.0;
+            constraints.add(new LinearConstraint(xConstraints, Relationship.GEQ, 0.0));
+        }
+
+        // Ensure L >= 0
+        for (int i = 1; i <= entitiesCount; i++) {
+            double[] lConstraints = new double[entitiesCount + 1];
+            lConstraints[i] = 1.0;
+            constraints.add(new LinearConstraint(lConstraints, Relationship.GEQ, 0.0));
+        }
+
+        // Using SimplexSolver to solve the problem
+        SimplexSolver solver = new SimplexSolver();
+        PointValuePair solution = solver.optimize(
+            new MaxIter(1000),
+            objectiveFunction,
+            new NonNegativeConstraint(true),
+            GoalType.MINIMIZE,
+            constraints
+        );
+
+        // Access solution (we do not expect to reach this with high entities count)
+        System.out.println("Solution: " + solution.getValue());
+    }
+}

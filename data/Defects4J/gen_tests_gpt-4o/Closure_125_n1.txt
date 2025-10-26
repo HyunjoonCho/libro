@@ -1,0 +1,84 @@
+
+import org.junit.Test;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.PrintStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import static org.junit.Assert.assertTrue;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testCompilerCrashes() throws Exception {
+        // Prepare the JavaScript source code that causes the crash
+        String jsCode = "var test = {};\n" +
+                "/**\n" +
+                " * @interface\n" +
+                " */\n" +
+                "test.T = function() {};\n" +
+                "/**\n" +
+                " * @constructor\n" +
+                " * @implements {test.T}\n" +
+                " */\n" +
+                "test.A = function() {};\n" +
+                "/**\n" +
+                " * @constructor\n" +
+                " * @implements {test.T}\n" +
+                " */\n" +
+                "test.B = function() {};\n" +
+                "/**\n" +
+                " * @constructor\n" +
+                " */\n" +
+                "test.X = function() {\n" +
+                "  this.type = test.A;\n" +
+                "  this.t = this.f();\n" +
+                "};\n" +
+                "/**\n" +
+                " * @return {test.T}\n" +
+                " */\n" +
+                "test.X.prototype.f = function() {\n" +
+                "  if (this.type === test.A) {\n" +
+                "    return new test.A();\n" +
+                "  } else if (this.type === test.B) {\n" +
+                "    return new test.B();\n" +
+                "  }\n" +
+                "};";
+
+        // Write the JS code to a temporary file
+        Path tempFilePath = Files.createTempFile("crash", ".js");
+        Files.write(tempFilePath, jsCode.getBytes());
+
+        // Define the path to the Closure Compiler jar
+        String compilerJarPath = "./closure-compiler-v20130411.jar";
+
+        // Set up the process to run the compiler
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                "java", "-jar", compilerJarPath,
+                "--js", tempFilePath.toString(),
+                "--warning_level=VERBOSE",
+                "--compilation_level=SIMPLE_OPTIMIZATIONS"
+        );
+        processBuilder.redirectErrorStream(true);
+
+        // Capture output of the compiler
+        Process process = processBuilder.start();
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        try (InputStream is = process.getInputStream()) {
+            int readByte;
+            while ((readByte = is.read()) != -1) {
+                outputStream.write(readByte);
+            }
+        }
+
+        int exitCode = process.waitFor();
+        String output = outputStream.toString();
+
+        // Clean up
+        Files.deleteIfExists(tempFilePath);
+
+        // Check that the error message points to the same error as described
+        assertTrue(output.contains("java.lang.IllegalStateException"));
+    }
+}

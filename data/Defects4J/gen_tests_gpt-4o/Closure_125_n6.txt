@@ -1,0 +1,87 @@
+
+import org.junit.Test;
+import java.io.*;
+
+import static org.junit.Assert.*;
+
+public class ClosureCompilerCrashTest {
+
+    @Test
+    public void testClosureCompilerCrash() {
+        String compilerJarPath = "path/to/compiler.jar";
+        String jsFilePath = "path/to/crash.js"; // you need to adjust this path
+
+        // Create JS file with the contents from the bug report
+        String jsContents = 
+                "var test = {};\n" +
+                "/**\n" +
+                " * @interface\n" +
+                " */\n" +
+                "test.T = function() {};\n" +
+                "/**\n" +
+                " * @constructor\n" +
+                " * @implements {test.T}\n" +
+                " */\n" +
+                "test.A = function() {};\n" +
+                "/**\n" +
+                " * @constructor\n" +
+                " * @implements {test.T}\n" +
+                " */\n" +
+                "test.B = function() {};\n" +
+                "/**\n" +
+                " * @constructor\n" +
+                " */\n" +
+                "test.X = function() {\n" +
+                " this.type = test.A;\n" +
+                " this.t = this.f();\n" +
+                "};\n" +
+                "/**\n" +
+                " * @return {test.T}\n" +
+                " */\n" +
+                "test.X.prototype.f = function() {\n" +
+                " if (this.type === test.A) {\n" +
+                " return new test.A();\n" +
+                " } else if (this.type === test.B) {\n" +
+                " return new test.B();\n" +
+                " }\n" +
+                "};";
+
+        try {
+            // Write the JS code to a temporary file
+            File jsFile = new File(jsFilePath);
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(jsFile))) {
+                writer.write(jsContents);
+            }
+
+            // Run the Closure Compiler process
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                    "java", "-jar", compilerJarPath, "--js", jsFile.getAbsolutePath(), "--warning_level=VERBOSE", "--compilation_level=SIMPLE_OPTIMIZATIONS");
+
+            Process process = processBuilder.start();
+
+            // Read the output and error streams
+            String output = readStream(process.getInputStream());
+            String errors = readStream(process.getErrorStream());
+
+            int exitCode = process.waitFor();
+
+            // Check if the process failed and analyze output
+            assertEquals("Process should exit with error, indicating it crashed.", 0, exitCode);
+            assertFalse("Errors should be present in the output.", errors.isEmpty());
+
+        } catch (Exception e) {
+            fail("Exception occurred: " + e.getMessage());
+        }
+    }
+
+    private String readStream(InputStream inputStream) throws IOException {
+        StringBuilder output = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append(System.lineSeparator());
+            }
+        }
+        return output.toString();
+    }
+}

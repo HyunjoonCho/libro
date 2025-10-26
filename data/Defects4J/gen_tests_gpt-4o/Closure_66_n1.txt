@@ -1,0 +1,54 @@
+
+import com.google.javascript.jscomp.CompilationLevel;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.JSSourceFile;
+import com.google.javascript.rhino.Node;
+import org.junit.Test;
+
+import java.util.List;
+
+import static org.junit.Assert.assertTrue;
+
+public class EnumTypingTest {
+
+    @Test
+    public void testEnumTyping() {
+        // Setup the compiler options
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+        
+        // Example source code
+        String jsCode = "/** @type {Object} */\n" +
+                        "var NS = {};\n" +
+                        "\n" +
+                        "/**\n" +
+                        " * @enum {number}\n" +
+                        " */\n" +
+                        "NS.keys = { \n" + 
+                        "  a: 1, \n" + 
+                        "  b: 2, \n" + 
+                        "  c: 3\n" + 
+                        "};\n" +
+                        "\n" +
+                        "/**\n" +
+                        " * @enum\n" +
+                        " */\n" +
+                        "window['gKEYS'] = NS.keys;";
+        
+        // Create source file
+        JSSourceFile inputSource = JSSourceFile.fromCode("test.js", jsCode);
+        
+        // Compile the source JavaScript code
+        com.google.javascript.jscomp.Compiler compiler = new com.google.javascript.jscomp.Compiler();
+        compiler.compile(List.of(JSSourceFile.fromCode("externs.js", "")), List.of(inputSource), options);
+        
+        // Check the warnings produced
+        List<JSError> warnings = compiler.getWarnings();
+        
+        // Check if any warnings are related to typing
+        boolean typingWarningPresent = warnings.stream().anyMatch(warning -> warning.getDescription().contains("enum"));
+        
+        // The test will fail if there are enum typing-related warnings, indicating it counted the enum as un-typed.
+        assertTrue("Enum should not be counted as un-typed", !typingWarningPresent);
+    }
+}

@@ -1,0 +1,51 @@
+
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.JSError;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.fail;
+
+public class GetterIssueTest {
+
+    @Test
+    public void testExceptionWhenEmittingCodeWithGetters() {
+        // Set up the JavaScript code containing a getter
+        String jsCode = "class Test {" +
+                        "   get name() {" +
+                        "       return 'test';" +
+                        "   }" +
+                        "}";
+        
+        // Initialize the Compiler
+        Compiler compiler = new Compiler();
+
+        // Set up compiler options as desired
+        CompilerOptions options = new CompilerOptions();
+        options.setCheckTypes(true); // Example setting, may not be necessary based on the bug
+
+        // Compile the JavaScript code
+        try {
+            compiler.compile(
+                SourceFile.fromCode("externs.js", ""),  // Empty externs
+                SourceFile.fromCode("input.js", jsCode), // The problematic JavaScript code
+                options);
+
+            // If no exception was thrown, we fail the test
+            if (!compiler.getErrors().isEmpty()) {
+                for (JSError error : compiler.getErrors()) {
+                    System.err.println(error.toString());
+                }
+            }
+            
+            fail("Expected an exception due to getter parsing issue, but none occurred.");
+        } catch (RuntimeException e) {
+            Throwable cause = e.getCause();
+            if (!(cause instanceof IllegalStateException && 
+                  cause.getMessage().contains("Expected function but was call Reference"))) {
+                fail("Unexpected exception: " + e);
+            }
+            // The exception was expected and reProduced successfully
+        }
+    }
+}

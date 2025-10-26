@@ -1,0 +1,61 @@
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.sym.ByteQuadsCanonicalizer;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+
+import static org.junit.Assert.fail;
+
+public class UTF8ByteStreamExceptionTest {
+
+    private static final int SEED = -523743345;
+
+    private static void injectReproducibleSeed(ObjectMapper objectMapper) throws Exception {
+        JsonFactory jsonFactory = objectMapper.getFactory();
+        Field byteSymbolCanonicalizerField = JsonFactory.class.getDeclaredField("_byteSymbolCanonicalizer");
+        byteSymbolCanonicalizerField.setAccessible(true);
+
+        Method factoryMethod = ByteQuadsCanonicalizer.class.getDeclaredMethod("createRoot", int.class);
+        factoryMethod.setAccessible(true);
+        byteSymbolCanonicalizerField.set(jsonFactory, factoryMethod.invoke(null, SEED));
+    }
+
+    @Test
+    public void testArrayIndexOutOfBoundsException() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        
+        try {
+            injectReproducibleSeed(objectMapper);
+
+            StringBuilder stringBuilder = new StringBuilder();
+            stringBuilder.append("{\n");
+            stringBuilder.append(" \"expectedGCperPosition\": null");
+            for (int i = 0; i < 60; ++i) {
+                stringBuilder.append(",\n \"").append(i + 1).append("\": null");
+            }
+            stringBuilder.append("\n}");
+
+            byte[] jsonData = stringBuilder.toString().getBytes(StandardCharsets.UTF_8);
+
+            try {
+                objectMapper.readValue(jsonData, Map.class);
+                fail("Expected ArrayIndexOutOfBoundsException was not thrown.");
+            } catch (ArrayIndexOutOfBoundsException e) {
+                // If exception occurs, test is successful
+                System.out.println("Caught expected ArrayIndexOutOfBoundsException: " + e.getMessage());
+            } catch (JsonProcessingException e) {
+                fail("Unexpected JsonProcessingException: " + e.getMessage());
+            }
+
+        } catch (Exception e) {
+            fail("Unexpected exception: " + e.getMessage());
+        }
+    }
+}

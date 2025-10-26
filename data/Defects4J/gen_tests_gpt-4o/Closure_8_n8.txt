@@ -1,0 +1,43 @@
+
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.JSSourceFile;
+import com.google.javascript.jscomp.Result;
+import org.junit.Test;
+import static org.junit.Assert.assertTrue;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testObfuscatedCodeTriggersTypeError() {
+        Compiler compiler = new Compiler();
+
+        CompilerOptions options = new CompilerOptions();
+        // Set options for advanced compilation which includes REFINED function in original problem
+        options.setLanguageIn(com.google.javascript.jscomp.CompilerOptions.LanguageMode.ECMASCRIPT5);
+        options.setLanguageOut(com.google.javascript.jscomp.CompilerOptions.LanguageMode.ECMASCRIPT5);
+
+        String originalJs = ""
+            + "function(argument) {\n"
+            + "  // use argument\n"
+            + "  var variable = 1;\n"
+            + "  // argument not used anymore\n"
+            + "  alert(variable);\n"
+            + "}";
+
+        // Compile the JS and get the result
+        Result result = compiler.compile(
+                JSSourceFile.fromCode("externs.js", ""),  // empty externs
+                JSSourceFile.fromCode("test.js", originalJs),
+                options);
+
+        // Grab the compiled JS code
+        String compiledJs = compiler.toSource();
+        
+        // Check whether the compiledJs contains correctly renamed variables
+        // This is a simplistic check and may need to be more robust depending on specific cases
+        boolean hasRedeclareProblem = compiledJs.contains("function(a)") && compiledJs.contains("var a=");
+
+        assertTrue("The Closure Compiler should not rename variables to cause redeclaration issues.", !hasRedeclareProblem);
+    }
+}

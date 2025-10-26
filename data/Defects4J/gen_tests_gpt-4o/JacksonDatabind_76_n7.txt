@@ -1,0 +1,108 @@
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonPOJOBuilder;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+
+public class EmployeeDeserializationTest {
+
+    @Test
+    public void testDeserializationWithBuilderAndJsonUnwrapped() throws Exception {
+        // Given JSON with "emp_id" not at the end
+        String json = "{"
+                + "\"emp_age\": 30,"
+                + "\"emp_id\": 1234,"
+                + "\"emp_first_name\": \"John\","
+                + "\"emp_last_name\": \"Doe\""
+                + "}";
+
+        // Deserialize JSON to Employee
+        ObjectMapper objectMapper = new ObjectMapper();
+        Employee emp = objectMapper.readValue(json, Employee.class);
+
+        // Verify fields
+        assertEquals(30, emp.getAge(), "Age should be properly set");
+        assertEquals(1234, emp.getId(), "ID should be properly set");
+        // This should fail demonstrating the bug
+        assertNull(emp.getName(), "Name should be properly set but is null due to bug");
+    }
+
+    @JsonDeserialize(builder = Employee.Builder.class)
+    public static class Employee {
+        private final long id;
+        private final Name name;
+        private final int age;
+
+        private Employee(Builder builder) {
+            id = builder.id;
+            name = builder.name;
+            age = builder.age;
+        }
+
+        public long getId() {
+            return id;
+        }
+
+        public Name getName() {
+            return name;
+        }
+
+        public int getAge() {
+            return age;
+        }
+
+        @JsonPOJOBuilder(withPrefix = "set")
+        public static class Builder {
+            private final long id;
+            private Name name;
+            private int age;
+
+            @JsonCreator
+            public Builder(@JsonProperty("emp_id") long id) {
+                this.id = id;
+            }
+
+            @JsonUnwrapped
+            public void setName(Name name) {
+                this.name = name;
+            }
+
+            @JsonProperty("emp_age")
+            public void setAge(int age) {
+                this.age = age;
+            }
+
+            public Employee build() {
+                return new Employee(this);
+            }
+        }
+    }
+
+    public static class Name {
+        private final String first;
+        private final String last;
+
+        @JsonCreator
+        public Name(
+                @JsonProperty("emp_first_name") String first,
+                @JsonProperty("emp_last_name") String last
+        ) {
+            this.first = first;
+            this.last = last;
+        }
+
+        public String getFirst() {
+            return first;
+        }
+
+        public String getLast() {
+            return last;
+        }
+    }
+}

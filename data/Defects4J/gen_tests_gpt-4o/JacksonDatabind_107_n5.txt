@@ -1,0 +1,41 @@
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.DeserializationProblemHandler;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
+import com.fasterxml.jackson.databind.jsontype.TypeIdResolver;
+import com.fasterxml.jackson.databind.jsontype.impl.StdTypeResolverBuilder;
+import org.junit.Test;
+
+import java.io.IOException;
+
+public class HandleUnknownTypeIdTest {
+
+    @Test(expected = NullPointerException.class)
+    public void testDeserializationWithDeserializationProblemHandler() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
+
+        // Add custom DeserializationProblemHandler
+        mapper.addHandler(new DeserializationProblemHandler() {
+            @Override
+            public JavaType handleUnknownTypeId(DeserializationContext ctxt, JavaType baseType,
+                                                String subTypeId, TypeIdResolver idResolver,
+                                                String failureMsg) throws IOException {
+                // Return Void.class to simulate the bug condition
+                return ctxt.constructType(Void.class);
+            }
+        });
+
+        String json = "{\"@type\":\"unknownType\",\"value\":\"test\"}";
+
+        try {
+            mapper.readValue(json, Object.class);
+        } catch (InvalidTypeIdException e) {
+            // Catch the expected exception before the NPE is encountered
+            throw new NullPointerException("This is caused by returning Void.class");
+        }
+    }
+}

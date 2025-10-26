@@ -1,0 +1,44 @@
+
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipFile;
+import org.junit.Test;
+
+import java.io.File;
+import java.io.IOException;
+
+import static org.junit.Assert.assertFalse;
+import static org.mockito.Mockito.*;
+
+public class ZipFileTest {
+
+    @Test
+    public void testIsUnixSymlinkWithInvalidPermissions() throws IOException {
+        // Mock the ZipFile and ZipArchiveEntry
+        ZipFile mockZipFile = mock(ZipFile.class);
+        ZipArchiveEntry mockEntry = mock(ZipArchiveEntry.class);
+
+        // Setup the expected behavior for the mocked entry
+        when(mockEntry.getName()).thenReturn("META-INF/maven/");
+        when(mockEntry.getUnixMode()).thenReturn(0177777); // Octal 177777
+
+        // Assume isUnixSymlink method to be tested
+        when(mockEntry.isUnixSymlink()).thenCallRealMethod();
+
+        // Add custom logic to mimic the potential real method behavior
+        doAnswer(invocation -> {
+            int unixMode = mockEntry.getUnixMode();
+            return unixMode != 0xFFFF && (unixMode & 0120000) == 0120000; // UnixStat.LINK_FLAG = 0120000;
+        }).when(mockEntry).isUnixSymlink();
+
+        // Mock the behavior of getting entries
+        when(mockZipFile.getEntriesInPhysicalOrder()).thenReturn(java.util.Collections.singletonList(mockEntry));
+
+        // Check the symlink status
+        mockZipFile.getEntriesInPhysicalOrder().forEach(entry ->
+                System.out.printf("%-17s: symlink:%-5s - unixMode:%o%n", entry.getName(), entry.isUnixSymlink(), entry.getUnixMode())
+        );
+
+        // Ensure isUnixSymlink returns false for broken entries
+        assertFalse(mockEntry.isUnixSymlink());
+    }
+}

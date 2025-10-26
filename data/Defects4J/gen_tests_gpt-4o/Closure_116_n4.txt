@@ -1,0 +1,61 @@
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+
+public class CompilerOptimizationTest {
+
+    @Test
+    public void testAdvancedOptimization() throws IOException, InterruptedException {
+        // Prepare input JavaScript file
+        String jsInput = "window[\"anchor\"] = function (obj, modifiesProp) {\n"
+                + "  return (function (saved) {\n"
+                + "    return modifiesProp(obj) + saved;\n"
+                + "  })(obj[\"prop\"]);\n"
+                + "};\n";
+        File inputFile = new File("input.js");
+        try (FileWriter writer = new FileWriter(inputFile)) {
+            writer.write(jsInput);
+        }
+
+        // Prepare the command to execute the Closure Compiler
+        String[] command = new String[] {
+                "java", 
+                "-jar", "path/to/closure-compiler.jar",  // Replace with actual path to closure-compiler.jar
+                "--compilation_level", "ADVANCED_OPTIMIZATIONS",
+                "--warning_level", "VERBOSE",
+                "--externs", "window.js",          // Make sure this file has valid externs
+                "--js", "input.js",
+                "--js_output_file", "output.js"
+        };
+
+        // Execute the command
+        Process process = Runtime.getRuntime().exec(command);
+        process.waitFor();
+
+        // Read the output.js file
+        File outputFile = new File("output.js");
+        StringBuilder output = new StringBuilder();
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                output.append(line).append("\n");
+            }
+        }
+
+        // Define the expected output
+        String expectedOutput = "window.foo=function(a,b){var HOLD=a.prop;return b(a)+HOLD;};";
+
+        // Perform test assertion
+        assertEquals(expectedOutput.trim(), output.toString().trim());
+
+        // Clean up the files
+        inputFile.delete();
+        outputFile.delete();
+    }
+}

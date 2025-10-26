@@ -1,0 +1,79 @@
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import org.junit.Test;
+
+import java.util.Map;
+import java.util.UUID;
+
+// Custom interface
+interface MyCustomIdInterface {
+    UUID getId();
+}
+
+// POJO implementing the custom interface
+class Foo implements MyCustomIdInterface {
+    private UUID id;
+    private String property;
+
+    @JsonCreator
+    public Foo(@JsonProperty("id") UUID id, @JsonProperty("property") String property) {
+        this.id = id;
+        this.property = property;
+    }
+
+    @Override
+    public UUID getId() {
+        return id;
+    }
+
+    public String getProperty() {
+        return property;
+    }
+}
+
+// Custom HashMap ensuring every value implements MyCustomIdInterface
+class MyHashMap<K, V extends MyCustomIdInterface> extends java.util.HashMap<K, V> {}
+
+// Class with a method annotated for deserialization
+class Container {
+    private Map<UUID, Foo> something;
+
+    @JsonDeserialize(as = MyHashMap.class)
+    public void setSomething(Map<UUID, Foo> incomingValue) {
+        this.something = incomingValue;
+    }
+
+    public Map<UUID, Foo> getSomething() {
+        return something;
+    }
+}
+
+// Test case
+public class MyTest {
+
+    @Test
+    public void testDeserializationIssue() throws JsonProcessingException {
+        String json = "{\n" +
+                "  \"something\": [\n" +
+                "    {\n" +
+                "      \"id\": \"123e4567-e89b-12d3-a456-426614174000\",\n" +
+                "      \"property\": \"value\"\n" +
+                "    }\n" +
+                "  ]\n" +
+                "}";
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        Container container = objectMapper.readValue(json, Container.class);
+
+        Map<UUID, Foo> result = container.getSomething();
+        assertNotNull(result);
+        assertEquals(1, result.size());
+        UUID uuid = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
+        assertTrue(result.containsKey(uuid));
+        assertEquals("value", result.get(uuid).getProperty());
+    }
+}

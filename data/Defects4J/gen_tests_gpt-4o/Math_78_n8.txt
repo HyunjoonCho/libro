@@ -1,0 +1,68 @@
+
+import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
+import org.apache.commons.math3.ode.events.EventHandler;
+import org.apache.commons.math3.ode.sampling.FixedStepHandler;
+import org.apache.commons.math3.ode.sampling.StepNormalizer;
+import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
+import org.apache.commons.math3.ode.FirstOrderIntegrator;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class VeryCloseEventTest {
+
+    @Test
+    public void testVeryCloseEvents() {
+        // Create a simple ODE problem
+        FirstOrderDifferentialEquations ode = new FirstOrderDifferentialEquations() {
+            public int getDimension() {
+                return 1;
+            }
+
+            public void computeDerivatives(double t, double[] y, double[] yDot) {
+                yDot[0] = 1.0; // Simple constant rate of change
+            }
+        };
+
+        FirstOrderIntegrator integrator = new DormandPrince853Integrator(1.0e-8, 500.0, 1.0e-10, 1.0e-10);
+
+        // Define an event handler with very close events
+        EventHandler eventHandler = new EventHandler() {
+            public double g(double t, double[] y) {
+                if (t < 90) {
+                    return t - 90; // Event at t = 90
+                } else {
+                    return 135 - t; // Event at t = 135
+                }
+            }
+
+            public EventHandler.Action eventOccurred(double t, double[] y, boolean increasing) {
+                System.out.println("Event occurred at t = " + t);
+                return EventHandler.Action.STOP;
+            }
+
+            public void init(double t0, double[] y0, double t) {
+            }
+
+            public double getMaxCheckInterval() {
+                return 1.0;
+            }
+
+            public int getMaxIterationCount() {
+                return 100;
+            }
+
+            public double getConvergence() {
+                return 1.0e-8;
+            }
+        };
+
+        integrator.addEventHandler(eventHandler, 1.0, 1.0e-8, 100);
+
+        double[] y = {0.0};
+        integrator.integrate(ode, 0.0, y, 200.0, y);
+
+        // Depending on whether the issue is reproduced, the event at 135 might not be detected.
+        // To verify this (for debugging), we should ensure that println confirms event detection.
+    }
+}

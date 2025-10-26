@@ -1,0 +1,70 @@
+
+import static org.junit.Assert.*;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+public class CompilerErrorOutputTest {
+
+    private File testJsFile;
+
+    @Before
+    public void setUp() throws Exception {
+        // Create a temporary JavaScript file to be used during testing
+        testJsFile = File.createTempFile("test", ".js");
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        // Delete the temporary file after the test
+        if (testJsFile != null && testJsFile.exists()) {
+            testJsFile.delete();
+        }
+    }
+
+    @Test
+    public void testCompilerErrorOutputWithoutCaret() throws Exception {
+        writeToFile("alert(1;");
+        
+        String compilerOutput = runCompiler();
+        
+        assertFalse(compilerOutput.contains("^"));
+    }
+
+    @Test
+    public void testCompilerErrorOutputWithCaret() throws Exception {
+        writeToFile("alert(1;\n");
+        
+        String compilerOutput = runCompiler();
+        
+        assertTrue(compilerOutput.contains("^"));
+    }
+
+    private void writeToFile(String content) throws Exception {
+        try (PrintWriter out = new PrintWriter(testJsFile)) {
+            out.print(content);
+        }
+    }
+
+    private String runCompiler() throws Exception {
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                "java", "-jar", "compiler.jar", "--js", testJsFile.getAbsolutePath());
+        
+        Process process = processBuilder.start();
+        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        StringBuilder output = new StringBuilder();
+        String line;
+        while ((line = reader.readLine()) != null) {
+            output.append(line).append(System.lineSeparator());
+        }
+        process.waitFor();
+        
+        return output.toString();
+    }
+}

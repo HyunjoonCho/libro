@@ -1,0 +1,77 @@
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+// Custom collection class
+class CustomStringCollection {
+    private final List<String> strings;
+
+    public CustomStringCollection(List<String> strings) {
+        this.strings = Collections.unmodifiableList(strings);
+    }
+
+    public List<String> getStrings() {
+        return strings;
+    }
+}
+
+// Wrapper class for testing
+class Wrapper {
+    private CustomStringCollection stringCollection;
+
+    public CustomStringCollection getStringCollection() {
+        return stringCollection;
+    }
+
+    public void setStringCollection(CustomStringCollection stringCollection) {
+        this.stringCollection = stringCollection;
+    }
+}
+
+// Custom deserializer for CustomStringCollection
+class CustomStringCollectionDeserializer extends JsonDeserializer<CustomStringCollection> {
+    @Override
+    public CustomStringCollection deserialize(JsonParser p, DeserializationContext ctxt)
+            throws IOException, JsonProcessingException {
+        List<String> list = ctxt.readValue(p, List.class);
+        return new CustomStringCollection(list);
+    }
+}
+
+public class CustomStringCollectionTest {
+
+    @Test
+    public void testCustomStringCollectionDeserialization() throws IOException {
+        // Prepare JSON
+        String json = "{\"stringCollection\": [\"one\", \"two\", \"three\"]}";
+
+        // Set up ObjectMapper with custom deserializer
+        ObjectMapper mapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+        module.addDeserializer(CustomStringCollection.class, new CustomStringCollectionDeserializer());
+        mapper.registerModule(module);
+
+        // Deserialize
+        Wrapper wrapper = mapper.readValue(json, Wrapper.class);
+
+        // Verify
+        CustomStringCollection collection = wrapper.getStringCollection();
+        assertTrue(collection != null);
+        assertEquals(3, collection.getStrings().size());
+        assertEquals("one", collection.getStrings().get(0));
+        assertEquals("two", collection.getStrings().get(1));
+        assertEquals("three", collection.getStrings().get(2));
+    }
+}

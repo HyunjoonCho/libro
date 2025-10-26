@@ -1,0 +1,52 @@
+
+import com.google.javascript.jscomp.CompilationLevel;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.JSSourceFile;
+import com.google.javascript.jscomp.Result;
+
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+
+public class CompilerCrashTest {
+
+    @Test
+    public void testSmartNameRemovalCausesCompilerCrash() {
+        // Initialize the compiler
+        Compiler compiler = new Compiler();
+
+        // Set the compiler options
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        // Define the JavaScript source code causing the issue
+        String jsCode = ""
+                + "var goog = {};\n"
+                + "goog.inherits = function(x, y) {};\n"
+                + "var ns = {};\n"
+                + "/** @constructor */ ns.PageSelectionModel = function(){};\n"
+                + "\n"
+                + "/** @constructor */ \n"
+                + "ns.PageSelectionModel.FooEvent = function() {};\n"
+                + "/** @constructor */ \n"
+                + "ns.PageSelectionModel.SelectEvent = function() {};\n"
+                + "goog.inherits(ns.PageSelectionModel.ChangeEvent, ns.PageSelectionModel.FooEvent);";
+
+        // Create an external input source (empty, as this is not relevant for this issue)
+        JSSourceFile[] externs = new JSSourceFile[]{JSSourceFile.fromCode("externs.js", "")};
+
+        // Create the input source
+        JSSourceFile[] input = new JSSourceFile[]{JSSourceFile.fromCode("test.js", jsCode)};
+
+        // Compile the code
+        Result result = compiler.compile(externs, input, options);
+
+        // Since the code triggers a crash, the expected result is that errors will be present
+        assertFalse("Compilation should fail with errors", result.success);
+
+        // Check that the specific error message is present
+        assertTrue("Expected error message not found", compiler.getErrors().stream()
+            .anyMatch(error -> error.toString().contains("Illegal State Exception")));
+    }
+}

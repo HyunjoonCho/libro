@@ -1,0 +1,111 @@
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions.LanguageMode;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testFunctionAliasDetection() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+        
+        options.setWarningLevel(DiagnosticGroups.ACCESS_CONTROLS, CheckLevel.ERROR);
+        options.setWarningLevel(DiagnosticGroups.CHECK_TYPES, CheckLevel.ERROR);
+        options.setWarningLevel(DiagnosticGroups.CHECK_VARIABLES, CheckLevel.ERROR);
+        options.setWarningLevel(DiagnosticGroups.USELESS_CODE, CheckLevel.ERROR);
+        options.setLanguage(LanguageMode.ECMASCRIPT5);
+
+        // Test case 1 - Direct call with wrong argument count
+        String jsCode1 = 
+            "var makeClass = function(protoMethods) {" +
+            "  var clazz = function() {" +
+            "    this.initialize.apply(this, arguments);" +
+            "  };" +
+            "  for (var i in protoMethods) {" +
+            "    clazz.prototype[i] = protoMethods[i];" +
+            "  };" +
+            "  return clazz;" +
+            "};" +
+            "" +
+            "/** @constructor */" +
+            "var Person = function(name){};" +
+            "Person = makeClass(/** @lends Person.prototype */ {" +
+            "  /** @this {Person} */" +
+            "  initialize: function(name) {" +
+            "    this.name = name;" +
+            "  }," +
+            "" +
+            "  /** @this {Person} */" +
+            "  getName: function() { return this.name; }," +
+            "" +
+            "  /**" +
+            "   * @param {string} message" +
+            "   * @this {Person}" +
+            "   */" +
+            "  say: function(message) {" +
+            "    window.console.log(this.getName(1) + ' says: ' + message);" +
+            "  }" +
+            "});" +
+            "" +
+            "var joe = new Person('joe');" +
+            "joe.say('hi');" + 
+            "var jane = new Person('jane');" +
+            "jane.say('hello');";
+
+        // Test case 2 - Aliased `this` within setTimeout
+        String jsCode2 = 
+            "var makeClass = function(protoMethods) {" +
+            "  var clazz = function() {" +
+            "    this.initialize.apply(this, arguments);" +
+            "  };" +
+            "  for (var i in protoMethods) {" +
+            "    clazz.prototype[i] = protoMethods[i];" +
+            "  };" +
+            "  return clazz;" +
+            "};" +
+            "" +
+            "/** @constructor */" +
+            "var Person = function(name){};" +
+            "Person = makeClass(/** @lends Person.prototype */ {" +
+            "  /** @this {Person} */" +
+            "  initialize: function(name) {" +
+            "    this.name = name;" +
+            "  }," +
+            "" +
+            "  /** @this {Person} */" +
+            "  getName: function() { return this.name; }," +
+            "" +
+            "  /**" +
+            "   * @param {string} message" +
+            "   * @this {Person}" +
+            "   */" +
+            "  say: function(message) {" +
+            "    var self = this;" +
+            "    setTimeout(function() {" +
+            "      window.console.log(self.getName(1) + ' says: ' + message);" +
+            "    }, 500);" +
+            "  }" +
+            "});" +
+            "" +
+            "var joe = new Person('joe');" +
+            "joe.say('hi');" + 
+            "var jane = new Person('jane');" +
+            "jane.say('hello');";
+
+        // Test Scenario 1
+        Result result1 = compiler.compile(SourceFile.fromCode("externs.js", ""), SourceFile.fromCode("test2-1.js", jsCode1), options);
+        String errors1 = compiler.getErrors().toString();
+        assertTrue("Should report an error on direct call", errors1.contains("Function Person.prototype.getName: called with 1 argument(s)."));
+
+        // Test Scenario 2
+        Result result2 = compiler.compile(SourceFile.fromCode("externs.js", ""), SourceFile.fromCode("test2-2.js", jsCode2), options);
+        String errors2 = compiler.getErrors().toString();
+        assertFalse("Should report no error when `this` is aliased and called within setTimeout", errors2.contains("Function Person.prototype.getName: called with 1 argument(s)."));
+    }
+}

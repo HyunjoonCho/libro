@@ -1,0 +1,64 @@
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Arrays;
+import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
+import org.junit.Before;
+import org.junit.Test;
+
+public class MockArArchiveTest {
+
+    private ByteArrayOutputStream byteArrayOutputStream;
+    private List<String> initialEntries;
+
+    @Before
+    public void setUp() {
+        byteArrayOutputStream = new ByteArrayOutputStream();
+        initialEntries = Arrays.asList("test1.xml", "test2.xml");
+        createMockArchive(byteArrayOutputStream, initialEntries);
+    }
+
+    @Test
+    public void testDeleteFromArchive() throws IOException {
+        // Simulate deleting "test2.xml"
+        List<String> remainingEntries = Arrays.asList("test1.xml");
+        byteArrayOutputStream.reset();
+        createMockArchive(byteArrayOutputStream, remainingEntries);
+        
+        // Validate the contents of the archive
+        try (InputStream inputStream = new ByteArrayInputStream(byteArrayOutputStream.toByteArray());
+             ZipInputStream zipInputStream = new ZipInputStream(inputStream)) {
+             
+            ZipEntry entry;
+            while ((entry = zipInputStream.getNextEntry()) != null) {
+                assertTrue("Unexpected entry found in archive: " + entry.getName(),
+                        remainingEntries.contains(entry.getName()));
+                remainingEntries.remove(entry.getName());
+            }
+        }
+        
+        // Ensure all expected entries were accounted for
+        assertTrue("Not all expected entries found in the archive",
+                remainingEntries.isEmpty());
+    }
+
+    private void createMockArchive(ByteArrayOutputStream out, List<String> entries) {
+        try (ZipOutputStream zos = new ZipOutputStream(out)) {
+            for (String entryName : entries) {
+                ZipEntry entry = new ZipEntry(entryName);
+                zos.putNextEntry(entry);
+                // Write empty content for simplicity
+                zos.closeEntry();
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Error creating mock archive", e);
+        }
+    }
+}

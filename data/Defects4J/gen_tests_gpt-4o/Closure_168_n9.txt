@@ -1,0 +1,88 @@
+
+import javax.script.Invocable;
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineManager;
+import javax.script.ScriptException;
+import org.junit.Test;
+
+public class JavaScriptBugReproductionTest {
+
+    @Test
+    public void testFunctionAliasingErrorNotCaught() throws ScriptException, NoSuchMethodException {
+        String script1 = "var makeClass = function(protoMethods) {\n"
+                + " var clazz = function() {\n"
+                + " this.initialize.apply(this, arguments);\n"
+                + " }\n"
+                + " for (var i in protoMethods) {\n"
+                + " clazz.prototype[i] = protoMethods[i];\n"
+                + " }\n"
+                + " return clazz;\n"
+                + "}\n"
+                + "/** @constructor */\n"
+                + "var Person = function(name){};\n"
+                + "Person = makeClass(/** @lends Person.prototype */ {\n"
+                + " /** @this {Person} */\n"
+                + " initialize: function(name) {\n"
+                + " this.name = name;\n"
+                + " },\n"
+                + " /** @this {Person} */\n"
+                + " getName: function() { return this.name; },\n"
+                + " /**\n"
+                + " * @param {string} message\n"
+                + " * @this {Person}\n"
+                + " */\n"
+                + " say: function(message) {\n"
+                + " console.log(this.getName(1) + ' says: ' + message);\n"
+                + " }\n"
+                + "});\n"
+                + "var joe = new Person('joe');\n"
+                + "joe.say('hi');\n";
+
+        String script2 = "var makeClass = function(protoMethods) {\n"
+                + " var clazz = function() {\n"
+                + " this.initialize.apply(this, arguments);\n"
+                + " }\n"
+                + " for (var i in protoMethods) {\n"
+                + " clazz.prototype[i] = protoMethods[i];\n"
+                + " }\n"
+                + " return clazz;\n"
+                + "}\n"
+                + "/** @constructor */\n"
+                + "var Person = function(name){};\n"
+                + "Person = makeClass(/** @lends Person.prototype */ {\n"
+                + " /** @this {Person} */\n"
+                + " initialize: function(name) {\n"
+                + " this.name = name;\n"
+                + " },\n"
+                + " /** @this {Person} */\n"
+                + " getName: function() { return this.name; },\n"
+                + " /**\n"
+                + " * @param {string} message\n"
+                + " * @this {Person}\n"
+                + " */\n"
+                + " say: function(message) {\n"
+                + " var self = this;\n"
+                + " setTimeout(function() {\n"
+                + " console.log(self.getName(1) + ' says: ' + message);\n"
+                + " }, 500); \n"
+                + " }\n"
+                + "});\n"
+                + "var joe = new Person('joe');\n"
+                + "joe.say('hi');\n";
+
+        // To emulate how Google Closure Compiler might check the code statically, you won't
+        // catch the error in a production browser JS runtime or typical JS engine call.
+        // Here simply demonstrate executing the JS (which normally won't exhibit the error
+        // directly, but demonstrates the environment. The real value comes from using static
+        // analysis).
+
+        ScriptEngineManager manager = new ScriptEngineManager();
+        ScriptEngine engine = manager.getEngineByName("nashorn");
+
+        // Evaluate script1
+        engine.eval(script1);
+
+        // Evaluate script2 (aliased with setTimeout)
+        engine.eval(script2);
+    }
+}

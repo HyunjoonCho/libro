@@ -1,0 +1,51 @@
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.rhino.Node;
+import org.junit.Test;
+
+import java.util.List;
+
+import static org.junit.Assert.assertFalse;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testJscDeterministicIssue() {
+        // JavaScript code snippet with potential warning issue
+        String jsCode = "var t = null;\n" +
+                        "window.test = function() {\n" +
+                        "  if (t != null) {\n" +
+                        "    t = null;\n" +
+                        "  }\n" +
+                        "  t = 1;\n" +
+                        "};";
+
+        // Setup the compiler and compile the given JavaScript code
+        Compiler compiler = new Compiler();
+        
+        // Define compiler options - using ADVANCED_OPTIMIZATIONS to reproduce the issue
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+        
+        // Configure warning level to capture the specific warning
+        options.setWarningLevel(DiagnosticGroups.DETERMINISTIC, CheckLevel.WARNING);
+
+        // Set up the externs and input
+        SourceFile extern = SourceFile.fromCode("externs.js", "");
+        SourceFile input = SourceFile.fromCode("input.js", jsCode);
+
+        // Compile the code
+        compiler.compile(extern, input, options);
+
+        // Get the list of warnings
+        List<JSError> warnings = compiler.getWarnings();
+
+        // Assert that the specific warning JSC_DETERMINISTIC_TEST is not present
+        boolean hasDeterministicTestWarning = warnings.stream()
+                .anyMatch(warning -> warning.getType().key.equals("JSC_DETERMINISTIC_TEST"));
+        
+        // Verify that the warning is absent
+        assertFalse("Expected no JSC_DETERMINISTIC_TEST warning, but it was present.", hasDeterministicTestWarning);
+    }
+}

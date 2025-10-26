@@ -1,0 +1,79 @@
+
+import static org.junit.Assert.*;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import javax.crypto.Cipher;
+import javax.crypto.CipherInputStream;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+public class IOUtilsTest {
+
+    private static SecretKey secretKey;
+
+    @BeforeClass
+    public static void setup() throws Exception {
+        KeyGenerator keyGen = KeyGenerator.getInstance("AES");
+        keyGen.init(128); // AES key size
+        secretKey = keyGen.generateKey();
+    }
+
+    @Test
+    public void testSkipOnCipherInputStream() throws Exception {
+        byte[] data = new byte[1024]; // Dummy data to simulate a stream
+        ByteArrayInputStream bais = new ByteArrayInputStream(data);
+
+        Cipher cipher = Cipher.getInstance("AES/ECB/NoPadding");
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey);
+
+        InputStream cipherInputStream = new CipherInputStream(bais, cipher);
+
+        long numToSkip = 100;
+        long skippedUsingIOUtils = skipUsingIOUtils(cipherInputStream, numToSkip);
+
+        // Reset the stream for re-use
+        bais.reset();
+        cipherInputStream = new CipherInputStream(bais, cipher);
+
+        long skippedUsingCustomMethod = skipUsingCustomMethod(cipherInputStream, numToSkip);
+
+        assertEquals("Custom method should skip the requested bytes", numToSkip, skippedUsingCustomMethod);
+        // Demonstrate that IOUtils.skip() does not skip as expected
+        assertNotEquals("IOUtils.skip() might not skip the requested bytes", numToSkip, skippedUsingIOUtils);
+    }
+
+    private long skipUsingIOUtils(InputStream is, long numToSkip) throws IOException {
+        long skipped = 0;
+        while (skipped < numToSkip) {
+            long n = is.skip(numToSkip - skipped);
+            if (n == 0) {
+                break;
+            }
+            skipped += n;
+        }
+        return skipped;
+    }
+
+    private long skipUsingCustomMethod(InputStream is, long numToSkip) throws IOException {
+        long remaining = numToSkip;
+        byte[] buffer = new byte[1024];
+        int read;
+        while (remaining > 0) {
+            long n = is.skip(remaining);
+            if (n <= 0) { // Read if skip fails
+                read = is.read(buffer, 0, (int) Math.min(buffer.length, remaining));
+                if (read == -1) { // End of stream reached
+                    break;
+                }
+                n = read;
+            }
+            remaining -= n;
+        }
+        return numToSkip - remaining;
+    }
+}

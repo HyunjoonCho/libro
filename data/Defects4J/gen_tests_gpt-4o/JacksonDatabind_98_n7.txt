@@ -1,0 +1,81 @@
+
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.module.kotlin.KotlinModule;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ExternalPropertyEnumTest {
+
+    enum Kind {
+        CONTACT, EMAIL
+    }
+
+    static class To {
+        public String name;
+
+        // Default constructor is needed by Jackson
+        public To() {}
+
+        public To(String name) {
+            this.name = name;
+        }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "kind")
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = ContactInvite.class, name = "CONTACT"),
+        @JsonSubTypes.Type(value = EmailInvite.class, name = "EMAIL")
+    })
+    static abstract class Invite {
+        public abstract Kind getKind();
+    }
+
+    static class ContactInvite extends Invite {
+        public To to;
+
+        public ContactInvite() {}
+
+        public ContactInvite(To to) {
+            this.to = to;
+        }
+
+        @Override
+        public Kind getKind() {
+            return Kind.CONTACT;
+        }
+    }
+
+    static class EmailInvite extends Invite {
+        public String emailAddress;
+
+        public EmailInvite() {}
+
+        public EmailInvite(String emailAddress) {
+            this.emailAddress = emailAddress;
+        }
+
+        @Override
+        public Kind getKind() {
+            return Kind.EMAIL;
+        }
+    }
+
+    @Test
+    public void testExternalPropertyEnumDeserialization() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new KotlinModule());
+
+        String jsonInput = "{ \"kind\": \"CONTACT\", \"to\": { \"name\": \"Foo\" } }";
+
+        try {
+            Invite invite = mapper.readValue(jsonInput, Invite.class);
+            assertNotNull(invite);
+            assertTrue(invite instanceof ContactInvite);
+            assertEquals("Foo", ((ContactInvite) invite).to.name);
+        } catch (Exception e) {
+            fail("Deserialization failed with exception: " + e.getMessage());
+        }
+    }
+}

@@ -1,0 +1,35 @@
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.rhino.Node;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class GoogScopePrivateFunctionTest {
+
+    @Test
+    public void testPrivateFunctionInGoogScope() {
+        String code = "goog.scope(function() { " +
+                      "  /* @private */ " +
+                      "  function test() {}" +
+                      "});";
+
+        CompilerOptions options = new CompilerOptions();
+        options.setWarningLevel(DiagnosticGroups.CHECK_VARIABLES, CheckLevel.ERROR);
+
+        Compiler compiler = new Compiler();
+        compiler.initOptions(options);
+
+        Node root = compiler.parseTestCode(code);
+        assertNotNull("AST should be parsed", root);
+
+        // Run the checks
+        Preconditions.checkState(!compiler.getErrors().isEmpty(), "There should be errors due to 'test' not being recognized as an alias");
+
+        // Check if the specific error regarding 'test' should be eliminated allowing '@private' functions.
+        // In the corrected scenario, the error list should be empty if '@private' is considered valid inside 'goog.scope'
+        JSError[] errors = compiler.getErrors();
+        for (JSError error : errors) {
+            assertFalse("Unexpected alias error in goog.scope", error.description.contains("is in a goog.scope and is not an alias"));
+        }
+    }
+}

@@ -1,0 +1,50 @@
+
+import com.google.javascript.jscomp.*;
+import org.junit.Test;
+
+import java.nio.charset.StandardCharsets;
+
+import static org.junit.Assert.fail;
+
+public class CompilerVarCheckTest {
+
+    @Test
+    public void testVarCheckWithModules() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+
+        // Setup the compiler options similar to the command line flags
+        options.setCompilationLevel(CompilationLevel.ADVANCED_OPTIMIZATIONS);
+        options.setDebugLogDirectory("logs");
+        options.setPrettyPrint(true);
+
+        // Create the modules analogous to --module flag
+        JSModule jqueryModule = new JSModule("jquery");
+        JSModule coreModule = new JSModule("core");
+        coreModule.addDependency(jqueryModule);
+
+        // Add the mock JS sources
+        jqueryModule.add(JSSourceFile.fromCode("jquery.js",
+                "var jQuery = function() {}; jQuery.prototype.length = 0;"));
+        coreModule.add(JSSourceFile.fromCode("core.js",
+                "equal( jQuery(' <div/> ').length, 1, 'Make sure whitespace is trimmed.' );"));
+
+        // No actual externs needed for this isolated reproduction
+        JSSourceFile externs = JSSourceFile.fromCode("qunit_externs.js", "");
+
+        try {
+            // Attempt to compile modules expecting the error
+            compiler.compileModules(
+                    ImmutableList.of(externs),
+                    ImmutableList.of(jqueryModule, coreModule),
+                    options
+            );
+            fail("Expected VarCheck to throw an exception due to variable name collision.");
+        } catch (RuntimeException e) {
+            // Assert the error is indeed from jQuery$$2 variable issue
+            if (!e.getMessage().contains("Unexpected variable jQuery$$2")) {
+                fail("Expected INTERNAL COMPILER ERROR regarding unexpected variable jQuery$$2");
+            }
+        }
+    }
+}

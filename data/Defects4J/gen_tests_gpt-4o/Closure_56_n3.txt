@@ -1,0 +1,51 @@
+
+import java.io.*;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class CompilerOutputTest {
+
+    @Test
+    public void testTruncatedErrorMessage() throws IOException, InterruptedException {
+        // Prepare a JavaScript file with two lines of code
+        String jsFileName = "test.js";
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(jsFileName))) {
+            writer.write("alert(foo);\n");
+            writer.write("alert(bar);");
+        }
+
+        // Execute the Java compiler command
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                "java", "-jar", "compiler.jar",
+                "--warning_level", "VERBOSE",
+                "--js", jsFileName
+        );
+        processBuilder.redirectErrorStream(true);
+        Process process = processBuilder.start();
+
+        // Capture the output of the compiler
+        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        StringBuilder output = new StringBuilder();
+        String line;
+        while ((line = reader.readLine()) != null) {
+            output.append(line).append("\n");
+        }
+        process.waitFor();
+
+        // Verify the contents of the output
+        String expectedError = "test.js:2: ERROR - variable bar is undefined\n";
+        assertTrue("The output does not contain the expected error message for line 2.",
+                output.toString().contains(expectedError));
+        
+        String expectedIndicatorLine = "alert(bar);";
+        assertTrue("The output does not contain the expected line for the error.",
+                output.toString().contains(expectedIndicatorLine));
+
+        String expectedCaret = " ^\n";
+        assertTrue("The output does not contain the expected caret indicator for line 2.",
+                output.toString().contains(expectedCaret));
+
+        // Clean up the test JavaScript file
+        new File(jsFileName).delete();
+    }
+}

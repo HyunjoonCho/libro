@@ -1,0 +1,57 @@
+
+import org.apache.commons.math3.geometry.euclidean.threed.Vector3D;
+import org.apache.commons.math3.geometry.partitioning.BSPTree;
+import org.apache.commons.math3.geometry.enclosing.EnclosingBall;
+import org.apache.commons.math3.geometry.euclidean.threed.PolyhedronsSet;
+import org.apache.commons.math3.geometry.partitioning.RegionFactory;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class BSPTreeTest {
+
+    @Test
+    public void testBSPTreeCreatesCorrectBRep() {
+        Vector3D[] cubeVertices = {
+            new Vector3D(0.0, 0.0, 0.0),
+            new Vector3D(1.0, 0.0, 0.0),
+            new Vector3D(1.0, 1.0, 0.0),
+            new Vector3D(0.0, 1.0, 0.0),
+            new Vector3D(0.0, 0.0, 1.0),
+            new Vector3D(1.0, 0.0, 1.0),
+            new Vector3D(1.0, 1.0, 1.0),
+            new Vector3D(0.0, 1.0, 1.0)
+        };
+
+        // Define faces using indices into the vertex array (12 triangular faces for a cube)
+        int[][] faceIndices = {
+            {0, 1, 2}, {0, 2, 3},
+            {4, 5, 6}, {4, 6, 7},
+            {0, 4, 7}, {0, 7, 3},
+            {1, 5, 6}, {1, 6, 2},
+            {0, 1, 5}, {0, 5, 4},
+            {3, 2, 6}, {3, 6, 7}
+        };
+
+        // Construct the initial PolyhedronsSet
+        PolyhedronsSet cubeSet = new PolyhedronsSet(1e-10);
+        for (int[] face : faceIndices) {
+            Vector3D v1 = cubeVertices[face[0]];
+            Vector3D v2 = cubeVertices[face[1]];
+            Vector3D v3 = cubeVertices[face[2]];
+            cubeSet = (PolyhedronsSet) new RegionFactory<>().union(cubeSet, new PolyhedronsSet(v1, v2, v3, 1e-10));
+        }
+
+        // Small change to vertex to simulate error described in bug
+        cubeVertices[6] = new Vector3D(1.0, 1.01, 1.0);
+
+        // Reconstruct the tree
+        BSPTree<Vector3D> tree = cubeSet.getTree(false).copySelf();
+        PolyhedronsSet reconstructedSet = new PolyhedronsSet(tree, 1e-10);
+
+        // Test to check if the reconstructed BRep still represents a cube
+        EnclosingBall<Vector3D> enclosingBall = reconstructedSet.getEnclosingCap();
+        // Expected behavior might change
+        assertNotEquals(1.0, enclosingBall.getRadius(), "Reconstructed mesh does not match expected BRep properties");
+    }
+}

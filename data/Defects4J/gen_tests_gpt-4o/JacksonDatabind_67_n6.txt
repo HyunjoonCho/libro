@@ -1,0 +1,66 @@
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.deser.BeanDeserializerModifier;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+import com.fasterxml.jackson.datatype.guava.GuavaModule;
+import com.google.common.collect.ImmutableMap;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+// Define an example enum
+enum Color {
+    RED, BLUE, GREEN
+}
+
+public class KeyDeserializerTest {
+
+    @Test
+    public void testEnumKeyDeserializerModification() throws JsonProcessingException {
+        // Create a module that modifies key deserializers
+        SimpleModule module = new SimpleModule();
+        module.setDeserializerModifier(new BeanDeserializerModifier() {
+            @Override
+            public KeyDeserializer modifyKeyDeserializer(
+                    DeserializationConfig config,
+                    JavaType type,
+                    KeyDeserializer deserializer) {
+                if (!type.isEnumType()) {
+                    return super.modifyKeyDeserializer(config, type, deserializer);
+                }
+                return new KeyDeserializer() {
+                    @Override
+                    @SuppressWarnings("unchecked")
+                    public Object deserializeKey(String key, DeserializationContext ctxt)
+                            throws IOException, JsonProcessingException {
+                        Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                        return Enum.valueOf(rawClass, key.toUpperCase());
+                    }
+                };
+            }
+        });
+
+        // Configure ObjectMapper with Guava module and our custom module
+        ObjectMapper mapper = new ObjectMapper()
+                .registerModule(new GuavaModule())
+                .registerModule(module);
+
+        // Example JSON with a lowercase enum key
+        String json = "{\"red\":1}";
+
+        // Expected outcome using modified enum key deserializer
+        ImmutableMap<Color, Integer> expectedMap = ImmutableMap.of(Color.RED, 1);
+
+        // Deserialize to Map with Enum keys
+        JavaType mapType = TypeFactory.defaultInstance().constructMapType(ImmutableMap.class, Color.class, Integer.class);
+        ImmutableMap<Color, Integer> result = mapper.readValue(json, mapType);
+
+        // Assert that the deserialized map matches the expected result
+        assertEquals(expectedMap, result);
+    }
+}

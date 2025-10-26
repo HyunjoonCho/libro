@@ -1,0 +1,65 @@
+
+import org.apache.commons.math3.linear.Array2DRowRealMatrix;
+import org.apache.commons.math3.linear.CholeskyDecomposition;
+import org.apache.commons.math3.random.JDKRandomGenerator;
+import org.apache.commons.math3.random.CorrelatedRandomVectorGenerator;
+import org.apache.commons.math3.random.GaussianRandomGenerator;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class CorrelatedRandomVectorTest {
+
+    @Test
+    public void testCovarianceMatrixWithZeroRows() {
+        // Given covariance matrices from the bug report
+        double[][] matrix1 = {
+            {0.0, 0.0, 0.0, 0.0, 0.0},
+            {0.0, 0.013445532, 0.01039469, 0.009881156, 0.010499559},
+            {0.0, 0.01039469, 0.023006616, 0.008196856, 0.010732709},
+            {0.0, 0.009881156, 0.008196856, 0.019023866, 0.009210099},
+            {0.0, 0.010499559, 0.010732709, 0.009210099, 0.019107243}
+        };
+
+        double[][] matrix2 = {
+            {0.013445532, 0.01039469, 0.0, 0.009881156, 0.010499559},
+            {0.01039469, 0.023006616, 0.0, 0.008196856, 0.010732709},
+            {0.0, 0.0, 0.0, 0.0, 0.0},
+            {0.009881156, 0.008196856, 0.0, 0.019023866, 0.009210099},
+            {0.010499559, 0.010732709, 0.0, 0.009210099, 0.019107243}
+        };
+
+        double[][] matrix3 = {
+            {0.013445532, 0.01039469, 0.009881156, 0.010499559},
+            {0.01039469, 0.023006616, 0.008196856, 0.010732709},
+            {0.009881156, 0.008196856, 0.019023866, 0.009210099},
+            {0.010499559, 0.010732709, 0.009210099, 0.019107243}
+        };
+
+        // Test the decomposition and vector generation
+        assertDecompositionAndSample(matrix1, 4);
+        assertDecompositionAndSample(matrix2, 4);
+        assertDecompositionAndSample(matrix3, 4);
+    }
+
+    private void assertDecompositionAndSample(double[][] covariance, int expectedRank) {
+        Array2DRowRealMatrix covMatrix = new Array2DRowRealMatrix(covariance);
+
+        try {
+            CholeskyDecomposition decomposition = new CholeskyDecomposition(covMatrix);
+
+            GaussianRandomGenerator grg = new GaussianRandomGenerator(new JDKRandomGenerator());
+            CorrelatedRandomVectorGenerator gen =
+                new CorrelatedRandomVectorGenerator(decomposition.getL().getData(), 1e-10, grg);
+
+            // Obtain the root matrix and check the rank
+            int actualRank = decomposition.getL().getColumnDimension();
+            assertEquals("Incorrect rank detected", expectedRank, actualRank);
+
+            // Sample a vector and validate non-null result
+            double[] sample = gen.nextVector();
+            assertEquals("Sample vector length mismatch", covariance.length, sample.length);
+        } catch (Exception e) {
+            System.err.println("An error occurred: " + e.getMessage());
+        }
+    }
+}

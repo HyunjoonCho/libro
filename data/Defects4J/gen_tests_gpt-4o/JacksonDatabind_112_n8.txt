@@ -1,0 +1,67 @@
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class CustomCollectionDeserializationTest {
+
+    // Custom immutable collection
+    public static class ImmutableStringList {
+        private final List<String> internalList;
+
+        public ImmutableStringList(List<String> list) {
+            this.internalList = Collections.unmodifiableList(new ArrayList<>(list));
+        }
+
+        public List<String> getList() {
+            return internalList;
+        }
+    }
+
+    // Custom deserializer for the immutable collection
+    public static class ImmutableStringListDeserializer extends JsonDeserializer<ImmutableStringList> {
+        @Override
+        public ImmutableStringList deserialize(com.fasterxml.jackson.core.JsonParser p, DeserializationContext ctxt)
+                throws IOException, JsonProcessingException {
+            List<String> list = ctxt.readValue(p, List.class);
+            return new ImmutableStringList(list);
+        }
+    }
+
+    // Class containing a property of the custom collection
+    public static class Container {
+        @JsonDeserialize(using = ImmutableStringListDeserializer.class)
+        private ImmutableStringList strings;
+
+        public ImmutableStringList getStrings() {
+            return strings;
+        }
+
+        public void setStrings(ImmutableStringList strings) {
+            this.strings = strings;
+        }
+    }
+
+    @Test
+    public void testCustomCollectionDeserialization() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"strings\": [\"foo\", \"bar\", \"baz\"]}";
+
+        // Deserialize the Container class
+        Container container = mapper.readValue(json, Container.class);
+
+        // Assert the deserialized content
+        List<String> expected = List.of("foo", "bar", "baz");
+        assertEquals(expected, container.getStrings().getList());
+    }
+}

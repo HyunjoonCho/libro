@@ -1,0 +1,52 @@
+
+import org.apache.commons.compress.archivers.ArchiveOutputStream;
+import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+
+import static org.junit.Assert.*;
+
+public class ArchiveOutputStreamTest {
+
+    @Test
+    public void testDirectFinishCallShouldNotCorruptOutput() throws IOException {
+        // Setup a byte array output stream to hold the archive data
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        
+        // Use a TarArchiveOutputStream as an example of ArchiveOutputStream implementation
+        ArchiveOutputStream archiveOutputStream = new TarArchiveOutputStream(byteArrayOutputStream);
+        
+        // Create a simple entry to add
+        ArchiveEntry entry = new TarArchiveEntry("test.txt");
+        
+        // Add entry to the archive
+        archiveOutputStream.putArchiveEntry(entry);
+        // Provide file content
+        archiveOutputStream.write("Hello, Archive!".getBytes());
+        // Close the current entry
+        archiveOutputStream.closeArchiveEntry();
+        
+        // Directly call finish (could lead to inconsistency)
+        archiveOutputStream.finish();
+        
+        // After calling finish, try adding another entry should not be possible normally
+        try {
+            ArchiveEntry entry2 = new TarArchiveEntry("test2.txt");
+            archiveOutputStream.putArchiveEntry(entry2);
+            archiveOutputStream.write("This should fail.".getBytes());
+            // This point should not be reached if finish() correctly finalized the stream.
+            archiveOutputStream.closeArchiveEntry();
+            fail("Expected IOException when writing after finish() was called.");
+        } catch (IOException expected) {
+            // Expected as the output should be finalized
+        }
+        
+        // Lastly, ensure the stream is properly closed without exceptions
+        archiveOutputStream.close();
+    }
+}

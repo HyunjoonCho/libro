@@ -1,0 +1,60 @@
+
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
+import org.apache.commons.compress.archivers.zip.ZipFile;
+import org.junit.jupiter.api.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Enumeration;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
+public class ZipArchiveEntryTest {
+
+    @Test
+    public void testZipArchiveEntryEquality() throws IOException {
+        // Create a byte array representing a simple ZIP file
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        try (ZipOutputStream zipOutputStream = new ZipOutputStream(byteArrayOutputStream)) {
+            ZipEntry zipEntry = new ZipEntry("test.txt");
+            zipOutputStream.putNextEntry(zipEntry);
+            zipOutputStream.write("Sample content".getBytes(StandardCharsets.UTF_8));
+            zipOutputStream.closeEntry();
+        }
+
+        byte[] zipData = byteArrayOutputStream.toByteArray();
+
+        // Use ZipArchiveInputStream to read the entry
+        ZipArchiveEntry entryFromStream;
+        try (ZipArchiveInputStream zipStream = new ZipArchiveInputStream(new ByteArrayInputStream(zipData))) {
+            entryFromStream = zipStream.getNextZipEntry();
+        }
+
+        // Write zipData to a temporary file to use with ZipFile
+        File tempZipFile = File.createTempFile("test", ".zip");
+        try (FileOutputStream fos = new FileOutputStream(tempZipFile)) {
+            fos.write(zipData);
+        }
+
+        // Use ZipFile to read the entry
+        ZipArchiveEntry entryFromFile;
+        try (ZipFile zipFile = new ZipFile(tempZipFile)) {
+            Enumeration<ZipArchiveEntry> entries = zipFile.getEntries();
+            entryFromFile = entries.nextElement();
+        }
+
+        // Ensure that the entries are not equal, demonstrating the bug
+        assertFalse(entryFromStream.equals(entryFromFile),
+                "ZipArchiveEntry from ZipArchiveInputStream should not be equal to one from ZipFile due to comment handling.");
+
+        // Clean up the temporary file
+        tempZipFile.delete();
+    }
+}

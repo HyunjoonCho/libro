@@ -1,0 +1,26 @@
+java
+public void testTarArchiveInputStreamCorruptedBzip2() throws IOException {
+    String archivePath = "path/to/test.tar.bz2";
+    File tempFile = File.createTempFile("test", ".bz2");
+    try (FileOutputStream fos = new FileOutputStream(tempFile)) {
+        fos.write(new byte[]{0x1f, 0x9d}); // corrupted bzip2 header
+    }
+    try (TarArchiveInputStream input = new TarArchiveInputStream(new BZip2CompressorInputStream(new FileInputStream(tempFile), true))) {
+        ArchiveEntry nextMatchedEntry = input.getNextEntry();
+        assertNotNull(nextMatchedEntry);
+        try {
+            // Expecting IOException
+            while (nextMatchedEntry!= null) {
+                logger.info("Extracting %s", nextMatchedEntry.getName());
+                String outputPath = "/tmp/" + nextMatchedEntry.getName();
+                OutputStream out = new FileOutputStream(outputPath);
+                ByteStreams.copy(input, out);
+                out.close();
+                nextMatchedEntry = input.getNextEntry();
+            }
+            fail("Expected IOException not thrown");
+        } catch (IOException e) {
+            // expected
+        }
+    }
+}

@@ -1,0 +1,56 @@
+
+import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+import static org.junit.Assert.fail;
+
+public class ZipArchiveInputStreamTest {
+
+    @Test
+    public void testTruncatedZipArchive() {
+        // Create a truncated ZIP file in memory
+        byte[] truncatedZip = createTruncatedZipArchive();
+
+        // Attempt to read the truncated ZIP archive
+        try (ZipArchiveInputStream zipInputStream = new ZipArchiveInputStream(new ByteArrayInputStream(truncatedZip))) {
+            ZipEntry entry;
+            while ((entry = zipInputStream.getNextZipEntry()) != null) {
+                byte[] buffer = new byte[1024];
+                int bytesRead;
+                while ((bytesRead = zipInputStream.read(buffer)) != -1) {
+                    // We do not expect to reach this in a truncated archive
+                }
+            }
+            fail("Expected IOException due to truncated ZIP, but none was thrown.");
+        } catch (IOException e) {
+            System.out.println("Correctly caught IOException for truncated ZIP: " + e.getMessage());
+        }
+    }
+
+    private byte[] createTruncatedZipArchive() {
+        try {
+            // Create a simple ZIP file with a single entry
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            ZipOutputStream zos = new ZipOutputStream(baos);
+            zos.putNextEntry(new ZipEntry("test.txt"));
+            zos.write("Hello, World!".getBytes());
+            // Normally, we would call zos.closeEntry() here, but we won't, to simulate truncation
+            zos.close();
+            
+            byte[] fullZip = baos.toByteArray();
+            
+            // Truncate the last 10 bytes to simulate a corrupted archive
+            byte[] truncatedZip = new byte[fullZip.length - 10];
+            System.arraycopy(fullZip, 0, truncatedZip, 0, truncatedZip.length);
+            
+            return truncatedZip;
+        } catch (IOException e) {
+            throw new RuntimeException("Error creating truncated ZIP archive", e);
+        }
+    }
+}

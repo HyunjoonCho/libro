@@ -1,0 +1,32 @@
+java
+public void testToStringStyleMemoryLeak() {
+    // Set the locale to trigger the creation of the thread local in ToStringStyle
+    Locale.setDefault(Locale.US);
+
+    // Create a new thread to simulate a webapp reload
+    Thread thread = new Thread(() -> {
+        // Do some work to create a reference chain
+        for (int i = 0; i < 10000; i++) {
+            new Object();
+        }
+    });
+
+    // Start the thread
+    thread.start();
+
+    // Wait for the thread to finish
+    try {
+        thread.join();
+    } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+    }
+
+    // Check that the thread local has been removed
+    try {
+        Thread threadLocalThread = Thread.currentThread();
+        Field threadLocalsField = Thread.class.getDeclaredField("threadLocals");
+        threadLocalsField.setAccessible(true);
+        Map<Thread, ThreadLocalMap> threadLocals = (Map<Thread, ThreadLocalMap>) threadLocalsField.get(threadLocalThread);
+        Field entryField = ThreadLocalMap.class.getDeclaredField("table");
+        entryField.setAccessible(true);
+        Object[] table = (Object[]) entryField.get(threadLocals.get(threadLocalThread));

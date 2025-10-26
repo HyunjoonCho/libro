@@ -1,0 +1,67 @@
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.JsonMappingException;
+import com.fasterxml.jackson.databind.node.TreeTraversingParser;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+public class TreeTraversingParserBoundsTest {
+
+    public static class IntClass {
+        public int x;
+
+        @Override
+        public String toString() {
+            return String.valueOf(x);
+        }
+    }
+
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    @Test
+    public void testIntegerOverflow() {
+        // This should throw an exception for integer overflow
+        String jsonInput = "{\"x\": 2147483648}";  // 2147483648 is greater than Integer.MAX_VALUE
+        try {
+            // Parse directly from JSON string
+            mapper.readerFor(IntClass.class).readValue(jsonInput);
+            fail("Expected JsonMappingException for direct JSON input due to overflow, but none was thrown");
+        } catch (JsonMappingException e) {
+            // Expected exception
+        }
+
+        try {
+            // Create a JsonNode and use TreeTraversingParser
+            JsonNode tree = mapper.readTree(jsonInput);
+            JsonParser parser = new TreeTraversingParser(tree);
+            mapper.readerFor(IntClass.class).readValue(parser);
+            fail("Expected JsonMappingException for TreeTraversingParser due to overflow, but none was thrown");
+        } catch (JsonMappingException e) {
+            // Expected exception
+        }
+    }
+
+    @Test
+    public void testSmallInts() {
+        // These should parse correctly as they are within integer bounds
+        String jsonInput = "{\"x\": 10}";
+        try {
+            IntClass fromString = mapper.readerFor(IntClass.class).readValue(jsonInput);
+            assertEquals(10, fromString.x);  // Direct JSON string parsing
+        } catch (Exception e) {
+            fail("Did not expect an exception for direct JSON input within bounds");
+        }
+
+        try {
+            JsonNode tree = mapper.readTree(jsonInput);
+            IntClass fromTree = mapper.readerFor(IntClass.class).readValue(new TreeTraversingParser(tree));
+            assertEquals(10, fromTree.x);  // Parsing through TreeTraversingParser
+        } catch (Exception e) {
+            fail("Did not expect an exception for TreeTraversingParser input within bounds");
+        }
+    }
+}

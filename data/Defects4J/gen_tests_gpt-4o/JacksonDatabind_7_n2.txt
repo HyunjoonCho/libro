@@ -1,0 +1,53 @@
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.util.JsonParserSequence;
+import com.fasterxml.jackson.core.util.TokenBuffer;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.io.IOException;
+import static org.junit.Assert.*;
+
+public class TokenBufferDeserializationTest {
+    
+    static class Value {
+        @JsonCreator
+        public static Value from(TokenBuffer buffer) throws IOException {
+            JsonParser parser = buffer.asParser();
+            JsonToken[] expectedTokens = {JsonToken.START_OBJECT, JsonToken.FIELD_NAME, JsonToken.VALUE_NUMBER_INT, 
+                                           JsonToken.FIELD_NAME, JsonToken.VALUE_NULL, JsonToken.END_OBJECT};
+            
+            int index = 0;
+            while (parser.nextToken() != null) {
+                assertEquals("Token mismatch at index " + index, expectedTokens[index], parser.currentToken());
+                index++;
+            }
+            
+            return new Value();
+        }
+    }
+
+    @Test
+    public void testTokenBufferDeserialization() throws IOException {
+        String json = "{ \"a\":1, \"b\":null }";
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        TokenBuffer buffer = new TokenBuffer(objectMapper, false);
+
+        JsonParser parser = objectMapper.createParser(json);
+
+        while (parser.nextToken() != null) {
+            // This mimics the current behavior reported as a bug
+            if (parser.currentToken() == JsonToken.FIELD_NAME) {
+                buffer.copyCurrentStructure(parser);
+            }
+        }
+        parser.close();
+
+        // This will invoke the from(TokenBuffer) method
+        objectMapper.readValue(buffer.asParser(), Value.class);
+    }
+
+}

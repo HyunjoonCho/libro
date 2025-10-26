@@ -1,0 +1,64 @@
+
+import org.apache.commons.math3.optim.linear.LinearConstraint;
+import org.apache.commons.math3.optim.linear.LinearConstraintSet;
+import org.apache.commons.math3.optim.linear.LinearObjectiveFunction;
+import org.apache.commons.math3.optim.linear.NonNegativeConstraint;
+import org.apache.commons.math3.optim.linear.Relationship;
+import org.apache.commons.math3.optim.linear.SimplexSolver;
+import org.apache.commons.math3.optim.linear.UnboundedSolutionException;
+import org.apache.commons.math3.optim.nonlinear.scalar.GoalType;
+import org.apache.commons.math3.optim.PointValuePair;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.*;
+
+public class SimplexSolverTest {
+
+    @Test(expected = UnboundedSolutionException.class)
+    public void testUnboundedSolutionException() {
+        final int ENTITIES_COUNT = 15; // Set this to a larger number to trigger the exception
+
+        // Objective function: min(1*t + 0*L)
+        double[] objectiveCoefficients = new double[ENTITIES_COUNT + 1];
+        objectiveCoefficients[0] = 1.0; // Coefficient for t
+        for (int i = 1; i <= ENTITIES_COUNT; i++) {
+            objectiveCoefficients[i] = 0.0; // Coefficients for L
+        }
+
+        // Create the linear objective function
+        LinearObjectiveFunction objectiveFunction = new LinearObjectiveFunction(objectiveCoefficients, 0);
+
+        List<LinearConstraint> constraints = new ArrayList<>();
+
+        // Add constraints: -q(r) + QL >= 0 and x(r)t - XL >= 0, L >= 0
+        for (int i = 0; i < ENTITIES_COUNT; i++) {
+            // For simplicity, assume q(r) and Q, x(r) and X, are arrays of ones
+            // Adjust constraints according to your problem specifics
+            double[] qConstraint = new double[ENTITIES_COUNT + 1];
+            qConstraint[0] = 0.0; // No t in this constraint
+            qConstraint[i + 1] = 1.0; // Coefficient for L(i)
+            constraints.add(new LinearConstraint(qConstraint, Relationship.GEQ, 1.0));
+
+            double[] xConstraint = new double[ENTITIES_COUNT + 1];
+            xConstraint[0] = 1.0; // Coefficient for t
+            xConstraint[i + 1] = -1.0; // Coefficient for L(i)
+            constraints.add(new LinearConstraint(xConstraint, Relationship.GEQ, 0.0));
+        }
+
+        // Solve the LP problem
+        SimplexSolver solver = new SimplexSolver();
+        PointValuePair solution = solver.optimize(
+                objectiveFunction,
+                new LinearConstraintSet(constraints),
+                GoalType.MINIMIZE,
+                new NonNegativeConstraint(true)
+        );
+
+        // Check if a solution is obtained
+        assertNotNull("The solution should be obtained", solution);
+        fail("An UnboundedSolutionException was expected");
+    }
+}

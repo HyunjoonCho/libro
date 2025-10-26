@@ -1,0 +1,71 @@
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+import static org.junit.Assert.fail;
+
+@RunWith(JUnit4.class)
+public class TarFileTest {
+    @Test
+    public void testTarFile() throws IOException {
+        File file = new File("test.tar");
+        TarArchiveOutputStream out = new TarArchiveOutputStream(new FileOutputStream(file));
+        out.putArchiveEntry(new TarArchiveEntry("test.txt"));
+        out.close();
+
+        File symlinkFile = new File("test.symlink");
+        symlinkFile.createNewFile();
+        symlinkFile.delete();
+        symlinkFile.mkdir();
+        symlinkFile.delete();
+
+        TarArchiveOutputStream symlinkOut = new TarArchiveOutputStream(new FileOutputStream("test.symlink.tar"));
+        symlinkOut.putArchiveEntry(new TarArchiveEntry("test.symlink", new File(symlinkFile.getAbsolutePath())));
+        symlinkOut.close();
+
+        TarArchiveInputStream in = new TarArchiveInputStream(new FileInputStream(file));
+        TarArchiveInputStream symlinkIn = new TarArchiveInputStream(new FileInputStream("test.symlink.tar"));
+
+        try {
+            while (in.getNextTarEntry()!= null) {
+                // Check if the file exists
+                if (in.getName().equals("test.txt")) {
+                    assertEquals("test.txt", in.getName());
+                    in.closeEntry();
+                } else {
+                    fail("Unexpected file found: " + in.getName());
+                }
+            }
+            fail("Expected more files");
+        } finally {
+            in.close();
+        }
+
+        try {
+            while (symlinkIn.getNextTarEntry()!= null) {
+                // Check if the file exists
+                if (symlinkIn.getName().equals("test.symlink")) {
+                    assertEquals("test.symlink", symlinkIn.getName());
+                    symlinkIn.closeEntry();
+                } else {
+                    fail("Unexpected file found: " + symlinkIn.getName());
+                }
+            }
+            fail("Expected more files");
+        } finally {
+            symlinkIn.close();
+        }
+    }
+}

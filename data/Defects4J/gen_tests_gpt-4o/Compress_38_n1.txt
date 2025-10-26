@@ -1,0 +1,43 @@
+
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.archivers.tar.TarConstants;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+
+public class TarArchiveTest {
+
+    @Test
+    public void testPaxHeaderWithTrailingSlash() throws IOException {
+        // Create a TAR entry with a PAX header and a trailing slash
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try (TarArchiveInputStream tais = createTarWithPaxHeader(baos)) {
+            // Read the first entry, which is expected to be a PAX header
+            TarArchiveEntry entry = tais.getNextTarEntry();
+            assertNotNull("Entry should not be null", entry);
+            
+            // Assert that it is not recognized as a directory
+            assertFalse("PAX header should not be treated as a directory", entry.isDirectory());
+        }
+    }
+
+    private TarArchiveInputStream createTarWithPaxHeader(ByteArrayOutputStream baos) throws IOException {
+        // Create a minimal TAR file containing a PAX header entry with a trailing slash
+        byte[] paxHeaderName = "./PaxHeader/".getBytes();
+        byte[] paxHeader = new byte[TarConstants.HEADER_BLOCK];
+        System.arraycopy(paxHeaderName, 0, paxHeader, 0, paxHeaderName.length);
+
+        paxHeader[156] = TarConstants.LF_PAX_GLOBAL_HEADER; // Flag indicating PAX header
+
+        baos.write(paxHeader);
+
+        // Closing the byte array stream to create an input stream from it
+        return new TarArchiveInputStream(new ByteArrayInputStream(baos.toByteArray()));
+    }
+}

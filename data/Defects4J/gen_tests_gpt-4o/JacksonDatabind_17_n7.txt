@@ -1,0 +1,70 @@
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import org.junit.Test;
+
+import static org.junit.Assert.assertNotNull;
+
+public class DefaultTypingTest {
+
+    public static class Foo {
+        private String bar;
+
+        public Foo() {
+        }
+
+        public Foo(String bar) {
+            this.bar = bar;
+        }
+
+        public String getBar() {
+            return bar;
+        }
+
+        public void setBar(String bar) {
+            this.bar = bar;
+        }
+    }
+
+    @Test
+    public void testReadTreeWithDefaultTyping() throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper()
+                .enableDefaultTyping() // This causes the issue
+                .enable(MapperFeature.AUTO_DETECT_GETTERS)
+                .enable(MapperFeature.REQUIRE_SETTERS_FOR_GETTERS)
+                .disable(MapperFeature.USE_GETTERS_AS_SETTERS)
+                .disable(MapperFeature.CAN_OVERRIDE_ACCESS_MODIFIERS)
+                .enable(SerializationFeature.INDENT_OUTPUT)
+                .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
+
+        Foo foo = new Foo("bar");
+        String serialized = mapper.writeValueAsString(foo); // {"bar" : "bar"}
+        
+        // Attempt to read as tree - this should reproduce the issue
+        Exception exception = null;
+        try {
+            JsonNode jsonNode = mapper.readTree(serialized);
+            assertNotNull(jsonNode);
+        } catch (Exception e) {
+            exception = e;
+        }
+
+        // Expected exception due to defaultTyping being enabled
+        assertNotNull("Expected JsonMappingException due to incompatible default typing", exception);
+
+        // Attempt to use valueToTree - this should also reproduce the issue
+        exception = null;
+        try {
+            JsonNode node = mapper.valueToTree(foo);
+            assertNotNull(node);
+        } catch (Exception e) {
+            exception = e;
+        }
+
+        // Expected exception due to defaultTyping being enabled
+        assertNotNull("Expected JsonMappingException due to incompatible default typing in valueToTree", exception);
+    }
+}

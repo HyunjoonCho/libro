@@ -1,0 +1,79 @@
+
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
+
+// Assuming this is a simplified version of ListAttribute.
+class ListAttribute {
+    private String itemJsonKey;
+    private List<String> items;
+
+    public ListAttribute(String itemJsonKey, List<String> items) {
+        this.itemJsonKey = itemJsonKey;
+        this.items = items;
+    }
+
+    public String getItemJsonKey() {
+        return itemJsonKey;
+    }
+
+    public List<String> getItems() {
+        return items;
+    }
+}
+
+// Custom serializer for ListAttribute.
+class ListAttributeSerializer extends StdSerializer<ListAttribute> {
+
+    public ListAttributeSerializer() {
+        super(ListAttribute.class);
+    }
+
+    @Override
+    public void serialize(ListAttribute value, JsonGenerator jgen, SerializerProvider provider) throws IOException {
+        jgen.writeStartObject();
+        jgen.writeStringField("itemType", value.getItemJsonKey());
+        jgen.writeObjectField("items", value.getItems());
+        jgen.writeEndObject();
+    }
+}
+
+public class TestSerialization {
+
+    public static void main(String[] args) throws JsonProcessingException {
+        // Prepare a ListAttribute object with some dummy data.
+        ListAttribute listAttribute = new ListAttribute("typeA", Arrays.asList("item1", "item2", "item3"));
+
+        // Set up ObjectMapper and register the custom serializer.
+        ObjectMapper mapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+        module.addSerializer(ListAttribute.class, new ListAttributeSerializer());
+        mapper.registerModule(module);
+
+        // Attempt to serialize the ListAttribute into a JSON Node tree.
+        byte[] jsonBytes = mapper.writeValueAsBytes(listAttribute);
+        JsonNode tree = mapper.readTree(jsonBytes);
+
+        // Print the result to inspect the node structure.
+        System.out.println(tree.toString());
+
+        // Specific test assertions based on bug expectations.
+        if (tree instanceof ObjectNode) {
+            JsonNode itemsNode = tree.get("items");
+            if (itemsNode.isContainerNode()) {
+                for (JsonNode item : itemsNode) {
+                    assert !item.isEmbeddedValue(); // Ensure no embedded objects are present.
+                }
+            }
+        }
+    }
+}

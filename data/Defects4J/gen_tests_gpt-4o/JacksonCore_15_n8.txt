@@ -1,0 +1,50 @@
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.filter.FilteringParserDelegate;
+import com.fasterxml.jackson.core.filter.TokenFilter;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class FilteringParserDelegateTest {
+
+    @Test
+    public void testAllowMultipleMatches() throws IOException {
+        String json = "{ \"items\": [ {\"name\": \"item1\", \"value\": 1}, {\"name\": \"item2\", \"value\": 2} ] }";
+
+        TokenFilter filter = new TokenFilter() {
+            @Override
+            public TokenFilter includeProperty(String name) {
+                return "_allowMultipleMatches".equals(name) ? this : null;
+            }
+
+            @Override
+            public boolean includeValue(JsonParser p) {
+                try {
+                    JsonToken token = p.nextToken();
+                    return token != null && token.isNumeric() && p.getValueAsInt() > 1;
+                } catch (IOException e) {
+                    return false;
+                }
+            }
+        };
+
+        JsonFactory jsonFactory = new JsonFactory();
+        JsonParser parser = jsonFactory.createParser(json);
+        FilteringParserDelegate filteringParserDelegate = new FilteringParserDelegate(
+                parser, filter, false, false);
+
+        // Validate that multiple matches for a filter work correctly
+        while (filteringParserDelegate.nextToken() != null) {
+            if (filteringParserDelegate.currentToken() == JsonToken.VALUE_NUMBER_INT) {
+                int value = filteringParserDelegate.getIntValue();
+                assertEquals(2, value);
+            }
+        }
+    }
+}

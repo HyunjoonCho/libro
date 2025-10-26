@@ -1,0 +1,51 @@
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.filter.FilteringParserDelegate;
+import com.fasterxml.jackson.core.filter.NameMatchFilter;
+import org.junit.Test;
+
+import java.io.IOException;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+
+public class FilteringParserDelegateTest {
+
+    @Test
+    public void testMissingEndObject() throws IOException {
+        JsonFactory factory = new JsonFactory();
+        String json = "{\n" +
+                      "  \"a\":123,\n" +
+                      "  \"array\":[1,2],\n" +
+                      "  \"ob\": {\n" +
+                      "    \"value0\":2,\n" +
+                      "    \"value\":3,\n" +
+                      "    \"value2\":4\n" +
+                      "  },\n" +
+                      "  \"b\":true\n" +
+                      "}";
+        
+        JsonParser p0 = factory.createParser(json);
+        JsonParser p = new FilteringParserDelegate(
+                p0,
+                new NameMatchFilter("value"),
+                true,  // includePath
+                false  // multipleMatches
+        );
+
+        // We expect: {"ob":{"value":3}}
+        assertEquals(JsonToken.START_OBJECT, p.nextToken()); // {
+        assertEquals(JsonToken.FIELD_NAME, p.nextToken());   // "ob"
+        assertEquals(JsonToken.START_OBJECT, p.nextToken()); // {
+        assertEquals(JsonToken.FIELD_NAME, p.nextToken());   // "value"
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken()); // 3
+        
+        assertEquals(JsonToken.END_OBJECT, p.nextToken());   // Should be } for the "ob" object
+        assertEquals(JsonToken.END_OBJECT, p.nextToken());   // Should be } for the root object
+
+        assertNull(p.nextToken()); // Ensure no extra tokens
+        p.close();
+    }
+}

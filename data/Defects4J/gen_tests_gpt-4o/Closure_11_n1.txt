@@ -1,0 +1,60 @@
+script
+const { expect } = require('chai');
+const { JSDOM } = require('jsdom');
+
+describe('Record Type Property Issue', function() {
+    var makeClass = function(protoMethods) {
+        var clazz = function() {
+            this.initialize.apply(this, arguments);
+        }
+        for (var i in protoMethods) {
+            clazz.prototype[i] = protoMethods[i];
+        }
+        return clazz;
+    }
+
+    /** 
+     * @constructor
+     * @param {{name: string, height: number}} options 
+     */
+    var Person = function(options) {};
+    Person = makeClass(/** @lends Person.prototype */ {
+        /**
+         * @this {Person}
+         * @param {{name: string, height: number}} options
+         */
+        initialize: function(options) {
+            /** @type {string} */
+            this.name_ = options.thisPropDoesNotExist;
+        },
+        
+        /**
+         * @param {string} message
+         * @this {Person}
+         */
+        say: function(message) {
+            console.log(this.name_ + ' says: ' + message);
+        }
+    });
+
+    it('should report an error for missing property in options', function() {
+        // This simulates what you expect to be type-checking
+        try {
+            new Person({name: 'joe', height: 300});
+        } catch (error) {
+            if (!(error instanceof TypeError)) {
+                throw error;
+            }
+        }
+        
+        // Direct logging assertion
+        const logSpy = sinon.spy(console, 'log');
+        const joe = new Person({name: 'joe', height: 300});
+        joe.say('hi');
+
+        // Testing if the console logs correctly, which might not be useful but indicative of execution.
+        expect(logSpy.calledWithExactly('undefined says: hi')).to.be.true;
+        // Cleanup spy
+        logSpy.restore();
+    });
+});

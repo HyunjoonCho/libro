@@ -1,0 +1,48 @@
+
+import org.apache.commons.collections.Transformer;
+import org.apache.commons.collections.functors.InvokerTransformer;
+import org.apache.commons.collections.map.TransformedMap;
+import org.junit.Test;
+
+import java.io.*;
+import java.util.HashMap;
+import java.util.Map;
+
+public class InvokerTransformerVulnerabilityTest {
+
+    public static class VulnerableClass {
+        public void exploit() {
+            System.out.println("Exploited! Arbitrary code executed.");
+        }
+    }
+
+    @Test
+    public void testInvokerTransformerExploitation() throws Exception {
+        // Set up the InvokerTransformer to call the 'exploit' method
+        Transformer transformer = new InvokerTransformer("exploit", null, null);
+
+        // Create a Map to transform using the InvokerTransformer
+        Map<String, VulnerableClass> originalMap = new HashMap<>();
+        originalMap.put("key", new VulnerableClass());
+
+        Map<String, VulnerableClass> transformedMap = TransformedMap.decorate(originalMap, null, transformer);
+
+        // Serialize the malicious map
+        byte[] serializedData;
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+             ObjectOutputStream oos = new ObjectOutputStream(baos)) {
+            oos.writeObject(transformedMap);
+            serializedData = baos.toByteArray();
+        }
+
+        // Deserialize the map and trigger the exploit
+        try (ByteArrayInputStream bais = new ByteArrayInputStream(serializedData);
+             ObjectInputStream ois = new ObjectInputStream(bais)) {
+            // Trigger the code execution here
+            Map deserializedMap = (Map) ois.readObject();
+
+            // Perform any operation that triggers the execution
+            deserializedMap.get("key");
+        }
+    }
+}

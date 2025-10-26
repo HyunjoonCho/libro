@@ -1,0 +1,76 @@
+
+import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
+import org.apache.commons.math3.ode.events.EventHandler;
+import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
+import org.apache.commons.math3.ode.sampling.StepHandler;
+import org.apache.commons.math3.ode.sampling.StepInterpolator;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+
+public class OdeIntegrationTest {
+
+    @Test
+    public void testCloseEventsDetection() {
+        // Define the differential equation dy/dt = y, simple exponential growth
+        FirstOrderDifferentialEquations equations = new FirstOrderDifferentialEquations() {
+            public int getDimension() {
+                return 1;
+            }
+
+            public void computeDerivatives(double t, double[] y, double[] yDot) {
+                yDot[0] = y[0];
+            }
+        };
+
+        // Define the event handler
+        EventHandler handler = new EventHandler() {
+            private boolean firstEventDetected = false;
+            private boolean secondEventDetected = false;
+
+            public double g(double t, double[] y) {
+                if (!firstEventDetected) {
+                    return t - 90.0;
+                } else {
+                    return t - 135.0;
+                }
+            }
+
+            public EventHandler.Action eventOccurred(double t, double[] y, boolean increasing) {
+                if (!firstEventDetected) {
+                    firstEventDetected = true;
+                } else {
+                    secondEventDetected = true;
+                }
+                return EventHandler.Action.RESET_STATE;
+            }
+
+            public void resetState(double t, double[] y) {
+            }
+
+            public void init(double t0, double[] y0, double t) {
+            }
+
+            public boolean isFirstEventDetected() {
+                return firstEventDetected;
+            }
+
+            public boolean isSecondEventDetected() {
+                return secondEventDetected;
+            }
+        };
+
+        DormandPrince853Integrator integrator = new DormandPrince853Integrator(1.0e-8, 200.0, 1.0e-10, 1.0e-10);
+        integrator.addEventHandler(handler, 1.0, 1.0e-9, 100);
+
+        // Define initial state
+        double[] y = new double[] {1.0};
+        double startTime = 0.0;
+        double endTime = 150.0;
+
+        integrator.integrate(equations, startTime, y, endTime, y);
+
+        assertTrue(((EventHandler) handler).isFirstEventDetected());
+        assertTrue(((EventHandler) handler).isSecondEventDetected());
+    }
+}

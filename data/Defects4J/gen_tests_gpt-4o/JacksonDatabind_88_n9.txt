@@ -1,0 +1,63 @@
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
+import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
+import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class PolymorphicTypeIdTest {
+
+    static class BaseClass {
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
+    static class DerivedClass1 extends BaseClass {
+        public int value;
+
+        public DerivedClass1() {
+        }
+
+        public DerivedClass1(int value) {
+            this.value = value;
+        }
+    }
+
+    static class DerivedClass2 extends BaseClass {
+        public String name;
+
+        public DerivedClass2() {
+        }
+
+        public DerivedClass2(String name) {
+            this.name = name;
+        }
+    }
+
+    @Test
+    public void testIncompatiblePolymorphicTypeId() {
+        ObjectMapper mapper = new ObjectMapper();
+        // Set a more permissive validator if needed, but this would realistically be LaissezFaireSubTypeValidator for less restrictive tests
+        mapper.activateDefaultTyping(LaissezFaireSubTypeValidator.instance,
+                ObjectMapper.DefaultTyping.OBJECT_AND_NON_CONCRETE, JsonTypeInfo.As.PROPERTY);
+
+        DerivedClass1 obj = new DerivedClass1(123);
+        String json;
+        try {
+            json = mapper.writeValueAsString(obj);
+
+            // Now attempt to deserialize using an incompatible type manually set in JSON
+            String incompatibleJson = json.replace(DerivedClass1.class.getName(), DerivedClass2.class.getName());
+
+            // Expecting an InvalidTypeIdException due to type incompatibility
+            mapper.readValue(incompatibleJson, DerivedClass1.class);
+            fail("Expected an InvalidTypeIdException due to incompatible type id");
+        } catch (InvalidTypeIdException e) {
+            // Expected outcome
+            System.out.println("Caught expected InvalidTypeIdException: " + e.getMessage());
+        } catch (Exception e) {
+            fail("Unexpected exception: " + e.getMessage());
+        }
+    }
+}

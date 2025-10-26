@@ -1,0 +1,43 @@
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.filter.FilteringParserDelegate;
+import com.fasterxml.jackson.core.filter.TokenFilter;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.io.IOException;
+
+import static org.junit.Assert.assertEquals;
+
+public class FilteringParserDelegateTest {
+
+    @Test
+    public void testFilteringParserDelegateMatchCount() throws IOException {
+        String json = "{ \"field1\": \"value1\", \"field2\": \"value2\", \"field3\": \"value3\" }";
+        JsonFactory jsonFactory = new JsonFactory();
+        ObjectMapper mapper = new ObjectMapper(jsonFactory);
+
+        // Define a TokenFilter that only matches specific fields
+        TokenFilter filter = new TokenFilter() {
+            @Override
+            public TokenFilter includeProperty(String name) {
+                return "field2".equals(name) ? TokenFilter.INCLUDE_ALL : null;
+            }
+        };
+
+        try (JsonParser parser = jsonFactory.createParser(json);
+             FilteringParserDelegate filteredParser = new FilteringParserDelegate(parser, filter, false, false)) {
+
+            // Deserialize with filtering
+            JsonNode result = mapper.readTree(filteredParser);
+
+            // Assert that only field2 is included after filtering
+            assertEquals(1, result.size());
+            assertEquals("value2", result.get("field2").asText());
+
+            // Note: We cannot directly assert _matchCount here as it's an internal detail, 
+            // but we'd expect the behavior consistent with its intended use.
+        }
+    }
+}

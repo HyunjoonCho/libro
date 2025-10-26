@@ -1,0 +1,41 @@
+
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
+import org.junit.Test;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
+import static org.junit.Assert.fail;
+
+public class TarArchiveInputStreamTest {
+
+    @Test
+    public void testCorruptedBzip2() {
+        String archivePath = "path/to/test.tar.bz2";  // Adjust path to the location of your test.tar.bz2
+        try (TarArchiveInputStream input = new TarArchiveInputStream(
+                new BZip2CompressorInputStream(new FileInputStream(archivePath), true))) {
+            
+            ArchiveEntry nextMatchedEntry = input.getNextEntry();
+            while (nextMatchedEntry != null) {
+                System.out.println("Extracting " + nextMatchedEntry.getName());
+                String outputPath = "/tmp/" + nextMatchedEntry.getName();
+                try (OutputStream out = Files.newOutputStream(Paths.get(outputPath))) {
+                    byte[] buffer = new byte[1024];
+                    int len;
+                    while ((len = input.read(buffer)) > 0) {
+                        out.write(buffer, 0, len);
+                    }
+                }
+                nextMatchedEntry = input.getNextEntry();
+            }
+            fail("Expected an IOException due to truncated file, but none was thrown.");
+        } catch (IOException e) {
+            // Expected: IOException should be thrown due to unexpected EOF
+            System.out.println("IOException caught as expected: " + e.getMessage());
+        }
+    }
+}

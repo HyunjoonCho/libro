@@ -1,0 +1,69 @@
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.deser.BeanDeserializerModifier;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.deser.KeyDeserializer;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+import com.fasterxml.jackson.datatype.guava.GuavaModule;
+import com.google.common.collect.ImmutableMap;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class EnumKeyDeserializerTest {
+
+    // Sample Enum for testing
+    public enum SampleEnum {
+        FIRST, SECOND, THIRD
+    }
+
+    public static class CustomEnumModule extends SimpleModule {
+        public CustomEnumModule() {
+            setDeserializerModifier(new BeanDeserializerModifier() {
+
+                @Override
+                public KeyDeserializer modifyKeyDeserializer(
+                        DeserializationConfig config,
+                        JavaType type,
+                        KeyDeserializer deserializer) {
+                    if (!type.isEnumType()) {
+                        return super.modifyKeyDeserializer(config, type, deserializer);
+                    }
+                    return new KeyDeserializer() {
+                        @Override
+                        public Object deserializeKey(String key, DeserializationContext ctxt)
+                                throws IOException, JsonProcessingException {
+                            Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                            return Enum.valueOf(rawClass, key.toUpperCase());
+                        }
+                    };
+                }
+            });
+        }
+    }
+
+    @Test
+    public void testEnumKeyDeserializer() throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new GuavaModule());
+        mapper.registerModule(new CustomEnumModule());
+
+        // JSON with enum keys in lowercase
+        String json = "{\"first\": 1, \"second\": 2}";
+
+        // TypeFactory to construct MapType for deserialization
+        JavaType mapType = TypeFactory.defaultInstance().constructMapType(
+                ImmutableMap.class, SampleEnum.class, Integer.class);
+
+        // Attempt to deserialize
+        ImmutableMap<SampleEnum, Integer> result = mapper.readValue(json, mapType);
+
+        // Assert that the keys have been correctly deserialized to uppercase enum names
+        assertEquals(1, result.get(SampleEnum.FIRST));
+        assertEquals(2, result.get(SampleEnum.SECOND));
+    }
+}

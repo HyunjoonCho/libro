@@ -1,0 +1,53 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.Result;
+import org.junit.Test;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import static org.junit.Assert.assertTrue;
+
+public class NonJSDocCommentsTest {
+
+    @Test
+    public void testNonJSDocCommentBehavior() {
+        String jsCode = "/* @preserve Foo License */\nalert(\"foo\");";
+
+        // Capture the standard output
+        ByteArrayOutputStream outContent = new ByteArrayOutputStream();
+        PrintStream originalOut = System.out;
+        System.setOut(new PrintStream(outContent));
+
+        try {
+            // Run the Closure Compiler
+            CommandLineRunner runner = new CommandLineRunner(new String[]{"--warning_level=VERBOSE", "--externs", "", "--jscomp_off=globalThis", "--js", "input.js"});
+
+            CompilerOptions options = new CompilerOptions();
+            runner.setRunOptions(options);
+
+            Result result = runner.run();
+
+            // Check for the expected warning
+            String output = outContent.toString();
+            assertTrue(output.contains("WARNING - Parse error. Non-JSDoc comment has annotations. Did you mean to start it with '/**'"));
+
+            // Test with '/*!'
+            jsCode = "/*! @preserve Foo License */\nalert(\"foo\");";
+
+            // Reset the output stream
+            outContent.reset();
+            System.setOut(new PrintStream(outContent));
+
+            // Run the Closure Compiler again
+            result = runner.run();
+
+            // Check the absence of warnings and missing comment preservation
+            output = outContent.toString();
+            assertTrue(!output.contains("WARNING"));
+            assertTrue(!output.contains("preserve Foo License"));
+        } finally {
+            // Restore the standard output
+            System.setOut(originalOut);
+        }
+    }
+}

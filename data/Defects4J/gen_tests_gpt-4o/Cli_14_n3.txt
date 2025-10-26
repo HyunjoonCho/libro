@@ -1,0 +1,69 @@
+
+import org.apache.commons.cli2.CommandLine;
+import org.apache.commons.cli2.Group;
+import org.apache.commons.cli2.builder.ArgumentBuilder;
+import org.apache.commons.cli2.builder.DefaultOptionBuilder;
+import org.apache.commons.cli2.builder.GroupBuilder;
+import org.apache.commons.cli2.commandline.Parser;
+import org.apache.commons.cli2.option.DefaultOption;
+import org.apache.commons.cli2.validation.FileValidator;
+import org.junit.Test;
+
+import java.io.File;
+import java.nio.file.Files;
+
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+public class CLI2SampleTest {
+
+    @Test
+    public void testFileValidatorClassCastException() {
+        try {
+            // Create a temporary file to simulate an existing file
+            File tempFile = Files.createTempFile("testfile", ".txt").toFile();
+            tempFile.deleteOnExit(); // Ensure the file is deleted when the VM exits
+
+            final DefaultOptionBuilder obuilder = new DefaultOptionBuilder();
+            final ArgumentBuilder abuilder = new ArgumentBuilder();
+            final GroupBuilder gbuilder = new GroupBuilder();
+
+            // Set up the file-name option with FileValidator
+            DefaultOption fileNameOption = obuilder
+                    .withShortName("f")
+                    .withLongName("file-name")
+                    .withRequired(true)
+                    .withDescription("name of an existing file")
+                    .withArgument(abuilder
+                            .withName("file-name")
+                            .withValidator(FileValidator.getExistingFileInstance())
+                            .create())
+                    .create();
+
+            Group options = gbuilder
+                    .withName("options")
+                    .withOption(fileNameOption)
+                    .create();
+
+            Parser parser = new Parser();
+            parser.setHelpTrigger("--help");
+            parser.setGroup(options);
+
+            // Command-line argument with the path to the existing file
+            String[] args = new String[]{"--file-name", tempFile.getAbsolutePath()};
+
+            // Try parsing the arguments
+            CommandLine cl = parser.parseAndHelp(args);
+
+            // If parsing succeeds without exception, the test should fail because we expect a ClassCastException
+            fail("Expected a ClassCastException to be thrown");
+
+        } catch (ClassCastException e) {
+            // If a ClassCastException is caught, assert that it matches the expected behavior
+            assertTrue(e.getMessage().contains("java.io.File cannot be cast to java.lang.String"));
+        } catch (Exception e) {
+            // If any other exception is thrown, the test fails
+            fail("Unexpected exception: " + e.getMessage());
+        }
+    }
+}

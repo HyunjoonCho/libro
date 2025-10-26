@@ -1,0 +1,91 @@
+
+import org.apache.commons.math3.optim.PointValuePair;
+import org.apache.commons.math3.optim.SimpleBounds;
+import org.apache.commons.math3.optim.SimpleValueChecker;
+import org.apache.commons.math3.optim.nonlinear.scalar.GoalType;
+import org.apache.commons.math3.optim.nonlinear.scalar.MultivariateFunctionMappingAdapter;
+import org.apache.commons.math3.optim.nonlinear.scalar.MultivariateOptimizer;
+import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.CMAESOptimizer;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+
+public class CMAESOptimizerTest {
+
+    @Test
+    public void testCMAESOptimizerNearBoundsResolution() {
+        double[] lowerBound = {0.0};
+        double[] upperBound = {1.0};
+        
+        // A simple quadratic function that has a minimum at x = 0.5
+        MultivariateFunctionMappingAdapter function = new MultivariateFunctionMappingAdapter(
+            point -> {
+                double x = point[0];
+                return (x - 0.5) * (x - 0.5);
+            }, lowerBound, upperBound);
+
+        MultivariateOptimizer optimizer = new CMAESOptimizer(
+            1000, 1e-9, true,
+            10, 0, new RandomGenerator() {
+                private final Random random = new Random();
+                @Override
+                public void setSeed(long seed) {
+                    random.setSeed(seed);
+                }
+
+                @Override
+                public double nextDouble() {
+                    return random.nextDouble();
+                }
+
+                @Override
+                public float nextFloat() {
+                    return random.nextFloat();
+                }
+
+                @Override
+                public int nextInt(int n) {
+                    return random.nextInt(n);
+                }
+
+                @Override
+                public void nextBytes(byte[] bytes) {
+                    random.nextBytes(bytes);
+                }
+
+                @Override
+                public long nextLong() {
+                    return random.nextLong();
+                }
+            }, false, new SimpleValueChecker(1e-9, 1e-9));
+
+        PointValuePair result = optimizer.optimize(
+            new CMAESOptimizer.PopulationSize(10),
+            new CMAESOptimizer.Sigma(new double[]{0.1}),
+            function,
+            GoalType.MINIMIZE,
+            new InitialGuess(new double[]{0.1}), // Start near the lower bound
+            SimpleBounds.unbounded(1)
+        );
+
+        double solutionNearLowerBound = function.wrap(result.getPoint())[0];
+        assertTrue("Expected optimized value to be near 0.5", Math.abs(solutionNearLowerBound - 0.5) < 1e-2);
+
+        // Change the initial guess to be near the upper bound
+        result = optimizer.optimize(
+            new CMAESOptimizer.PopulationSize(10),
+            new CMAESOptimizer.Sigma(new double[]{0.1}),
+            function,
+            GoalType.MINIMIZE,
+            new InitialGuess(new double[]{0.9}), // Start near the upper bound
+            SimpleBounds.unbounded(1)
+        );
+
+        double solutionNearUpperBound = function.wrap(result.getPoint())[0];
+        assertTrue("Expected optimized value to be near 0.5", Math.abs(solutionNearUpperBound - 0.5) < 1e-2);
+
+        // Compare solutions for lower and upper bound starts
+        System.out.println("Solution near lower bound: " + solutionNearLowerBound);
+        System.out.println("Solution near upper bound: " + solutionNearUpperBound);
+    }
+}

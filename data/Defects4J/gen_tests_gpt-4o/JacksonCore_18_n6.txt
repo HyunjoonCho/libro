@@ -1,0 +1,40 @@
+
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.math.BigDecimal;
+
+public class BigDecimalSerializationTest {
+
+    @Test(expected = OutOfMemoryError.class)
+    public void testBigDecimalSerializationAsPlainCausesOutOfMemoryError() {
+        ObjectMapper mapper = new ObjectMapper().enable(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN);
+        
+        // We will run the code in a separate thread to catch the OutOfMemoryError
+        Thread thread = new Thread(() -> {
+            try {
+                // This should trigger an OutOfMemoryError
+                mapper.writeValueAsString(new BigDecimal("9.223372E+1010671858"));
+            } catch (Exception e) {
+                // Any other exception should not fail the test
+                e.printStackTrace();
+            }
+        });
+
+        thread.setUncaughtExceptionHandler((t, e) -> {
+            if (e instanceof OutOfMemoryError) {
+                // We want the test to end here with an expected OutOfMemoryError
+                throw new AssertionError("Expected OutOfMemoryError", e);
+            }
+        });
+
+        thread.start();
+
+        try {
+            thread.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Preserve interrupt status
+        }
+    }
+}

@@ -1,0 +1,62 @@
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.util.TokenBuffer;
+import org.junit.Test;
+
+import java.io.IOException;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class TokenBufferTest {
+
+    static class Value {
+        static JsonToken[] capturedTokens;
+
+        @JsonCreator
+        public static Value from(TokenBuffer buffer) throws IOException {
+            JsonParser parser = buffer.asParser();
+            capturedTokens = captureTokenBuffer(parser);
+            return new Value();
+        }
+
+        private static JsonToken[] captureTokenBuffer(JsonParser parser) throws IOException {
+            JsonToken[] tokens = new JsonToken[5];
+            int i = 0;
+            while (parser.nextToken() != null && i < tokens.length) {
+                tokens[i++] = parser.currentToken();
+            }
+            return tokens;
+        }
+    }
+
+    @Test
+    public void testTokenBufferDelegateDeserialization() throws JsonProcessingException {
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        // Given JSON string
+        String jsonString = "{ \"a\":1, \"b\":null }";
+
+        // Deserializing the JSON string to trigger @JsonCreator and token capture
+        objectMapper.readValue(jsonString, Value.class);
+
+        // Expected tokens in the TokenBuffer
+        JsonToken[] expectedTokens = {
+            JsonToken.START_OBJECT,
+            JsonToken.FIELD_NAME,
+            JsonToken.VALUE_NUMBER_INT,
+            JsonToken.FIELD_NAME,
+            JsonToken.VALUE_NULL,
+            JsonToken.END_OBJECT
+        };
+
+        // Verifying that the captured tokens match the expected tokens
+        assertTrue("Captured tokens do not match expected tokens",
+            Value.capturedTokens.length == expectedTokens.length &&
+            java.util.Arrays.equals(Value.capturedTokens, expectedTokens));
+    }
+}

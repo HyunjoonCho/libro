@@ -1,0 +1,66 @@
+
+import org.apache.commons.math3.fitting.leastsquares.*;
+import org.apache.commons.math3.optim.SimpleVectorValueChecker;
+import org.apache.commons.math3.linear.RealVector;
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+
+public class LevenbergMarquardtTest {
+
+    private final double tolerance = 1e-6;
+
+    @Test
+    public void testLevenbergMarquardtInconsistency() {
+        // Objective function: A simple quadratic function
+        MultivariateJacobianFunction model = new MultivariateJacobianFunction() {
+            public Pair<RealVector, RealMatrix> value(RealVector point) {
+                double a = point.getEntry(0);
+                double b = point.getEntry(1);
+                
+                // A simple 2D paraboloid: f(x, y) = (x - 1)^2 + (y - 1.5)^2
+                double[] value = { (a - 1) * (a - 1) + (b - 1.5) * (b - 1.5) };
+                double[][] jacobian = {
+                        { 2 * (a - 1), 2 * (b - 1.5) }
+                };
+                return new Pair<>(new ArrayRealVector(value), new Array2DRowRealMatrix(jacobian));
+            }
+        };
+
+        // Observed target values
+        double[] target = { 0.0 };
+
+        // Start point, far from the optimal point
+        double[] startPoint = { 0.0, 0.0 };
+
+        // Create the optimizer
+        LevenbergMarquardtOptimizer optimizer = new LevenbergMarquardtOptimizer(new SimpleVectorValueChecker(tolerance, tolerance));
+
+        // Prepare the problem
+        LeastSquaresProblem problem = new LeastSquaresBuilder()
+                .start(startPoint)
+                .model(model)
+                .target(target)
+                .lazyEvaluation(false)
+                .maxEvaluations(1000)
+                .maxIterations(1000)
+                .build();
+
+        // Optimize
+        Optimum optimum = optimizer.optimize(problem);
+
+        // Extract results
+        double[] optimalPoint = optimum.getPoint().toArray();
+        double[] residuals = optimum.getResiduals().toArray();
+
+        // Validate that the point corresponds to the residuals and cost
+        // Ideally, optimal point should be close to the expected [1, 1.5]
+        // and the residuals should reflect the minimized cost
+        assertArrayEquals(new double[]{1.0, 1.5}, optimalPoint, tolerance);
+        assertArrayEquals(new double[]{0.0}, residuals, tolerance);
+
+        // Check if the cost calculation is consistent
+        double calculatedCost = 0.5 * residuals[0] * residuals[0];
+        assertEquals(optimum.getCost(), calculatedCost, tolerance);
+    }
+}

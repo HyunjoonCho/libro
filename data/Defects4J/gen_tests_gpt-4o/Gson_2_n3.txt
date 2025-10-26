@@ -1,0 +1,68 @@
+
+import com.google.gson.*;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class VehicleTypeAdapterTest {
+
+    abstract class Vehicle {
+        String make;
+    }
+
+    class Car extends Vehicle {
+        int numberOfDoors;
+    }
+
+    class Truck extends Vehicle {
+        double payloadCapacity;
+    }
+
+    class VehicleTypeAdapter implements JsonSerializer<Vehicle>, JsonDeserializer<Vehicle> {
+        @Override
+        public JsonElement serialize(Vehicle src, java.lang.reflect.Type typeOfSrc, JsonSerializationContext context) {
+            JsonObject jsonObject = new JsonObject();
+            jsonObject.addProperty("make", src.make);
+            if (src instanceof Car) {
+                jsonObject.addProperty("type", "Car");
+                jsonObject.addProperty("numberOfDoors", ((Car) src).numberOfDoors);
+            } else if (src instanceof Truck) {
+                jsonObject.addProperty("type", "Truck");
+                jsonObject.addProperty("payloadCapacity", ((Truck) src).payloadCapacity);
+            }
+            return jsonObject;
+        }
+
+        @Override
+        public Vehicle deserialize(JsonElement json, java.lang.reflect.Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
+            JsonObject jsonObject = json.getAsJsonObject();
+            String type = jsonObject.get("type").getAsString();
+            if ("Car".equals(type)) {
+                Car car = new Car();
+                car.make = jsonObject.get("make").getAsString();
+                car.numberOfDoors = jsonObject.get("numberOfDoors").getAsInt();
+                return car;
+            } else if ("Truck".equals(type)) {
+                Truck truck = new Truck();
+                truck.make = jsonObject.get("make").getAsString();
+                truck.payloadCapacity = jsonObject.get("payloadCapacity").getAsDouble();
+                return truck;
+            }
+            throw new JsonParseException("Unknown element type: " + type);
+        }
+    }
+
+    @Test
+    public void testDeserializeIncorrectJsonForCar() {
+        String truckJson = "{ 'make': 'Toyota', 'type': 'Truck', 'payloadCapacity': 5000 }";
+        Gson gson = new GsonBuilder()
+                .registerTypeAdapter(Vehicle.class, new VehicleTypeAdapter())
+                .create();
+        
+        try {
+            Car car = gson.fromJson(truckJson, Car.class);
+            fail("Expected JsonParseException not thrown");
+        } catch (JsonParseException e) {
+            assertTrue(e.getMessage().contains("Unknown element type"));
+        }
+    }
+}

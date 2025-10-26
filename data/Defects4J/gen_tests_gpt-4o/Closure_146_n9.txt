@@ -1,0 +1,46 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.JSError;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+
+public class GoogleClosureCompilerTest {
+
+    @Test
+    public void testBadTypeInferenceForUndefined() {
+        // JavaScript code from the bug report
+        String jsCode = "/** @param {string} x */\n" +
+                        "function g(x) {}\n" +
+                        "\n" +
+                        "/** @param {undefined} x */\n" +
+                        "function f(x) {\n" +
+                        "  if (x != undefined) { g(x); }\n" +
+                        "}";
+
+        // Set up compiler and options for ADVANCED_OPTIMIZATIONS
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        CommandLineRunner.setOptionsForCompilationLevel(CompilerOptions.CompilationLevel.ADVANCED_OPTIMIZATIONS, options);
+
+        // Run the compiler
+        SourceFile input = SourceFile.fromCode("input.js", jsCode);
+        Result result = compiler.compile(SourceFile.fromCode("externs.js", ""), input, options);
+
+        // Check if the expected bogus warning exists in the result
+        boolean foundExpectedWarning = false;
+        for (JSError warning : result.warnings) {
+            if (warning.description.contains("actual parameter 1 of g does not match formal parameter")) {
+                foundExpectedWarning = true;
+                break;
+            }
+        }
+
+        // Assert that the bogus warning is present
+        assertTrue("Expected bogus warning was not found", foundExpectedWarning);
+    }
+}

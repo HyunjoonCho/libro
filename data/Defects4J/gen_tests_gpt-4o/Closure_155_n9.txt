@@ -1,0 +1,45 @@
+
+import javax.script.Invocable;
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineManager;
+import javax.script.ScriptException;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class JavaScriptOptimizationTest {
+
+    @Test
+    public void testOverzealousArgumentsOptimization() throws ScriptException, NoSuchMethodException {
+        // Initialize Nashorn script engine
+        ScriptEngineManager manager = new ScriptEngineManager();
+        ScriptEngine engine = manager.getEngineByName("nashorn");
+
+        // Define the original JavaScript function
+        String jsCode = 
+            "function d3_call(callback) {" +
+            "  var f = callback;" +
+            "  arguments[0] = this;" +
+            "  f.apply(this, arguments);" +
+            "  return this;" +
+            "}";
+
+        // Create a test object to act as 'this'
+        String objectJs = 
+            "var testObject = { value: 'original this' };" +
+            "function callbackFunc(a) { this.result = a; };" +
+            "testObject";
+
+        engine.eval(jsCode);
+        engine.eval(objectJs);
+
+        // Retrieve the test object and function
+        Object testObject = engine.get("testObject");
+        Invocable invocable = (Invocable) engine;
+
+        // Invoke the d3_call function with callbackFunc
+        invocable.invokeFunction("d3_call", testObject, testObject.getClass().getMethod("callbackFunc"));
+
+        // Check if this is assigned correctly without being overwritten
+        assertEquals("original this", invocable.invokeMethod(testObject, "result"));
+    }
+}

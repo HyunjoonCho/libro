@@ -1,0 +1,79 @@
+
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectWriter;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+// Custom serializer
+class MySerializer extends com.fasterxml.jackson.databind.JsonSerializer<Map<String, String>> {
+    @Override
+    public void serialize(Map<String, String> value, com.fasterxml.jackson.core.JsonGenerator gen, com.fasterxml.jackson.databind.SerializerProvider serializers) throws IOException {
+        gen.writeStartObject();
+        for (Map.Entry<String, String> entry : value.entrySet()) {
+            gen.writeStringField(entry.getKey(), "custom_" + entry.getValue());
+        }
+        gen.writeEndObject();
+    }
+}
+
+// Custom converter
+class MyConverter extends com.fasterxml.jackson.databind.util.StdConverter<Map<String, String>, Map<String, JsonNode>> {
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    @Override
+    public Map<String, JsonNode> convert(Map<String, String> value) {
+        Map<String, JsonNode> result = new HashMap<>();
+        for (Map.Entry<String, String> entry : value.entrySet()) {
+            result.put(entry.getKey(), mapper.valueToTree("converted_" + entry.getValue()));
+        }
+        return result;
+    }
+}
+
+// Test class
+public class JsonAnyGetterTest {
+    public static class TestClass {
+        private final Map<String, String> parameters = new HashMap<>();
+
+        public TestClass() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(using = MySerializer.class)
+        // @JsonSerialize(converter = MyConverter.class) // Comment this line to use converter
+        @JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+    @Test
+    public void testJsonAnyGetterWithJsonSerialize() {
+        ObjectMapper mapper = new ObjectMapper();
+
+        TestClass testClass = new TestClass();
+        try {
+            String json = mapper.writeValueAsString(testClass);
+            // Ensure that the serialized values are prefixed with "custom_"
+            assertTrue(json.contains("custom_value1"));
+            assertTrue(json.contains("custom_value2"));
+        } catch (JsonMappingException e) {
+            fail("JsonMappingException occurred: " + e.getMessage());
+        } catch (IOException e) {
+            fail("IOException occurred: " + e.getMessage());
+        }
+    }
+}

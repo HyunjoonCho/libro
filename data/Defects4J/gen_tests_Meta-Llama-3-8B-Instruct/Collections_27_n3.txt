@@ -1,0 +1,73 @@
+java
+import org.junit.Test;
+import java.io.ByteArrayInputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.Assert.fail;
+
+public class InvokerTransformerTest {
+
+    @Test
+    public void testInvokerTransformer() throws Exception {
+        Map<String, String> map = new HashMap<>();
+        map.put("test", "test");
+
+        // Create a transformer
+        InvocationHandler handler = new InvocationHandler() {
+            @Override
+            public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                if (method.getName().equals("get")) {
+                    return "test";
+                } else if (method.getName().equals("put")) {
+                    map.put((String) args[0], (String) args[1]);
+                    return null;
+                } else {
+                    fail("Unknown method");
+                    return null;
+                }
+            }
+        };
+
+        // Serialize the transformer
+        byte[] serialized = serialize(handler);
+
+        // Deserialize the transformer
+        Object deserialized = deserialize(serialized);
+
+        // Create a new map
+        Map<String, String> newMap = new HashMap<>();
+
+        // Add the deserialized transformer to the new map
+        newMap.put("test", deserialized);
+
+        // Check that the transformer was added correctly
+        Set<Map.Entry<String, Object>> entries = newMap.entrySet();
+        for (Map.Entry<String, Object> entry : entries) {
+            if (entry.getKey().equals("test")) {
+                if (!(entry.getValue() instanceof InvocationHandler)) {
+                    fail("Expected InvocationHandler, got " + entry.getValue().getClass());
+                }
+            }
+        }
+    }
+
+    private byte[] serialize(Object obj) throws Exception {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(bos);
+        oos.writeObject(obj);
+        oos.close();
+        return bos.toByteArray();
+    }
+
+    private Object deserialize(byte[] bytes) throws Exception {
+        ByteArrayInputStream bis = new ByteArrayInputStream(bytes);
+        ObjectInputStream ois = new ObjectInputStream(bis);
+        return ois.readObject();
+    }
+}

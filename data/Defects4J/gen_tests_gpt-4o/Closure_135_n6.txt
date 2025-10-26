@@ -1,0 +1,66 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.CompilationLevel;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.JSError;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+
+public class InheritanceDetectionTest {
+
+    @Test
+    public void testInheritanceNotDetectedWithDirectPrototypeAssignment() {
+        String jsCode = "" +
+                "/**\n" +
+                " * @constructor\n" +
+                " */\n" +
+                "function SuperClass() {}\n" +
+                "\n" +
+                "SuperClass.prototype.CustomMethod = function() {};\n" +
+                "\n" +
+                "/**\n" +
+                " * @constructor\n" +
+                " * @extends {SuperClass}\n" +
+                " */\n" +
+                "function SubClass() {}\n" +
+                "SubClass.prototype = new SuperClass();\n" +
+                "\n" +
+                "/**\n" +
+                " * @override\n" +
+                " */\n" +
+                "SubClass.prototype.CustomMethod = function() {\n" +
+                " this.myProperty = 'value';\n" +
+                "};\n" +
+                "\n" +
+                "window['SubClassInstance'] = new SubClass();";
+
+        // Create a new compiler instance
+        Compiler compiler = new Compiler();
+
+        // Set up the compiler options
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        // Compile the JavaScript code
+        Result result = compiler.compile(
+                SourceFile.fromCode("externs.js", ""), // No externs
+                SourceFile.fromCode("test.js", jsCode),
+                options
+        );
+
+        // Check for the specific warning
+        boolean warningFound = false;
+        for (JSError warning : result.warnings) {
+            if (warning.description.contains("property CustomMethod not defined on any superclass of SubClass")) {
+                warningFound = true;
+                break;
+            }
+        }
+
+        assertTrue("Expected warning about unknown override was not found", warningFound);
+    }
+}

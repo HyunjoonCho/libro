@@ -1,0 +1,56 @@
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.DateTimeSerializerBase;
+import org.junit.jupiter.api.Test;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.TimeZone;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+class DateTimeSerializerTest {
+
+    static class TestClass {
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss", timezone = "UTC")
+        @JsonSerialize(using = CustomDateTimeSerializer.class)
+        public Date date;
+
+        public TestClass(Date date) {
+            this.date = date;
+        }
+    }
+
+    static class CustomDateTimeSerializer extends DateTimeSerializerBase<CustomDateTimeSerializer> {
+
+        public CustomDateTimeSerializer() {
+            super(Date.class, true, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"),
+                  null, false, null);
+        }
+
+        @Override
+        public CustomDateTimeSerializer withFormat(Boolean useTimestamp, DateFormat df,
+                                                   String datePattern, Boolean timeZone) {
+            return new CustomDateTimeSerializer();
+        }
+    }
+
+    @Test
+    public void testCustomDateTimeSerializerContextualFormat() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+        Date date = sdf.parse("2023-10-01 12:00:00");
+
+        TestClass testObject = new TestClass(date);
+
+        String json = mapper.writeValueAsString(testObject);
+        String expectedJson = "{\"date\":\"2023-10-01 12:00:00\"}";
+        assertEquals(expectedJson, json);
+    }
+}

@@ -1,0 +1,84 @@
+
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+
+public class ListAttributeSerializerTest {
+
+    private static ObjectMapper objectMapper;
+
+    @BeforeClass
+    public static void setup() {
+        objectMapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+        module.addSerializer(ListAttribute.class, new ListAttributeSerializer());
+        objectMapper.registerModule(module);
+    }
+
+    @Test
+    public void testCustomSerializerIssue() throws IOException {
+        ListAttribute<String> listAttribute = new ListAttribute<>("itemType1", Arrays.asList("item1", "item2"));
+        
+        // This is the incorrect behavior demonstration part
+        JsonNode tree = objectMapper.valueToTree(listAttribute);
+
+        // Workaround solution
+        byte[] jsonBytes = objectMapper.writeValueAsBytes(listAttribute);
+        JsonNode fixedTree = objectMapper.readTree(jsonBytes);
+
+        // Just showing expected vs the workaround produces the actual JSON tree structure.
+        assertEquals(fixedTree, tree); // This would fail with initial incorrect behavior.
+    }
+
+    // Class representing the problem domain
+    public static class ListAttribute<T> {
+        private final String itemJsonKey;
+        private final List<T> items;
+
+        public ListAttribute(String itemJsonKey, List<T> items) {
+            this.itemJsonKey = itemJsonKey;
+            this.items = items;
+        }
+
+        public String getItemJsonKey() {
+            return itemJsonKey;
+        }
+
+        public List<T> getItems() {
+            return items;
+        }
+    }
+
+    // Custom serializer as described
+    public static class ListAttributeSerializer extends JsonSerializer<ListAttribute> {
+        @Override
+        public void serialize(ListAttribute value, JsonGenerator jgen, SerializerProvider provider) throws IOException {
+            jgen.writeStartObject();
+            jgen.writeStringField("itemType", value.getItemJsonKey());
+            jgen.writeObjectField("items", value.getItems());
+            jgen.writeEndObject();
+        }
+
+        @Override
+        public void serializeWithType(ListAttribute value, JsonGenerator jgen,
+                                      SerializerProvider provider, com.fasterxml.jackson.databind.jsontype.TypeSerializer typeSer) throws IOException {
+            typeSer.writeTypePrefixForObject(value, jgen);
+            jgen.writeStringField("itemType", value.getItemJsonKey());
+            jgen.writeObjectField("items", value.getItems());
+            typeSer.writeTypeSuffixForObject(value, jgen);
+        }
+    }
+}

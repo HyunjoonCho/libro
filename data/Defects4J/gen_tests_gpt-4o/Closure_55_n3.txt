@@ -1,0 +1,48 @@
+
+import com.google.javascript.jscomp.*;
+
+import static org.junit.Assert.fail;
+
+import org.junit.Test;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testExceptionWhenEmittingCodeWithGetters() {
+        // Example JavaScript code that should cause the issue.
+        String jsCode = "var obj = { get name() { return 'Inspector'; } };";
+
+        // Create a Compiler instance
+        Compiler compiler = new Compiler();
+
+        // Set compilation options
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        // Custom error manager to throw an assertion error when the exception occurs
+        ErrorManager errorManager = new BasicErrorManager() {
+            @Override
+            public void println(CheckLevel checkLevel, JSError error) {
+                if (checkLevel == CheckLevel.ERROR) {
+                    throw new AssertionError("Compilation error: " + error.description);
+                }
+            }
+
+            @Override
+            protected void printSummary() {
+                // No summary needed
+            }
+        };
+        compiler.setErrorManager(errorManager);
+
+        try {
+            // Compile source code
+            compiler.compile(SourceFile.fromCode("externs.js", ""), SourceFile.fromCode("test.js", jsCode), options);
+        } catch (RuntimeException e) {
+            // Expected failure due to the known bug
+            if (!(e.getCause() instanceof IllegalStateException)) {
+                fail("Unexpected exception: " + e.getMessage());
+            }
+        }
+    }
+}

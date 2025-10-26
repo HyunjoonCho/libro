@@ -1,0 +1,67 @@
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.withSettings;
+
+import org.junit.Test;
+import org.mockito.internal.util.MockUtil;
+
+import java.util.List;
+import java.util.Observer;
+
+public class WindowsFailingTests {
+
+    @Test
+    public void testShouldGetExtraInterfaces() {
+        // This test is for the first issue mentioned
+        Bar bar = mock(Bar.class, withSettings().extraInterfaces(List.class, Observer.class));
+        
+        // Ensure that the mock has the correct extra interfaces
+        assertTrue(new MockUtil().getMockSettings(bar).getExtraInterfaces().length == 2);
+    }
+    
+    @Test
+    public void testNoJUnitDependencies() {
+        // This test simulates the second issue
+        try {
+            Class.forName("org.mockito.configuration.MockitoConfiguration");
+            fail("Expected a NoClassDefFoundError due to wrong name");
+        } catch (NoClassDefFoundError e) {
+            assertTrue(e.getMessage().contains("wrong name: org/mockito/configuration/MockitoConfiguration"));
+        }
+    }
+    
+    @Test
+    public void excludingClassLoaderCannotLoadClasses() {
+        // Simulate the third issue using a custom class loader
+        try {
+            CustomClassLoader loader = new CustomClassLoader(new String[]{"junit", "org.junit"});
+            loader.loadClass("junit.framework.Assert");
+            fail("Expected a ClassNotFoundException due to excluded class prefix");
+        } catch (ClassNotFoundException e) {
+            assertTrue(e.getMessage().contains("classes with prefix : [junit, org.junit] are excluded"));
+        }
+    }
+
+    class Bar {
+        // Simulate a simple class
+    }
+    
+    class CustomClassLoader extends ClassLoader {
+        private final String[] excludedPrefixes;
+
+        public CustomClassLoader(String[] excludedPrefixes) {
+            super();
+            this.excludedPrefixes = excludedPrefixes;
+        }
+
+        @Override
+        protected Class<?> findClass(String name) throws ClassNotFoundException {
+            for (String prefix : excludedPrefixes) {
+                if (name.startsWith(prefix)) {
+                    throw new ClassNotFoundException("classes with prefix : " + String.join(", ", excludedPrefixes) + " are excluded");
+                }
+            }
+            return super.findClass(name);
+        }
+    }
+}

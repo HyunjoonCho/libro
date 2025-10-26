@@ -1,0 +1,41 @@
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import org.junit.Test;
+
+import java.io.IOException;
+
+import static org.junit.Assert.fail;
+
+public class JacksonKeyLengthTest {
+
+    @Test
+    public void testLongJsonKeyLength() {
+        JsonFactory factory = new JsonFactory();
+
+        // Create a JSON string with a key length exceeding 262144 bytes
+        int excessiveLength = 262145;
+        StringBuilder longKeyBuilder = new StringBuilder(excessiveLength);
+        for (int i = 0; i < excessiveLength; i++) {
+            longKeyBuilder.append('a');
+        }
+        String longKey = longKeyBuilder.toString();
+        String jsonInput = "{\"" + longKey + "\": \"value\"}";
+
+        try (JsonParser parser = factory.createParser(jsonInput)) {
+            while (parser.nextToken() != null) {
+                if (parser.currentToken() == JsonToken.FIELD_NAME) {
+                    // If this line is reached, it means JsonParser managed 
+                    // to process the key without any error, which contradicts the bug report.
+                    fail("Expected an exception for a JSON key longer than 262144 bytes.");
+                }
+            }
+        } catch (ArrayIndexOutOfBoundsException e) {
+            // Expected outcome, based on the bug report for keys longer than 262144 bytes
+            System.out.println("Caught expected ArrayIndexOutOfBoundsException for long JSON key: " + e.getMessage());
+        } catch (IOException e) {
+            fail("Unexpected IOException: " + e.getMessage());
+        }
+    }
+}

@@ -1,0 +1,40 @@
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.rhino.Node;
+import org.junit.Test;
+
+import static org.junit.Assert.fail;
+
+public class CompilerCrashTest {
+
+    @Test
+    public void testSmartNameRemovalCausesCompilerCrash() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+
+        // Enable advanced optimization which includes smartNameRemoval
+        CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        // JavaScript code to be compiled
+        String jsCode = 
+            "var goog = {};\n" +
+            "goog.inherits = function(x, y) {};\n" +
+            "var ns = {};\n" +
+            "/** @constructor */ ns.PageSelectionModel = function(){};\n" +
+            "/** @constructor */ ns.PageSelectionModel.FooEvent = function() {};\n" +
+            "/** @constructor */ ns.PageSelectionModel.SelectEvent = function() {};\n" +
+            "goog.inherits(ns.PageSelectionModel.ChangeEvent, ns.PageSelectionModel.FooEvent);";
+
+        // Run the compiler
+        Node root = compiler.compile(SourceFile.fromCode("externs.js", ""), 
+                                     SourceFile.fromCode("test.js", jsCode), 
+                                     options).getJsRoot(); 
+
+        if (compiler.hasErrors()) {
+            fail("Expected no compiler errors, but errors were found: " + compiler.getErrors().toString());
+        }
+
+        // As the bug report says the compiler crashes and throws an IllegalStateException,
+        // we can assume that if no such exception is thrown, the bug is reproduced.
+    }
+}

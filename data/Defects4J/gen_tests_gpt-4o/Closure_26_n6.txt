@@ -1,0 +1,60 @@
+
+import org.junit.Test;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+
+import static org.junit.Assert.assertTrue;
+
+public class ProcessCommonJSModulesTest {
+
+    @Test
+    public void testCommonJSModuleError() throws IOException, InterruptedException {
+        // Setup JavaScript content
+        String echoJsContent = "define(function() { return { echo: function(val) { window.console.log(val); }}});";
+        String echoMainJsContent = "var echo = require('echo'); echo.echo('hello world');";
+
+        // Create temporary JavaScript files
+        java.nio.file.Files.write(java.nio.file.Paths.get("echo.js"), echoJsContent.getBytes());
+        java.nio.file.Files.write(java.nio.file.Paths.get("echo-main.js"), echoMainJsContent.getBytes());
+
+        // Construct the command to run Google Closure Compiler
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                "java", "-jar", "path/to/closure-compiler.jar",
+                "--formatting=PRETTY_PRINT",
+                "--jscomp_error=checkTypes",
+                "--compilation_level=SIMPLE_OPTIMIZATIONS",
+                "--transform_amd_modules",
+                "--process_common_js_modules",
+                "--js=echo.js",
+                "--js=echo-main.js",
+                "--common_js_entry_module=echo-main.js"
+        );
+
+        processBuilder.redirectErrorStream(true);
+        Process process = processBuilder.start();
+
+        // Capture and check the compiler output
+        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        String line;
+        boolean errorFound = false;
+        while ((line = reader.readLine()) != null) {
+            if (line.contains("ERROR - Property module$exports never defined on module$echo_main")) {
+                errorFound = true;
+                break;
+            }
+        }
+
+        // Clean up temporary files
+        java.nio.file.Files.delete(java.nio.file.Paths.get("echo.js"));
+        java.nio.file.Files.delete(java.nio.file.Paths.get("echo-main.js"));
+
+        // Ensure the expected error occurred
+        assertTrue("Expected error about module$exports not defined", errorFound);
+
+        // Wait for process to complete
+        int exitCode = process.waitFor();
+        System.out.println("Compiler exited with code: " + exitCode);
+    }
+}

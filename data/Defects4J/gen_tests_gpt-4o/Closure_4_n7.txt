@@ -1,0 +1,52 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import java.util.Collections;
+
+import static org.junit.Assert.assertFalse;
+
+public class TypeCycleTest {
+
+    @Test
+    public void testInterfaceImplementsItselfCausesStackOverflow() {
+        // Compiling the JavaScript code that simulates the bug
+        String jsCode = "/**\n" +
+                " * @interface\n" +
+                " */\n" +
+                "var OtherType = function() {}\n" +
+                "\n" +
+                "/**\n" +
+                " * @implements {MyType}\n" +
+                " * @constructor\n" +
+                " */\n" +
+                "var MyType = function() {}\n" +
+                "\n" +
+                "/**\n" +
+                " * @type {MyType}\n" +
+                " */\n" +
+                "var x = /** @type {!OtherType} */ (new Object());";
+
+        // Create a Compiler with options
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setCheckTypes(true);
+
+        // Fill options according to the bug scenario
+        CommandLineRunner.runCommandLine(options,
+                new String[]{
+                        "--property_renaming", "OFF",
+                        "--variable_renaming", "OFF",
+                        "--jscomp_warning", "checkTypes"
+                });
+
+        // Compile the JS code
+        compiler.compile(Collections.emptyList(),
+                Collections.singletonList(SourceFile.fromCode("t.js", jsCode)), options);
+
+        // Check that there was no stack overflow, which implies a compile error
+        assertFalse(compiler.hasErrors());
+    }
+}

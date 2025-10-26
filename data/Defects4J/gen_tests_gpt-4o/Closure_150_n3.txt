@@ -1,0 +1,62 @@
+
+import static org.junit.Assert.fail;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.PrintStream;
+import com.google.javascript.jscomp.*;
+
+public class TypeCheckerTest {
+
+    public void testTypeCheckerWithNestedFunction() {
+        String code = "var ns = {};\n" +
+                      "(function() {\n" +
+                      "   /** @param {string=} b */\n" +
+                      "   ns.a = function(b) {}\n" +
+                      "})();\n" +
+                      "\n" +
+                      "function d() {\n" +
+                      "   ns.a();\n" +
+                      "   ns.a(123);\n" +
+                      "}";
+        checkWarnings(code);
+    }
+
+    public void testTypeCheckerOutsideFunction() {
+        String code = "var ns = {};\n" +
+                      "(function() {\n" +
+                      "   /** @param {string=} b */\n" +
+                      "   ns.a = function(b) {}\n" +
+                      "})();\n" +
+                      "\n" +
+                      "ns.a();\n" +
+                      "ns.a(123);";
+        checkWarnings(code);
+    }
+
+    private void checkWarnings(String code) {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setWarningLevel(DiagnosticGroups.CHECK_TYPES, CheckLevel.WARNING);
+        
+        // Compiling
+        SourceFile extern = SourceFile.fromCode("externs.js", "");
+        SourceFile input = SourceFile.fromCode("test.js", code);
+        compiler.compile(extern, input, options);
+
+        // Capturing the warnings
+        JSError[] warnings = compiler.getWarnings();
+        JSError[] errors = compiler.getErrors();
+
+        // Verifying
+        if (warnings.length != 1 || errors.length != 0) {
+            fail("Expected 1 warning, but got " + warnings.length + " warnings and " + errors.length + " errors.");
+        }
+        
+        String expected = "actual parameter 1 of ns.a does not match formal parameter\n" + 
+                          "found   : number\n" + 
+                          "required: (string|undefined)";
+        if (!warnings[0].description.contains(expected)) {
+            fail("Warning was expected to be related to type mismatch, but was: " + warnings[0].description);
+        }
+    }
+}

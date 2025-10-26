@@ -1,0 +1,64 @@
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.deser.BeanDeserializerModifier;
+import com.fasterxml.jackson.databind.deser.KeyDeserializer;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.type.MapType;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+
+public class CustomEnumKeyDeserializerTest {
+
+    enum MyEnum {
+        VALUE_ONE, VALUE_TWO
+    }
+
+    static class MyEnumKeyModule extends SimpleModule {
+        public MyEnumKeyModule() {
+            setDeserializerModifier(new BeanDeserializerModifier() {
+                @Override
+                public KeyDeserializer modifyKeyDeserializer(
+                        DeserializationConfig config,
+                        JavaType type,
+                        KeyDeserializer deserializer) {
+                    if (!type.isEnumType()) {
+                        return super.modifyKeyDeserializer(config, type, deserializer);
+                    }
+                    return new KeyDeserializer() {
+                        @Override
+                        @SuppressWarnings("unchecked")
+                        public Object deserializeKey(String key, DeserializationContext ctxt)
+                                throws IOException, JsonProcessingException {
+                            Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                            return Enum.valueOf(rawClass, key.toUpperCase());
+                        }
+                    };
+                }
+            });
+        }
+    }
+
+    @Test
+    public void testEnumKeyDeserializer() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new MyEnumKeyModule());
+
+        // JSON input with lowercase enum keys
+        String json = "{\"value_one\": \"someValue\"}";
+
+        // Java type for deserialization
+        MapType mapType = mapper.getTypeFactory().constructMapType(Map.class, MyEnum.class, String.class);
+
+        // Deserialize JSON into map
+        Map<MyEnum, String> result = mapper.readValue(json, mapType);
+
+        // Verify the custom key deserializer handled the lowercase key
+        assertEquals("someValue", result.get(MyEnum.VALUE_ONE));
+    }
+}

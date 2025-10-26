@@ -1,0 +1,89 @@
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.TreeNode;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+public class SerializationTest {
+
+    // Hypothetical ListAttribute class with serializer
+    @JsonSerialize(using = ListAttributeSerializer.class)
+    static class ListAttribute<T> {
+        private final String itemJsonKey;
+        private final List<T> items;
+
+        @JsonCreator
+        public ListAttribute(@JsonProperty("itemType") String itemJsonKey, @JsonProperty("items") List<T> items) {
+            this.itemJsonKey = itemJsonKey;
+            this.items = items;
+        }
+
+        public String getItemJsonKey() {
+            return itemJsonKey;
+        }
+
+        public List<T> getItems() {
+            return items;
+        }
+    }
+
+    static class ListAttributeSerializer extends StdSerializer<ListAttribute> {
+        public ListAttributeSerializer() {
+            super(ListAttribute.class);
+        }
+
+        @Override
+        public void serialize(ListAttribute value, JsonGenerator jgen, SerializerProvider provider) throws IOException {
+            jgen.writeStartObject();
+            jgen.writeStringField("itemType", value.getItemJsonKey());
+            jgen.writeObjectField("items", value.getItems());
+            jgen.writeEndObject();
+        }
+    }
+
+    // X class definition with a ListAttribute
+    static class X<T> {
+        private final String s;
+        private final ListAttribute<T> items;
+
+        @JsonCreator
+        public X(@JsonProperty("s") String s, @JsonProperty("items") ListAttribute<T> items) {
+            this.s = s;
+            this.items = items;
+        }
+    }
+
+    @Test
+    public void testSerializeToTree() throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+
+        // Create an instance of X with ListAttribute
+        X<String> x = new X<>("sampleString", new ListAttribute<>("typeString", Arrays.asList("item1", "item2")));
+
+        // Serialize to a tree using ObjectMapper
+        JsonNode tree = mapper.valueToTree(x);
+
+        // Print the serialized tree for visibility
+        System.out.println(tree.toString());
+
+        // Ensure that VALUE_EMBEDDED_OBJECT is not used in the serialization
+        assertTrue(tree.has("s"));
+        assertTrue(tree.has("items"));
+        assertTrue(tree.get("items").has("items"));
+        assertFalse(tree.get("items").get("items").isValueNode()); // Ensure no VALUE_EMBEDDED_OBJECT
+    }
+}

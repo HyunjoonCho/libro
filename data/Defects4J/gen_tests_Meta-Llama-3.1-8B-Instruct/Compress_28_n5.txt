@@ -1,0 +1,23 @@
+java
+public void testTarArchiveInputStreamSilentlyFinishesOnEOF() throws IOException {
+    File corruptedTarFile = File.createTempFile("corrupted.tar", ".tar");
+    try (OutputStream out = new FileOutputStream(corruptedTarFile)) {
+        // Create a tar file with only one entry, but with unexpected EOF in the middle of the entry
+        TarArchiveOutputStream tarOut = new TarArchiveOutputStream(out);
+        tarOut.putArchiveEntry(new TarArchiveEntry("entry1"));
+        out.write(new byte[]{0x01, 0x02, 0x03}); // Write only a few bytes to the entry
+        out.closeEntry();
+    }
+
+    try (TarArchiveInputStream input = new TarArchiveInputStream(new FileInputStream(corruptedTarFile))) {
+        // Expect an IOException when getNextEntry is called
+        ArchiveEntry nextMatchedEntry = input.getNextEntry();
+        assertNotNull(nextMatchedEntry);
+        try {
+            input.getNextEntry();
+            fail("Expected IOException");
+        } catch (IOException e) {
+            // Expected
+        }
+    }
+}

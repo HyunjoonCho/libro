@@ -1,0 +1,44 @@
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.filter.FilteringParserDelegate;
+import com.fasterxml.jackson.core.filter.TokenFilter;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.io.IOException;
+
+import static org.junit.Assert.assertEquals;
+
+public class FilteringParserDelegateTest {
+
+    @Test
+    public void testAllowMultipleMatchesIgnored() throws IOException {
+        String json = "{ \"a\": 1, \"b\": 2, \"a\": 3 }";
+
+        ObjectMapper mapper = new ObjectMapper();
+        JsonFactory factory = mapper.getFactory();
+
+        TokenFilter filter = new TokenFilter() {
+            @Override
+            public TokenFilter includeProperty(String name) {
+                return "a".equals(name) ? TokenFilter.INCLUDE_ALL : null;
+            }
+        };
+
+        // Initialize FilteringParserDelegate with _allowMultipleMatches set to true
+        try (JsonParser parser = new FilteringParserDelegate(
+                factory.createParser(json),
+                filter,
+                true, // include property name
+                true  // allow multiple matches
+        )) {
+            JsonNode filteredNode = mapper.readTree(parser);
+            // The expected behavior given the current bug is the same as if 
+            // _allowMultipleMatches was set to false, since it's not utilized
+            // So only the first "a" property should be retained
+            assertEquals("{\"a\":1}", filteredNode.toString());
+        }
+    }
+}

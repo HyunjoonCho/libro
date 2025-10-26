@@ -1,0 +1,53 @@
+
+import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
+import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
+import org.apache.commons.math3.ode.sampling.FixedStepHandler;
+import org.apache.commons.math3.ode.sampling.StepNormalizer;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+
+public class TooLargeFirstStepTest {
+
+    @Test
+    public void testTooLargeFirstStep() {
+        // Define a simple differential equation, dy/dt = y, with an easy analytical solution
+        FirstOrderDifferentialEquations ode = new FirstOrderDifferentialEquations() {
+            @Override
+            public int getDimension() {
+                return 1;
+            }
+
+            @Override
+            public void computeDerivatives(double t, double[] y, double[] yDot) {
+                // Simple ODE: dy/dt = y
+                yDot[0] = y[0];
+            }
+        };
+
+        // Initial conditions
+        double[] y0 = new double[] { 1.0 }; // y(0) = 1
+        final double t0 = 0.0;
+        final double t1 = 1e-10; // Very short interval
+
+        // Expected result at t = t1, computed analytically
+        final double yExpected = Math.exp(0); // For t1 = 0, the analytic solution is e^t
+
+        DormandPrince853Integrator integrator = new DormandPrince853Integrator(1e-12, 1.0, 1e-12, 1e-12);
+        
+        // Define step handler
+        StepNormalizer normalizer = new StepNormalizer(1e-11, new FixedStepHandler() {
+            @Override
+            public void handleStep(double t, double[] y, double[] yDot, boolean isLast) {
+                // Check if the computed value is within a reasonable range of the expected value
+                assertTrue("Integration went out of bounds", t <= t1);
+            }
+        });
+
+        // Integrate and attach step handler
+        integrator.addStepHandler(normalizer);
+
+        // Perform the integration
+        integrator.integrate(ode, t0, y0, t1, y0);
+    }
+}

@@ -1,0 +1,42 @@
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.deser.DeserializationProblemHandler;
+import com.fasterxml.jackson.databind.jsontype.TypeIdResolver;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+import org.junit.Test;
+
+import static org.junit.Assert.fail;
+
+public class HandleUnknownTypeIdTest {
+
+    @Test
+    public void testDeserializationWithDeserializationProblemHandler() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enableDefaultTyping();
+
+        // Custom DeserializationProblemHandler
+        mapper.addHandler(new DeserializationProblemHandler() {
+            @Override
+            public JavaType handleUnknownTypeId(DeserializationContext ctxt, JavaType baseType,
+                                                String subTypeId, TypeIdResolver idResolver, String failureMsg) {
+                // Returning Void.class which is causing NPE in Jackson 2.9
+                return TypeFactory.defaultInstance().constructType(Void.class);
+            }
+        });
+
+        String json = "[\"InvalidTypeId\", {}]";
+
+        try {
+            mapper.readValue(json, Object.class);
+            fail("Expected an exception due to Void.class handling, but none was thrown.");
+        } catch (JsonProcessingException e) {
+            // Validate that this particular flow throws a JsonProcessingException
+            if (!(e.getCause() instanceof NullPointerException)) {
+                fail("Expected a NPE due to handling unknown type id with Void.class");
+            }
+        }
+    }
+}

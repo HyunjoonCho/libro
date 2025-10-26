@@ -1,0 +1,51 @@
+
+import org.apache.commons.compress.archivers.zip.*;
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
+import org.junit.Test;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+
+import static org.junit.Assert.fail;
+
+public class ZipArchiveInputStreamTest {
+
+    @Test
+    public void testUnknownCompressedSizeDuringZIPEntryExtraction() {
+        try {
+            // Prepare a ZIP entry with an unknown compressed size with a BZIP2 compression method
+            ZipArchiveEntry entry = new ZipArchiveEntry("test.txt");
+            entry.setMethod(ZipMethod.BZIP2.getCode());
+            entry.setCompressedSize(ArchiveEntry.SIZE_UNKNOWN);
+
+            // Create a BZIP2 compressed stream without specifying a size
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            try (BZip2CompressorOutputStream bzip2Out = new BZip2CompressorOutputStream(baos)) {
+                bzip2Out.write("Test data that is bzip2 compressed".getBytes());
+            }
+            byte[] bzip2Data = baos.toByteArray();
+
+            // Construct ZIP format around bzip2Data
+            ByteArrayOutputStream zipOut = new ByteArrayOutputStream();
+            try (ZipArchiveOutputStream zos = new ZipArchiveOutputStream(zipOut)) {
+                zos.putArchiveEntry(entry);
+                zos.write(bzip2Data);
+                zos.closeArchiveEntry();
+            }
+
+            // Test the ZipArchiveInputStream with unknown size for the BZIP2 entry
+            ByteArrayInputStream bais = new ByteArrayInputStream(zipOut.toByteArray());
+            try (ZipArchiveInputStream zis = new ZipArchiveInputStream(bais)) {
+                try {
+                    zis.getNextZipEntry();
+                    fail("Expected an exception due to unknown compressed size for BZIP2 method");
+                } catch (IOException e) {
+                    // Expected behavior, the test passes here
+                    System.out.println("Caught expected IOException: " + e.getMessage());
+                }
+            }
+        } catch (IOException e) {
+            fail("Unexpected IOException during setup: " + e.getMessage());
+        }
+    }
+}

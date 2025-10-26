@@ -1,0 +1,83 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.assertTrue;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testThisWithTypedefEmitsWarning() {
+        CompilerOptions options = new CompilerOptions();
+        List<SourceFile> externs = CommandLineRunner.getBuiltinExterns(options);
+        List<SourceFile> inputs = new ArrayList<>();
+
+        // JavaScript code from the bug report
+        String jsCode = ""
+            + "goog.provide('bug');\n"
+            + "\n"
+            + "/**\n"
+            + " * @this {bug.Thing}\n"
+            + " */\n"
+            + "bug.sharedMethod = function() {};\n"
+            + "\n"
+            + "/**\n"
+            + " * @constructor\n"
+            + " */\n"
+            + "bug.A = function() {};\n"
+            + "\n"
+            + "/**\n"
+            + " * @constructor\n"
+            + " */\n"
+            + "bug.B = function() {};\n"
+            + "\n"
+            + "/**\n"
+            + " * @type {bug.A|bug.B}\n"
+            + " */\n"
+            + "bug.Thing = goog.typedef;";
+
+        inputs.add(SourceFile.fromCode("test.js", jsCode));
+
+        LogErrorManager errorManager = new LogErrorManager();
+        com.google.javascript.jscomp.Compiler compiler = new com.google.javascript.jscomp.Compiler(errorManager);
+        compiler.compile(externs, inputs, options);
+
+        // Assert that a specific warning is reported
+        assertTrue(errorManager.hasWarnings());
+        assertTrue(errorManager.getWarningMessages().stream().anyMatch(
+                msg -> msg.contains("@this type of a function must be an object")));
+    }
+}
+
+class LogErrorManager extends com.google.javascript.jscomp.BasicErrorManager {
+    private final List<String> warningMessages = new ArrayList<>();
+
+    @Override
+    public void println(CheckLevel level, JSError error) {
+        if (level == CheckLevel.WARNING) {
+            warningMessages.add(error.toString());
+        }
+    }
+
+    @Override
+    public void report(CheckLevel level, JSError error) {
+        println(level, error);
+    }
+
+    @Override
+    protected void printSummary() {
+        System.out.println("Number of warnings: " + getWarningCount());
+    }
+
+    public boolean hasWarnings() {
+        return !warningMessages.isEmpty();
+    }
+
+    public List<String> getWarningMessages() {
+        return warningMessages;
+    }
+}

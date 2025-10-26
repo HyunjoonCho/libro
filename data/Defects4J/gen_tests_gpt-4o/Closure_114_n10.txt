@@ -1,0 +1,50 @@
+
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.JSError;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+
+public class ClosureCompilerCrashTest {
+
+    @Test
+    public void testClosureCompilerCrashOnAdvancedOptimizations() {
+        // JavaScript code that causes the crash
+        String jsCode = 
+            "var g=function(m){return m*Math.random()|0},d=document,h=d.getElementById('h'),c=d.getElementById('c'),l;" +
+            "(l=function(){requestAnimationFrame(l);h.style.textShadow=\"0 0 1px #000,\"+(g(10)-5)+\"px \"+(g(10)-5)+\"px 0 #888,0 0 180px rgb(\"+g(255)+\",\"+g(255)+\",\"+g(255)+\")\"})();" +
+            "d.addEventListener('mousemove',function(v){c.style.marginTop=(v.pageY/10+15|0)+'px'});";
+
+        // Set up the compiler
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setCompilationLevel(CompilerOptions.CompilationLevel.ADVANCED_OPTIMIZATIONS);
+
+        // Compile the JavaScript code
+        SourceFile extern = SourceFile.fromCode("externs", "");
+        SourceFile input = SourceFile.fromCode("input", jsCode);
+        Result result = compiler.compile(extern, input, options);
+
+        // Check the result for errors
+        assertFalse("Compilation should have errors", result.success);
+        
+        // Extract errors for assertion or debugging
+        for (JSError error : result.errors) {
+            System.out.println(error.toString());
+        }
+
+        // Expected error message based on the bug report
+        String expectedErrorMessage = "INTERNAL COMPILER ERROR.\n" +
+                "Please report this problem.\n" +
+                "Unexpected variable l";
+        
+        // Make sure the specific internal error is part of the result
+        assertTrue(
+            "Expected error message should be present",
+            result.errors.stream().anyMatch(e -> e.toString().contains(expectedErrorMessage))
+        );
+    }
+}

@@ -1,0 +1,57 @@
+
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.Pointer;
+import org.apache.commons.jxpath.ri.JXPathContextReferenceImpl;
+import org.apache.commons.jxpath.AbstractFactory;
+import org.apache.commons.jxpath.ri.model.NodePointer;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+public class JXPathTest {
+
+    @Test(expected = StackOverflowError.class)
+    public void testStackOverflowOnCreatePath() {
+        // Set up a map as the context.
+        Map<String, Object> map = new HashMap<>();
+        map.put("a", null);
+
+        // Create a JXPath context.
+        JXPathContext pathContext = JXPathContext.newContext(map);
+
+        // Set a factory to handle object creation path.
+        pathContext.setFactory(new AbstractFactory() {
+            @Override
+            public boolean createObject(JXPathContext context, Pointer pointer, Object parent, String name, int index) {
+                Map<String, Object> parentMap = (Map<String, Object>) parent;
+
+                if (index > -1) { 
+                    // If there's an index, we expect a list.
+                    List<Object> list = (List<Object>) parentMap.get(name);
+                    if (list == null) {
+                        list = new ArrayList<>();
+                    }
+                    while (list.size() <= index) {
+                        // Initially, set List elements to null to trigger the bug.
+                        list.add(null);
+                    }
+                    parentMap.put(name, list);
+                } else {
+                    // Otherwise, we're creating a map.
+                    parentMap.put(name, new HashMap<>());
+                }
+                return true;
+            }
+        });
+
+        // Attempt to create the path which will cause the stack overflow.
+        pathContext.createPath("a/b[1]/c");
+
+        // Attempt to create the second path, known to trigger the problem.
+        // This line should trigger a StackOverflowError based on the bug description.
+        pathContext.createPath("a/b[2]/c");
+    }
+}

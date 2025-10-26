@@ -1,0 +1,42 @@
+
+import org.junit.Test;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import com.google.javascript.jscomp.CommandLineRunner;
+
+import static org.junit.Assert.assertTrue;
+
+public class ClosureCompilerBugTest {
+
+    @Test
+    public void testMinusNegativeNumberParsing() throws IOException {
+        // Setup: write the JavaScript source code to a temporary file
+        String jsSourceCode = "var g = 0;\ng = g - -0.0;";
+        File jsFile = File.createTempFile("bulletfail", ".js");
+        Files.write(jsFile.toPath(), jsSourceCode.getBytes());
+
+        // Output file for compiled JavaScript
+        File outputFile = File.createTempFile("cc", ".js");
+
+        // Run Google Closure Compiler
+        String[] args = {
+            "--compilation_level", "ADVANCED_OPTIMIZATIONS",
+            "--js", jsFile.getAbsolutePath(),
+            "--js_output_file", outputFile.getAbsolutePath()
+        };
+
+        new CommandLineRunner(args).run();
+
+        // Read the compiled output to check for the problematic expression
+        String compiledOutput = new String(Files.readAllBytes(Paths.get(outputFile.getPath())));
+
+        // Test: Check if the output contains 'g--0.0' indicating the error
+        assertTrue("Compiled output should contain 'g--0.0'", compiledOutput.contains("g--0.0"));
+
+        // Cleanup temporary files
+        jsFile.delete();
+        outputFile.delete();
+    }
+}

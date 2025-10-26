@@ -1,0 +1,47 @@
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.rhino.Node;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+
+public class DependencySortingTest {
+
+    @Test
+    public void testDependencySortingWithClosurePassFalse() {
+        // Initialize the compiler instance
+        Compiler compiler = new Compiler();
+
+        // Create CompilerOptions
+        CompilerOptions options = new CompilerOptions();
+
+        // Set closure pass to false to prevent goog.require/goog.provide removal
+        options.setClosurePass(false);
+
+        // Enable dependency sorting
+        DependencyOptions dependencyOptions = new DependencyOptions();
+        dependencyOptions.setDependencySorting(true);
+        options.setDependencyOptions(dependencyOptions);
+
+        // Sample JS inputs with goog.require/provide
+        SourceFile input1 = SourceFile.fromCode("input1.js", "goog.provide('example1'); goog.require('example2');");
+        SourceFile input2 = SourceFile.fromCode("input2.js", "goog.provide('example2');");
+
+        // Compile the source files
+        Result result = compiler.compile(SourceFile.fromCode("externs.js", ""), java.util.Arrays.asList(input1, input2), options);
+
+        // Check that the compiled output contains the expected order
+        if (result.success) {
+            Node root = compiler.getRoot();
+            String compiledCode = compiler.toSource();
+
+            // We expect example2 to be before example1 since it is a dependency
+            int indexExample2 = compiledCode.indexOf("goog.provide('example2')");
+            int indexExample1 = compiledCode.indexOf("goog.provide('example1')");
+
+            assertTrue("example2 should appear before example1", indexExample2 < indexExample1);
+        } else {
+            throw new AssertionError("Compilation failed unexpectedly");
+        }
+    }
+}

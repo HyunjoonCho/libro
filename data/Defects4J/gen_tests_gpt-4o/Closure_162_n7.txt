@@ -1,0 +1,53 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+
+import java.util.Collections;
+
+import static org.junit.Assert.assertTrue;
+
+public class TypeAliasTest {
+
+    @Test
+    public void testTypeAliasesBeforeDefinitions() {
+        String jsCode = ""
+                + "goog.provide('foo.Foo');\n"
+                + "goog.provide('foo.Foo.Bar');\n\n"
+                + "goog.scope(function() {\n"
+                + "    /**\n"
+                + "     * @param {Foo.Bar} bar\n"
+                + "     * @constructor\n"
+                + "     */\n"
+                + "    foo.Foo = function(bar) {\n"
+                + "        this.bar = bar;\n"
+                + "    };\n"
+                + "    var Foo = foo.Foo;\n\n"
+                + "    /** @type {Foo.Bar} */\n"
+                + "    Foo.prototype.bar = null;\n\n"
+                + "    /** @constructor */\n"
+                + "    Foo.Bar = function() {};\n"
+                + "});\n";
+
+        CompilerOptions options = new CompilerOptions();
+        options.setWarningLevel(CompilerOptions.Reach.ALL_CHECKS, CompilerOptions.CheckLevel.WARNING);
+
+        CommandLineRunner runner = new CommandLineRunner(new String[]{
+                "--warning_level=VERBOSE",
+                "--process_closure_primitives=true"
+        });
+
+        Result result = runner.createCompiler().compile(
+                Collections.emptyList(),
+                Collections.singletonList(SourceFile.fromCode("test.js", jsCode)),
+                options
+        );
+
+        boolean hasError = result.errors.stream()
+                .anyMatch(error -> error.description.contains("Unknown type Foo.Bar"));
+
+        assertTrue("The compiler did not report the expected type alias error.", hasError);
+    }
+}

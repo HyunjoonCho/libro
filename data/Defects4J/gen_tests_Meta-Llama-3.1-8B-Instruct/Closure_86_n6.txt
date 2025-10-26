@@ -1,0 +1,29 @@
+java
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
+import org.mozilla.javascript.Context;
+import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.Scriptable;
+
+import static org.junit.Assert.assertTrue;
+
+@RunWith(JUnit4.class)
+public class IssueTest {
+
+    @Test
+    public void testSideEffectsAnalysis() {
+        Context x = Context.enter();
+        ScriptableObject global = x.initStandardObjects();
+        x.setGlobal(global);
+
+        Scriptable foo = x.newObject(global);
+        foo.put("location", global, x.newString("http://example.com"));
+
+        x.evaluateString(global, "var self = this; window.setTimeout(function() { window.location = self.location; }, 0);", "test", 1, null);
+        x.evaluateString(global, "function setLocation(loc) { this.location = loc; }", "test", 1, null);
+
+        x.evaluateString(global, "var foo = new Object(); foo.setLocation('http://www.google.com/');", "test", 1, null);
+
+        String expectedLocation = "http://www.google.com/";
+        String actualLocation = x.evaluateString(global, "foo.location", "test", 1, null).toString

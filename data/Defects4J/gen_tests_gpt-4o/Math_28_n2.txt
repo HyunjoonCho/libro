@@ -1,0 +1,69 @@
+
+import org.apache.commons.math3.optim.linear.*;
+import org.apache.commons.math3.optim.nonlinear.scalar.GoalType;
+import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.SimplexSolver;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class SimplexSolverTest {
+
+    private static final int ENTITIES_COUNT = 15; // Test with 15 entities to induce issue
+
+    @Test
+    public void testUnboundedSolutionException() {
+        try {
+            LinearObjectiveFunction objectiveFunction = new LinearObjectiveFunction(
+                createCoefficients(ENTITIES_COUNT), 0);
+
+            List<LinearConstraint> constraints = createConstraints(ENTITIES_COUNT);
+
+            SimplexSolver solver = new SimplexSolver();
+            PointValuePair solution = solver.optimize(
+                new LinearConstraintSet(constraints),
+                objectiveFunction,
+                GoalType.MINIMIZE,
+                new NonNegativeConstraint(true)
+            );
+
+            // Add assertions based on expected behavior if needed
+            // For example, if you expect specific solution values
+            assertNotNull(solution);
+        } catch (UnboundedSolutionException e) {
+            fail("Unexpected UnboundedSolutionException for ENTITIES_COUNT = " + ENTITIES_COUNT);
+        }
+    }
+
+    private double[] createCoefficients(int count) {
+        double[] coefficients = new double[count + 1];
+        coefficients[0] = 1; // Objective function: min(1*t + 0*L)
+        return coefficients;
+    }
+
+    private List<LinearConstraint> createConstraints(int count) {
+        List<LinearConstraint> constraints = new ArrayList<>();
+        
+        for (int r = 1; r <= count; r++) {
+            // The constraints as specified: -q(r) + QL >= 0
+            double[] qConstraint = new double[count + 1];
+            qConstraint[0] = -1; // Coefficient for -q(r)
+            for (int j = 1; j <= count; j++) {
+                qConstraint[j] = 1; // Coefficients for QL
+            }
+            constraints.add(new LinearConstraint(qConstraint, Relationship.GEQ, 0));
+
+            // The constraints as specified: x(r)t - XL >= 0
+            double[] xConstraint = new double[count + 1];
+            xConstraint[0] = r; // Coefficient for x(r)t
+            for (int j = 1; j <= count; j++) {
+                xConstraint[j] = -1; // Coefficients for XL
+            }
+            constraints.add(new LinearConstraint(xConstraint, Relationship.GEQ, 0));
+        }
+
+        // Constraint: L >= 0 is covered by NonNegativeConstraint option in solver
+        return constraints;
+    }
+}

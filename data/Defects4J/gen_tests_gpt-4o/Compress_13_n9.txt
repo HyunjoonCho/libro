@@ -1,0 +1,44 @@
+
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.ArchiveInputStream;
+import org.apache.commons.compress.archivers.ArchiveStreamFactory;
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.junit.Test;
+
+import java.io.File;
+import java.io.FileInputStream;
+
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
+
+public class UmlautZipTest {
+
+    @Test
+    public void testZipWithUmlauts() throws Exception {
+        // Path to the zip file created with WinZip containing umlauts.
+        File zipFile = new File("path/to/umlaut_directory.zip");
+        
+        // Use ArchiveStreamFactory to create the ArchiveInputStream
+        try (FileInputStream fis = new FileInputStream(zipFile);
+             ArchiveInputStream ais = new ArchiveStreamFactory().createArchiveInputStream("zip", fis)) {
+            
+            ArchiveEntry entry;
+            while ((entry = ais.getNextEntry()) != null) {
+                String entryName = entry.getName();
+                if (entryName.contains("ä")) { // Look for the umlaut in the directory name
+                    // Assuming directories with umlauts are incorrectly not marked as directories
+                    assertFalse("Entry should be a directory but is not: " + entryName, entry.isDirectory());
+                    
+                    // Check if backslashes are used instead of slashes
+                    assertTrue("Entry name should contain backslashes instead of slashes: " + entryName, entryName.contains("\\"));
+                    
+                    if (entry instanceof ZipArchiveEntry) {
+                        ZipArchiveEntry zipEntry = (ZipArchiveEntry) entry;
+                        // Additional check to see the flag indicating if it's a directory
+                        assertFalse("ZipEntry should not be a directory incorrectly: " + entryName, zipEntry.isDirectory());
+                    }
+                }
+            }
+        }
+    }
+}

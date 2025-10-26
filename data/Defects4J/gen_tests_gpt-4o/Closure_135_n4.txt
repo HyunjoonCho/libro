@@ -1,0 +1,50 @@
+
+import static org.junit.Assert.assertEquals;
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.rhino.*;
+
+import org.junit.Test;
+
+public class InheritanceDetectionTest {
+
+    @Test
+    public void testInheritanceWithDirectPrototypeAssignment() {
+        String code = ""
+            + "/**\n"
+            + " * @constructor\n"
+            + " */\n"
+            + "function SuperClass() {}\n"
+            + "SuperClass.prototype.CustomMethod = function() {};\n"
+            + "/**\n"
+            + " * @constructor\n"
+            + " * @extends {SuperClass}\n"
+            + " */\n"
+            + "function SubClass() {}\n"
+            + "SubClass.prototype = new SuperClass();\n"
+            + "/**\n"
+            + " * @override\n"
+            + " */\n"
+            + "SubClass.prototype.CustomMethod = function() {"
+            + " this.myProperty = 'value';\n"
+            + "};\n"
+            + "window['SubClassInstance'] = new SubClass();\n";
+
+        // Setting up the compiler
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+        WarningLevel.VERBOSE.setOptionsForWarningLevel(options);
+
+        // Perform the compilation
+        Result result = compiler.compile(SourceFile.fromCode("externs.js", ""), SourceFile.fromCode("input.js", code), options);
+
+        // Check if any warnings related to overriding are present
+        long overrideWarnings = result.warnings.stream()
+            .filter(d -> d.getType().key.equals("JSC_UNKNOWN_OVERRIDE"))
+            .count();
+
+        // Verify that there are no override warnings
+        assertEquals("Expected no override warnings, but found some", 0, overrideWarnings);
+    }
+}

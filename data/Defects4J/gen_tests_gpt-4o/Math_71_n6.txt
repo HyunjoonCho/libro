@@ -1,0 +1,53 @@
+
+import org.apache.commons.math.ode.DormandPrince853Integrator;
+import org.apache.commons.math.ode.FirstOrderDifferentialEquations;
+import org.apache.commons.math.ode.sampling.StepHandler;
+import org.apache.commons.math.ode.sampling.StepInterpolator;
+import org.junit.Assert;
+import org.junit.Test;
+
+public class OdeIntegratorTest {
+
+    @Test
+    public void testMissedEvent() throws Exception {
+        final double t0 = 1878250320.0000029;
+        final double t = 1878250379.9999986;
+
+        FirstOrderDifferentialEquations ode = new FirstOrderDifferentialEquations() {
+
+            public int getDimension() {
+                return 1;
+            }
+
+            public void computeDerivatives(double t, double[] y, double[] yDot) {
+                yDot[0] = y[0] * 1.0e-6;
+            }
+        };
+
+        DormandPrince853Integrator integrator = new DormandPrince853Integrator(0.0, 100.0,
+                                                                               1.0e-10, 1.0e-10);
+
+        double[] y = { 1.0 };
+        integrator.setInitialStepSize(60.0);
+
+        // Add a step handler to monitor the integration steps
+        integrator.addStepHandler(new StepHandler() {
+            public boolean requiresDenseOutput() {
+                return false;
+            }
+
+            public void reset() {
+            }
+
+            public void handleStep(StepInterpolator interpolator, boolean isLast) {
+                double currentTime = interpolator.getCurrentTime();
+                if (currentTime > t) {
+                    Assert.fail("Integration exceeded the expected end time.");
+                }
+            }
+        });
+
+        double finalT = integrator.integrate(ode, t0, y, t, y);
+        Assert.assertEquals("Final integration time does not match expected end time.", t, finalT, 1.0e-6);
+    }
+}

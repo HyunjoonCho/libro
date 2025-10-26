@@ -1,0 +1,81 @@
+
+import static org.junit.Assert.*;
+
+import java.io.*;
+import java.nio.file.*;
+import org.apache.commons.compress.archivers.*;
+import org.apache.commons.compress.archivers.ar.*;
+
+import org.junit.*;
+
+public class ArArchiveDeleteTest {
+
+    private static final String ARCHIVE_NAME = "test.ar";
+    
+    @Before
+    public void createArArchive() throws IOException {
+        try (OutputStream out = Files.newOutputStream(Paths.get(ARCHIVE_NAME));
+             ArArchiveOutputStream arOut = new ArArchiveOutputStream(out)) {
+            addFileToArchive(arOut, "test1.xml", "Content of test1");
+            addFileToArchive(arOut, "test2.xml", "Content of test2");
+        }
+    }
+
+    @After
+    public void cleanUp() throws IOException {
+        Files.delete(Paths.get(ARCHIVE_NAME));
+    }
+
+    @Test
+    public void testDeleteEntryFromArArchive() throws IOException {
+        // Load existing archive
+        try (InputStream in = Files.newInputStream(Paths.get(ARCHIVE_NAME));
+             ArArchiveInputStream arIn = new ArArchiveInputStream(in)) {
+
+            // Create new archive without "test2.xml"
+            try (OutputStream out = Files.newOutputStream(Paths.get("modified_" + ARCHIVE_NAME));
+                 ArArchiveOutputStream arOut = new ArArchiveOutputStream(out)) {
+
+                ArchiveEntry entry;
+                while ((entry = arIn.getNextEntry()) != null) {
+                    if (!"test2.xml".equals(entry.getName())) {
+                        arOut.putArchiveEntry(new ArArchiveEntry(entry.getName(), entry.getSize()));
+                        byte[] content = new byte[(int) entry.getSize()];
+                        arIn.read(content);
+                        arOut.write(content);
+                        arOut.closeArchiveEntry();
+                    }
+                }
+            }
+        }
+
+        // Verify the archive content
+        try (InputStream in = Files.newInputStream(Paths.get("modified_" + ARCHIVE_NAME));
+             ArArchiveInputStream arIn = new ArArchiveInputStream(in)) {
+
+            ArArchiveEntry entry = arIn.getNextArEntry();
+            assertNotNull("First entry should not be null", entry);
+            assertEquals("First entry should be test1.xml", "test1.xml", entry.getName());
+
+            assertNull("Should have no more entries", arIn.getNextArEntry());
+        }
+
+        // Check using command line (this is for manual verification, usually not done in automated tests)
+        Process process = new ProcessBuilder("ar", "-t", "modified_" + ARCHIVE_NAME).start();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            String line = reader.readLine();
+            assertEquals("test1.xml", line);
+            assertNull("Should be no more files in the archive listing", reader.readLine());
+        }
+
+        Files.delete(Paths.get("modified_" + ARCHIVE_NAME));
+    }
+
+    private void addFileToArchive(ArArchiveOutputStream arOut, String name, String content) throws IOException {
+        byte[] contentBytes = content.getBytes();
+        ArArchiveEntry entry = new ArArchiveEntry(name, contentBytes.length);
+        arOut.putArchiveEntry(entry);
+        arOut.write(contentBytes);
+        arOut.closeArchiveEntry();
+    }
+}

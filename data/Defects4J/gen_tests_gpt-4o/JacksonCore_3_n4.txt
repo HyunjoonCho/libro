@@ -1,0 +1,61 @@
+
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.ObjectCodec;
+import com.fasterxml.jackson.core.io.IOContext;
+import com.fasterxml.jackson.core.json.UTF8StreamJsonParser;
+import com.fasterxml.jackson.core.sym.BytesToNameCanonicalizer;
+
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+public class UTF8StreamJsonParserTest {
+
+    public void testIncorrectColumnCalculation() {
+        byte[] input = "{\"key\": \"value\"}".getBytes(); // example JSON input
+        InputStream in = new ByteArrayInputStream(input);
+        
+        IOContext ctxt = new IOContext(null, null, false);
+        BytesToNameCanonicalizer sym = BytesToNameCanonicalizer.createRoot();
+        ObjectCodec codec = null; // As per Jackson's use case, might be optional
+
+        // Start the parser with an offset position that is NOT zero
+        int customStartPosition = 10;
+
+        UTF8StreamJsonParser parser = new UTF8StreamJsonParser(
+            ctxt, 
+            JsonParser.Feature.collectDefaults(),
+            in, 
+            codec, 
+            sym, 
+            input, 
+            customStartPosition, 
+            input.length, 
+            true
+        );
+
+        try {
+            // Intentionally cause a parsing exception by expecting incorrect token
+            while (parser.nextToken() != JsonToken.END_OBJECT) {
+                // Attempt to parse JSON and expect a failure
+                if (parser.getCurrentToken() == JsonToken.FIELD_NAME) {
+                    if ("key".equals(parser.getCurrentName())) {
+                        parser.nextToken(); // move to value token
+                        // Introduce an error: expect a number, but get a string
+                        parser.getDoubleValue();
+                    }
+                }
+            }
+            fail("Expected JsonParseException due to type mismatch");
+        } catch (JsonParseException e) {
+            // Check if the reported column is incorrect due to the bug
+            assertEquals("Expected column calculation to consider custom start position",
+                         customStartPosition + 9 /*adjust expected column*/,
+                         e.getLocation().getColumnNr());
+        }
+    }
+}

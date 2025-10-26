@@ -1,0 +1,75 @@
+java
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.PrintStream;
+
+import javax.tools.JavaCompiler;
+import javax.tools.JavaCompiler.CompilationTask;
+import javax.tools.JavaFileObject;
+import javax.tools.StandardJavaFileManager;
+import javax.tools.ToolProvider;
+
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
+
+import static org.junit.Assert.assertEquals;
+
+@RunWith(Parameterized.class)
+public class AdvancedOptimizationsTest {
+    @Rule
+    public TemporaryFolder folder = new TemporaryFolder();
+
+    @Parameterized.Parameter(0)
+    public String inputJs;
+
+    @Parameterized.Parameter(1)
+    public String expectedOutput;
+
+    @Parameterized.Parameters
+    public static Object[][] data() {
+        return new Object[][] {
+            {"window['anchor'] = function (obj, modifiesProp) { return (function (saved) { return modifiesProp(obj) + saved; })(obj['prop']); };", "window.foo=function(a,b){var HOLD=a.prop;return b(a)+HOLD};"},
+            // Add more test cases as needed
+        };
+    }
+
+    @Before
+    public void setup() throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(bos));
+    }
+
+    @Test
+    public void testAdvancedOptimizations() throws IOException {
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, null, null);
+        JavaFileObject sourceFile = fileManager.getJavaFileObject("input", JavaFileObject.Kind.SOURCE);
+        JavaFileObject output = fileManager.getJavaFileObject("output", JavaFileObject.Kind.CLASS);
+
+        CompilationTask task = compiler.getTask(null, fileManager, null, null, null, sourceFile);
+        task.compile();
+
+        String[] args = new String[] {
+            "-cp", folder.getRoot().getAbsolutePath(),
+            "--compilation_level", "ADVANCED_OPTIMIZATIONS",
+            "--warning_level", "VERBOSE",
+            "--externs", "window.js",
+            "--js", sourceFile.getName(),
+            "--js_output_file", output.getName()
+        };
+
+        ProcessBuilder builder = new ProcessBuilder(args);
+        builder.directory(folder.getRoot());
+        Process process = builder.start();
+        process.waitFor();
+
+        String outputStr = bos.toString();
+        assertEquals(expectedOutput, outputStr);
+    }
+}

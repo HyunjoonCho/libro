@@ -1,0 +1,87 @@
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import org.junit.Assert;
+import org.junit.Test;
+
+import java.io.IOException;
+
+public class CustomDeserializerTest {
+
+    static class DataA {
+        public int i = 1;
+        public int j = 2;
+    }
+
+    static class DataB {
+        public DataA da = new DataA();
+        public int k = 3;
+    }
+
+    static class DataADeserializer extends StdDeserializer<DataA> {
+        private static final long serialVersionUID = 1L;
+
+        DataADeserializer() {
+            super(DataA.class);
+        }
+
+        @Override
+        public DataA deserialize(JsonParser jp, DeserializationContext ctxt)
+                throws IOException, JsonProcessingException {
+            assert (jp.getCurrentToken() == JsonToken.START_OBJECT);
+            JsonNode node = jp.getCodec().readTree(jp);
+
+            DataA da = new DataA();
+            da.i = 5; // Modify the value to match the desired state after deserialization
+            return da;
+        }
+    }
+
+    @Test
+    public void testCustomDeserializerWithParentUpdate() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+        module.addDeserializer(DataA.class, new DataADeserializer());
+        mapper.registerModule(module);
+
+        DataB db = new DataB();
+        db.da.i = 11;
+        db.k = 13;
+
+        // Serialize to JSON format string and JSON node
+        String jsonBString = mapper.writeValueAsString(db);
+        JsonNode jsonBNode = mapper.valueToTree(db);
+
+        // Validate deserialization into new objects
+        DataB dbNewViaString = mapper.readValue(jsonBString, DataB.class);
+        DataB dbNewViaNode = mapper.treeToValue(jsonBNode, DataB.class);
+
+        Assert.assertEquals(5, dbNewViaString.da.i);
+        Assert.assertEquals(13, dbNewViaString.k);
+
+        Assert.assertEquals(5, dbNewViaNode.da.i);
+        Assert.assertEquals(13, dbNewViaNode.k);
+
+        // Test updating an existing object with String JSON
+        DataB dbUpdViaString = new DataB();
+        mapper.readerForUpdating(dbUpdViaString).readValue(jsonBString);
+
+        Assert.assertEquals(5, dbUpdViaString.da.i);
+        Assert.assertEquals(13, dbUpdViaString.k);
+
+        // Test updating an existing object with JsonNode - this is where the issue arises
+        DataB dbUpdViaNode = new DataB();
+
+        // This line throws exception due to incorrect handling during deserialization update
+        mapper.readerForUpdating(dbUpdViaNode).readValue(jsonBNode);
+
+        Assert.assertEquals(5, dbUpdViaNode.da.i); // This fails due to the bug
+        Assert.assertEquals(13, dbUpdViaNode.k);   // This fails due to the bug
+    }
+}

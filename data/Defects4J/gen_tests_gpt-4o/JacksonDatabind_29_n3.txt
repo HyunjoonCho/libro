@@ -1,0 +1,55 @@
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class PolymorphicNullTypeIdTest {
+
+    static class Wrapper {
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "type")
+        public Base value;
+    }
+
+    interface Base {}
+
+    static class Impl implements Base {
+        public int data;
+
+        public Impl() {}
+        
+        public Impl(int data) {
+            this.data = data;
+        }
+    }
+
+    @Test
+    void testNullTypeIdForExternalId() {
+        ObjectMapper mapper = new ObjectMapper();
+        Wrapper wrapper = new Wrapper();
+        wrapper.value = new Impl(42);
+
+        // Serialize wrapper without "type" property
+        try {
+            // Serialize the Wrapper object without the "type" property
+            String jsonWithoutType = mapper.writeValueAsString(wrapper).replaceFirst("\"type\":\"Impl\",", "");
+            assertNotNull(jsonWithoutType);
+
+            // Attempt to deserialize
+            Exception exception = assertThrows(InvalidTypeIdException.class, () -> {
+                mapper.readValue(jsonWithoutType, Wrapper.class);
+            });
+
+            String expectedMessage = "Missing type id when trying to resolve subtype of [simple type, class PolymorphicNullTypeIdTest$Base]";
+            String actualMessage = exception.getMessage();
+
+            assertTrue(actualMessage.contains(expectedMessage));
+
+        } catch (JsonProcessingException e) {
+            fail("Serialization failed: " + e.getMessage());
+        }
+    }
+}

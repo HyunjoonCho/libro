@@ -1,0 +1,63 @@
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
+import com.fasterxml.jackson.annotation.JsonTypeInfo.Id;
+import com.fasterxml.jackson.annotation.JsonTypeInfo.Property;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class ExternalTypeIdDeserializationTest {
+
+    @JsonTypeInfo(use = Id.NAME, include = Property.EXTERNAL_PROPERTY, property = "type")
+    @JsonSubTypes({ 
+        @JsonSubTypes.Type(value = Car.class, name = "car"),
+        @JsonSubTypes.Type(value = Truck.class, name = "truck")
+    })
+    public static abstract class Vehicle {
+        public int wheels;
+    }
+
+    public static class Car extends Vehicle {
+        public boolean hasSunroof;
+
+        public Car() {
+        }
+
+        public Car(int wheels, boolean hasSunroof) {
+            this.wheels = wheels;
+            this.hasSunroof = hasSunroof;
+        }
+    }
+
+    public static class Truck extends Vehicle {
+        public double payloadCapacity;
+
+        public Truck() {
+        }
+
+        public Truck(int wheels, double payloadCapacity) {
+            this.wheels = wheels;
+            this.payloadCapacity = payloadCapacity;
+        }
+    }
+
+    // Test to reproduce the issue
+    @Test
+    public void testExternalTypeIdDeserialization() throws JsonProcessingException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        String jsonInput = "{\"type\":\"car\",\"wheels\":4,\"hasSunroof\":true}";
+
+        // Attempt to deserialize
+        Vehicle vehicle = objectMapper.readValue(jsonInput, Vehicle.class);
+
+        // Validate the results
+        assertEquals(Car.class, vehicle.getClass());
+        Car car = (Car) vehicle;
+        assertEquals(4, car.wheels);
+        assertEquals(true, car.hasSunroof);
+    }
+}

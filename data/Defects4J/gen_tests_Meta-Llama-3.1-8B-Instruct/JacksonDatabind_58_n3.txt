@@ -1,0 +1,38 @@
+java
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import org.junit.Test;
+
+import java.lang.reflect.Field;
+
+public class TestJackson {
+    @Test(expected = IllegalArgumentException.class)
+    public void testIgnoreCause() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+        mapper.configure(SerializationFeature.CAN_OVERRIDE_ACCESS_MODIFIERS, false);
+
+        MyException exception = new MyException("Test message");
+        exception.initCause(new Exception("Inner cause"));
+        String json = mapper.writeValueAsString(exception);
+
+        // Trying to deserialize with ignore cause annotation
+        mapper.configure(SerializationFeature.CAN_OVERRIDE_ACCESS_MODIFIERS, true);
+        mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, true);
+        mapper.addMixInAnnotations(MyException.class, IgnoreCauseMixin.class);
+        mapper.readValue(json, MyException.class);
+    }
+
+    public static class MyException extends RuntimeException {
+        public MyException(String message) {
+            super(message);
+        }
+
+        @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
+        public Exception cause;
+
+        public void initCause(Exception cause) {
+            this.cause = cause;
+        }
+   

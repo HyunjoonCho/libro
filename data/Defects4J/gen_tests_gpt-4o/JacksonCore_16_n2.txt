@@ -1,0 +1,48 @@
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.util.JsonParserSequence;
+import org.junit.Test;
+
+import java.io.IOException;
+
+import static org.junit.Assert.assertEquals;
+
+public class JsonParserSequenceTest {
+
+    @Test
+    public void testJsonParserSequenceTokenSkipping() throws IOException {
+        JsonFactory factory = new JsonFactory();
+
+        // First parser with a simple JSON object
+        JsonParser parser1 = factory.createParser("{\"key1\":\"value1\"}");
+        // Second parser starts directly with a token that shouldn't be skipped
+        JsonParser parser2 = factory.createParser("{\"key2\":\"value2\"}");
+
+        // Create a JsonParserSequence by concatenating parser1 and parser2
+        JsonParserSequence sequence = JsonParserSequence.createFlattened(parser1, parser2);
+
+        // Expecting tokens from both parsers in order
+
+        // First object from parser1
+        assertEquals(JsonToken.START_OBJECT, sequence.nextToken());
+        assertEquals(JsonToken.FIELD_NAME, sequence.nextToken()); // "key1"
+        assertEquals("key1", sequence.getCurrentName());
+        assertEquals(JsonToken.VALUE_STRING, sequence.nextToken()); // "value1"
+        assertEquals("value1", sequence.getText());
+        assertEquals(JsonToken.END_OBJECT, sequence.nextToken());
+
+        // Second object from parser2
+        // Verify that the first token of parser2 is not skipped
+        assertEquals(JsonToken.START_OBJECT, sequence.nextToken());
+        assertEquals(JsonToken.FIELD_NAME, sequence.nextToken()); // "key2"
+        assertEquals("key2", sequence.getCurrentName());
+        assertEquals(JsonToken.VALUE_STRING, sequence.nextToken()); // "value2"
+        assertEquals("value2", sequence.getText());
+        assertEquals(JsonToken.END_OBJECT, sequence.nextToken());
+
+        // Ensure no more tokens are available
+        assertEquals(null, sequence.nextToken());
+    }
+}

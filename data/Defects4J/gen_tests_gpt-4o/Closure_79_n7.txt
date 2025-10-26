@@ -1,0 +1,50 @@
+
+import org.junit.Test;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+
+public class CompilerTest {
+
+    @Test(expected = RuntimeException.class)
+    public void testExternPrototypeRuntimeException() throws IOException, InterruptedException {
+        // Create dummy 'prototype.js' file to simulate the error environment
+        File prototypeFile = new File("prototype.js");
+        try (FileWriter prototypeWriter = new FileWriter(prototypeFile)) {
+            prototypeWriter.write("(function() {\n");
+            prototypeWriter.write("    function Str(key, holder, stack) {}\n");
+            prototypeWriter.write("})();\n");
+        }
+
+        // Create dummy 'bootloader.js' file, we assume it's empty or minimal for the test
+        File bootloaderFile = new File("bootloader.js");
+        if (!bootloaderFile.exists()) {
+            bootloaderFile.createNewFile();
+        }
+
+        // Execute the command
+        try {
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                    "java", "-jar", "compiler.jar",
+                    "--compilation_level", "ADVANCED_OPTIMIZATIONS",
+                    "--externs", "prototype.js",
+                    "--js", "bootloader.js");
+            processBuilder.redirectErrorStream(true);
+            
+            Process process = processBuilder.start();
+            process.waitFor(); // Wait for the process to finish
+
+            // Read output (in a real test, you might want to analyze this)
+            String output = new String(Files.readAllBytes(process.getInputStream()), "UTF-8");
+            System.out.println(output);
+
+            // Since we expect a RuntimeException, the test should throw it, leading to test success.
+
+        } finally {
+            // Clean up created files to avoid side effects
+            prototypeFile.delete();
+            bootloaderFile.delete();
+        }
+    }
+}

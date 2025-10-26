@@ -1,0 +1,36 @@
+
+import com.google.javascript.jscomp.*;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testClosureCompilerMinificationError() {
+        String jsCode = "function urlEncodeIfNecessary(s) {" +
+                        " var regex = /[\\\"<>\.;]/;" +
+                        " var hasBadChars = regex.exec(s) != null;" +
+                        " return hasBadChars && typeof encodeURIComponent != 'undefined' ? encodeURIComponent(s) : s;" +
+                        "}";
+
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        
+        // Set up the compiler options, enabling aggressive optimizations to simulate the error
+        CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        JSSourceFile extern = JSSourceFile.fromCode("externs.js", "function encodeURIComponent(s) {}");
+        JSSourceFile input = JSSourceFile.fromCode("input.js", jsCode);
+
+        // Run the compiler
+        try {
+            compiler.compile(extern, input, options);
+            String minifiedCode = compiler.toSource();
+
+            // Check if the compiler transformed the regex incorrectly
+            assertFalse(minifiedCode.contains("[\\\"<>\.;]")); // Should flag the correct handling of regex
+        } catch (Exception e) {
+            fail("Compilation failed with exception: " + e.getMessage());
+        }
+    }
+}

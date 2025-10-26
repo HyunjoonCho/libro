@@ -1,0 +1,47 @@
+
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.zip.GZIPInputStream;
+
+import static org.junit.Assert.*;
+
+public class TarPaxHeaderTest {
+
+    @Test
+    public void testPaxHeaderEntryWithTrailingSlash() throws IOException {
+        // Prepare a synthetic tar file with a PAX header entry ending with "/"
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        TarArchiveEntry paxHeaderEntry = new TarArchiveEntry("path/to/paxheader/", true);
+        paxHeaderEntry.setSize(0);
+        
+        try (TarArchiveInputStream tarInput = new TarArchiveInputStream(new GZIPInputStream(
+                new ByteArrayInputStream(createTarWithPaxHeader(paxHeaderEntry).toByteArray())))) {
+            
+            TarArchiveEntry entry;
+            boolean foundPaxHeader = false;
+
+            while ((entry = tarInput.getNextTarEntry()) != null) {
+                if (entry.isPaxHeader() && entry.getName().endsWith("/") && !entry.isDirectory()) {
+                    foundPaxHeader = true;
+                }
+            }
+
+            assertTrue("PAX header entry with trailing slash should not be mistaken as a directory.", foundPaxHeader);
+        }
+    }
+
+    private ByteArrayOutputStream createTarWithPaxHeader(TarArchiveEntry paxHeaderEntry) throws IOException {
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        try (TarArchiveInputStream tarInput = new TarArchiveInputStream(new ByteArrayInputStream(byteArrayOutputStream.toByteArray()))) {
+            while (tarInput.getNextTarEntry() != null) {
+                tarInput.closeEntry();
+            }
+        }
+        return byteArrayOutputStream;
+    }
+}

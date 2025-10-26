@@ -1,0 +1,60 @@
+java
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectOutputStream;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.Assert.fail;
+
+@RunWith(JUnit4.class)
+public class InvokerTransformerTest {
+
+    @Test
+    public void testArbitraryRemoteCodeExecution() {
+        try {
+            Map<String, String> map = new HashMap<>();
+            map.put("key", "value");
+
+            Set<Map.Entry<String, String>> set = map.entrySet();
+
+            // Create an InvocationHandler that executes arbitrary code
+            InvocationHandler handler = new InvocationHandler() {
+                @Override
+                public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                    if (method.getName().equals("add")) {
+                        System.out.println("Invoking add method with args: " + args);
+                        // Execute arbitrary code here
+                        Runtime.getRuntime().exec("calc.exe");
+                        return null;
+                    } else {
+                        return null;
+                    }
+                }
+            };
+
+            // Serialize the map and the InvocationHandler
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            ObjectOutputStream oos = new ObjectOutputStream(bos);
+            oos.writeObject(set);
+            oos.writeObject(handler);
+            oos.close();
+
+            // Deserialize the objects
+            ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(bos.toByteArray()));
+            Set<Map.Entry<String, String>> deserializedSet = (Set<Map.Entry<String, String>>) ois.readObject();
+            InvocationHandler deserializedHandler = (InvocationHandler) ois.readObject();
+
+            // Invoke the add method on the deserialized set
+            deserializedSet.iterator().next().getEntry().add("new value");
+            fail("Expected a security exception");
+        } catch (Exception e) {
+            // Expected exception
+        }
+    }
+}

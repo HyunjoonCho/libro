@@ -1,0 +1,73 @@
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+
+// Step 1: Create a custom collection class
+class CustomStringCollection {
+    private final Set<String> strings;
+
+    public CustomStringCollection(Collection<String> strings) {
+        this.strings = Collections.unmodifiableSet(new HashSet<>(strings));
+    }
+
+    public Set<String> getStrings() {
+        return strings;
+    }
+}
+
+// Step 2: Create a class that uses this custom collection
+class DataClass {
+    private CustomStringCollection customCollection;
+
+    // Create a getter to ensure Jackson uses it
+    public CustomStringCollection getCustomCollection() {
+        return customCollection;
+    }
+
+    // Necessary setter for deserialization
+    public void setCustomCollection(CustomStringCollection customCollection) {
+        this.customCollection = customCollection;
+    }
+}
+
+// Step 3: Create a test case to demonstrate the issue
+public class CustomCollectionDeserializationTest {
+
+    @Test
+    public void testCustomCollectionDeserialization() throws Exception {
+        String json = "{\"customCollection\": [\"value1\", \"value2\"]}";
+
+        ObjectMapper mapper = new ObjectMapper();
+
+        // Register a custom deserializer if necessary
+        SimpleModule module = new SimpleModule();
+        module.addDeserializer(CustomStringCollection.class, new CustomStringCollectionDeserializer());
+        mapper.registerModule(module);
+
+        // Attempt to deserialize the JSON into an instance of DataClass
+        DataClass dataClass = mapper.readValue(json, DataClass.class);
+
+        // Verify the result
+        CustomStringCollection customCollection = dataClass.getCustomCollection();
+        assertNotNull(customCollection);
+        assertTrue(customCollection.getStrings().contains("value1"));
+        assertTrue(customCollection.getStrings().contains("value2"));
+    }
+
+}
+
+// Optional: Create a custom deserializer
+class CustomStringCollectionDeserializer extends com.fasterxml.jackson.databind.JsonDeserializer<CustomStringCollection> {
+    @Override
+    public CustomStringCollection deserialize(com.fasterxml.jackson.core.JsonParser p, com.fasterxml.jackson.databind.DeserializationContext ctxt) throws java.io.IOException {
+        Collection<String> strings = ctxt.readValue(p, Set.class);
+        return new CustomStringCollection(strings);
+    }
+}

@@ -1,0 +1,50 @@
+
+import com.google.javascript.jscomp.CommandLineRunner;
+import org.junit.Test;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+
+import static org.junit.Assert.assertEquals;
+
+public class ProcessCommonJSModulesTest {
+
+    @Test
+    public void testProcessCommonJSModulesWithCheckTypes() throws Exception {
+        // Prepare the echo.js and echo-main.js as inputs
+        String echoJs = "define(function() { return { echo: function(val) { window.console.log(val); } } });";
+        String echoMainJs = "var echo = require('echo'); echo.echo('hello world');";
+
+        // Redirect System.out to capture the compiler output
+        ByteArrayOutputStream outContent = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(outContent));
+
+        // Define the compilation arguments
+        String[] args = {
+            "--jscomp_error=checkTypes",
+            "--compilation_level=SIMPLE_OPTIMIZATIONS",
+            "--formatting=PRETTY_PRINT",
+            "--transform_amd_modules",
+            "--process_common_js_modules",
+            "--js=" + tempFile("echo.js", echoJs),
+            "--js=" + tempFile("echo-main.js", echoMainJs),
+            "--common_js_entry_module=echo-main.js"
+        };
+
+        // Run the closure compiler
+        CommandLineRunner runner = new CommandLineRunner(args);
+        runner.run();
+
+        // Assert that the output contains the expected error message
+        String output = outContent.toString();
+        assertEquals(true, output.contains("ERROR - Property module$exports never defined on module$echo_main"));
+    }
+
+    private String tempFile(String filename, String content) throws Exception {
+        File file = new File(System.getProperty("java.io.tmpdir") + "/" + filename);
+        FileWriter writer = new FileWriter(file);
+        writer.write(content);
+        writer.close();
+        return file.getAbsolutePath();
+    }
+}

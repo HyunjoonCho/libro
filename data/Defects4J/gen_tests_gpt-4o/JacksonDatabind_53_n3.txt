@@ -1,0 +1,78 @@
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Map;
+import java.util.UUID;
+
+// Custom interface with a contract requiring an "id" property
+interface MyCustomIdInterface {
+    UUID getId();
+}
+
+// Implementation of the interface
+class Foo implements MyCustomIdInterface {
+    private UUID id;
+    private String property;
+
+    @Override
+    public UUID getId() {
+        return id;
+    }
+
+    public void setId(UUID id) {
+        this.id = id;
+    }
+
+    @JsonProperty("property")
+    public void setProperty(String property) {
+        this.property = property;
+    }
+
+    @JsonProperty("property")
+    public String getProperty() {
+        return property;
+    }
+}
+
+// Custom Map class with generics, extending a HashMap
+class MyHashMap<K, V extends MyCustomIdInterface> extends java.util.HashMap<K, V> {
+    // Custom logic can be added here if needed
+}
+
+// Test class
+public class JsonDeserializeTest {
+
+    @Test
+    public void testJsonDeserializeWithCustomMap() throws IOException {
+        String json = "{ \"something\": [{ \"id\": \"123e4567-e89b-12d3-a456-426614174000\", \"property\": \"value\" }] }";
+
+        ObjectMapper mapper = new ObjectMapper();
+        // Here we expect a successful deserialization in versions prior to 2.7.x
+        MyContainer container = mapper.readValue(json, new TypeReference<MyContainer>() {});
+
+        Map<UUID, Foo> somethingMap = container.getSomething();
+        assertEquals(1, somethingMap.size());
+        Foo foo = somethingMap.get(UUID.fromString("123e4567-e89b-12d3-a456-426614174000"));
+        assertNotNull(foo);
+        assertEquals("value", foo.getProperty());
+    }
+
+    // The container class used to hold the deserialized content
+    static class MyContainer {
+        private Map<UUID, Foo> something;
+
+        @JsonDeserialize(as = MyHashMap.class)
+        public void setSomething(Map<UUID, Foo> incomingValue) {
+            this.something = incomingValue;
+        }
+
+        public Map<UUID, Foo> getSomething() {
+            return something;
+        }
+    }
+}

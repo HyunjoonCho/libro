@@ -1,0 +1,59 @@
+
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
+import org.apache.commons.compress.archivers.zip.ZipFile;
+import org.apache.tika.Tika;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+
+import static org.junit.Assert.assertNotNull;
+
+public class TikaZipTest {
+
+    @Test
+    public void testTikaDetectsZipWithZeroSizedUxEntry() throws IOException {
+        // Create a ZIP file in memory with a 0-sized "ux" field
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try (ZipArchiveOutputStream zos = new ZipArchiveOutputStream(baos)) {
+            ZipArchiveEntry entry = new ZipArchiveEntry("test.jpg");
+            entry.addExtraField(new TestWithZeroSizedUx());
+            zos.putArchiveEntry(entry);
+            zos.write(new byte[]{1, 2, 3, 4, 5}); // Dummy image data
+            zos.closeArchiveEntry();
+        }
+
+        byte[] zipContent = baos.toByteArray();
+
+        // Use Tika to detect the content type
+        Tika tika = new Tika();
+        String detectedType = null;
+        try (ByteArrayInputStream bais = new ByteArrayInputStream(zipContent)) {
+            detectedType = tika.detect(bais, new File("TR_01.ZIP"));
+        }
+
+        // Assert that the content type is detected correctly
+        assertNotNull(detectedType);
+    }
+
+    // Custom extra field to simulate the 0-sized "ux" local entry
+    private static class TestWithZeroSizedUx extends org.apache.commons.compress.archivers.zip.X7875_NewUnix {
+        @Override
+        public void parseFromLocalFileData(byte[] data, int offset, int length) {
+            // Intentionally provide empty implementation to simulate the zero-sized data case.
+        }
+
+        @Override
+        public int getLocalFileDataLength() {
+            return 0; // simulate 0-sized data length for "ux" entry
+        }
+
+        @Override
+        public byte[] getLocalFileDataData() {
+            return new byte[0]; // empty data
+        }
+    }
+}

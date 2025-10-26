@@ -1,0 +1,86 @@
+
+import org.apache.commons.compress.archivers.ArchiveOutputStream;
+import org.junit.Test;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+
+import static org.junit.Assert.fail;
+
+public class ArchiveOutputStreamTest {
+
+    @Test
+    public void testDirectFinishCall() {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        
+        // Using a hypothetical implementation of ArchiveOutputStream for demonstration.
+        ArchiveOutputStream archiveOutputStream = new DummyArchiveOutputStream(baos);
+        
+        try {
+            // Attempt to call finish() directly before close()
+            archiveOutputStream.finish();
+            
+            // Add some additional writes here to simulate corruption
+            archiveOutputStream.write(0); // Simulating a write after finish
+            
+            archiveOutputStream.close();   // Normally finish should be called here
+            
+            // If modifications like above are allowed after calling finish() directly,
+            // then this could lead to corrupted output or unexpected results.
+        } catch (IOException e) {
+            fail("An IOException occurred: " + e.getMessage());
+        }
+    }
+
+    // Dummy implementation for demonstration purposes
+    static class DummyArchiveOutputStream extends ArchiveOutputStream {
+
+        private boolean finished;
+        private final ByteArrayOutputStream baos;
+
+        public DummyArchiveOutputStream(ByteArrayOutputStream baos) {
+            this.baos = baos;
+            this.finished = false;
+        }
+
+        @Override
+        public void finish() throws IOException {
+            // Mark as finished and perform finishing operations
+            if (!finished) {
+                baos.write("Finished".getBytes());
+                finished = true;
+            }
+        }
+
+        @Override
+        public void close() throws IOException {
+            if (!finished) {
+                finish();
+            }
+            baos.close();
+        }
+
+        @Override
+        public void putArchiveEntry(ArchiveEntry entry) throws IOException {
+            // Dummy implementation
+        }
+
+        @Override
+        public void closeArchiveEntry() throws IOException {
+            // Dummy implementation
+        }
+
+        @Override
+        public void write(int b) throws IOException {
+            if (finished) {
+                throw new IOException("Cannot write after finish() is called.");
+            }
+            baos.write(b);
+        }
+
+        @Override
+        public long getBytesWritten() {
+            return baos.size();
+        }
+    }
+}

@@ -1,0 +1,49 @@
+
+import org.apache.commons.compress.archivers.tar.*;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+
+import static org.junit.Assert.assertTrue;
+
+public class TarArchiveTest {
+
+    @Test
+    public void testPaxHeaderWithTrailingSlash() throws IOException {
+        try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+             TarArchiveOutputStream tarOutput = new TarArchiveOutputStream(byteArrayOutputStream)) {
+             
+            TarArchiveEntry paxHeaderEntry = new TarArchiveEntry("./paxheader/", TarConstants.LF_PAX_EXTENDED_HEADER_LC);
+            paxHeaderEntry.setSize(0);
+            tarOutput.putArchiveEntry(paxHeaderEntry);
+            tarOutput.closeArchiveEntry();
+            
+            TarArchiveEntry normalEntry = new TarArchiveEntry("normalfile.txt");
+            normalEntry.setSize(12);
+            tarOutput.putArchiveEntry(normalEntry);
+            tarOutput.write("Hello World!".getBytes());
+            tarOutput.closeArchiveEntry();
+            
+            tarOutput.finish();
+
+            try (TarArchiveInputStream tarInput = new TarArchiveInputStream(
+                    new ByteArrayInputStream(byteArrayOutputStream.toByteArray()))) {
+                
+                TarArchiveEntry entry = tarInput.getNextTarEntry();
+                if (entry.isPaxHeader()) {
+                    assertTrue(entry.getName().endsWith("/"));
+                }
+                
+                entry = tarInput.getNextTarEntry();
+                assertTrue(entry.getName().equals("normalfile.txt"));
+                
+                byte[] content = new byte[12];
+                int bytesRead = tarInput.read(content);
+                assertTrue(bytesRead == 12);
+                assertTrue(new String(content).equals("Hello World!"));
+            }
+        }
+    }
+}

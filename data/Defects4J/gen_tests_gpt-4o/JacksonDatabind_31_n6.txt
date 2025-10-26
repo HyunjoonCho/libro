@@ -1,0 +1,53 @@
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.JsonStreamContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class JsonStreamContextTest {
+
+    static class TestData {
+        public String name;
+        public int value;
+
+        public TestData(String name, int value) {
+            this.name = name;
+            this.value = value;
+        }
+    }
+
+    @Test
+    public void testJsonStreamContextDifferences() throws JsonProcessingException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
+
+        TestData testData = new TestData("example", 42);
+
+        // Serialize (write) the object to JSON and inspect the context
+        String jsonString = objectMapper.writeValueAsString(testData);
+        JsonStreamContext writeContext = objectMapper.getFactory().getCodec().readTree(jsonString)
+                .traverse()
+                .getParsingContext();
+
+        System.out.println("Write Context: " + contextToString(writeContext));
+
+        // Convert the object to JSON using Tree Model API and inspect the context
+        TestData convertedData = objectMapper.convertValue(testData, TestData.class);
+        JsonStreamContext convertContext = objectMapper.writeTree(objectMapper.valueToTree(convertedData))
+                .traverse()
+                .getParsingContext();
+
+        System.out.println("Convert Context: " + contextToString(convertContext));
+
+        // Assert that write and convert contexts are not equal (or are, depending on expected behavior)
+        // This might need to be adjusted based on what constitutes 'different' in the contexts.
+        assertEquals("Contexts should have different characteristics", contextToString(writeContext), contextToString(convertContext));
+    }
+
+    private String contextToString(JsonStreamContext context) {
+        return String.format("Type: %s, CurrentName: %s, Depth: %d", context.getCurrentNode() != null ? context.getCurrentNode().getClass().getSimpleName() : "null", context.getCurrentName(), context.getCurrentIndex());
+    }
+}

@@ -1,0 +1,63 @@
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
+import javax.script.Invocable;
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineManager;
+import javax.script.ScriptException;
+
+import org.junit.Test;
+
+public class ArgumentScopeTest {
+
+    @Test
+    public void testArgumentsNotMovedToAnotherScope() throws ScriptException, NoSuchMethodException, InterruptedException {
+        // Prepare the JavaScript code
+        String originalScript = 
+            "function testFunction() {" +
+            "  var arg = arguments;" +
+            "  setTimeout(function() { callback(arg.length); }, 0);" +
+            "}" +
+            "function callback(result) { JavaCallback.resultReceived(result); }";
+
+        // Setup a script engine for JavaScript
+        ScriptEngineManager manager = new ScriptEngineManager();
+        ScriptEngine engine = manager.getEngineByName("nashorn");
+
+        // Evaluate the script
+        engine.eval(originalScript);
+
+        // A simple callback interface for JavaScript to Java call
+        class JavaCallback {
+            private int result = -1;
+            private CountDownLatch latch = new CountDownLatch(1);
+
+            public void resultReceived(int receivedResult) {
+                result = receivedResult;
+                latch.countDown();
+            }
+
+            public int getResult() throws InterruptedException {
+                if (latch.await(1, TimeUnit.SECONDS))
+                    return result;
+                else 
+                    throw new IllegalStateException("JavaScript execution took too long");
+            }
+        }
+        
+        // Bind the callback to allow JavaScript to call into Java
+        JavaCallback javaCallback = new JavaCallback();
+        engine.put("JavaCallback", javaCallback);
+
+        // Invoke the function with arguments
+        Invocable invocable = (Invocable) engine;
+        invocable.invokeFunction("testFunction", "arg1", "arg2", "arg3");
+
+        // Validate the callback received the correct number of arguments
+        assertEquals(3, javaCallback.getResult());
+    }
+}

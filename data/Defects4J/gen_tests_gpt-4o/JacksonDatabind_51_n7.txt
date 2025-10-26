@@ -1,0 +1,73 @@
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.impl.TypeIdResolverBase;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+// Define a base interface for our generic type
+interface Container<T> {
+    T getValue();
+}
+
+// Implement a generic Container
+class GenericContainer<T> implements Container<T> {
+    private T value;
+
+    public GenericContainer(T value) {
+        this.value = value;
+    }
+
+    @Override
+    public T getValue() {
+        return value;
+    }
+}
+
+// Custom TypeIdResolver that should return a type with a generic type parameter
+class CustomTypeIdResolver extends TypeIdResolverBase {
+    @Override
+    public String idFromValue(Object value) {
+        return value.getClass().getName();
+    }
+
+    @Override
+    public JsonTypeInfo.Id getMechanism() {
+        return JsonTypeInfo.Id.CUSTOM;
+    }
+
+    @Override
+    public JavaType typeFromId(DatabindContext context, String id) throws IOException {
+        // Simulating a generic type resolution
+        if (id.equals(GenericContainer.class.getName())) {
+            return TypeFactory.defaultInstance().constructParametricType(GenericContainer.class, String.class);
+        }
+        return super.typeFromId(context, id);
+    }
+}
+
+// Test class to serialize and deserialize objects
+public class GenericTypeTest {
+
+    @Test
+    public void testGenericTypeWithCustomIdResolver() throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new SimpleModule().addTypeResolverBuilder(
+            new CustomTypeIdResolverBuilder()));
+
+        Container<String> container = new GenericContainer<>("test value");
+
+        // Serialize the container
+        String json = mapper.writeValueAsString(container);
+
+        // Deserialize back
+        Container<?> deserializedContainer = mapper.readValue(json, Container.class);
+
+        // Check the deserialized type and value
+        assertTrue(deserializedContainer instanceof GenericContainer);
+        assertEquals("test value", deserializedContainer.getValue());
+    }
+}

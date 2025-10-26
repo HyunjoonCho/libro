@@ -1,0 +1,71 @@
+
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+
+class ListAttribute<T> {
+    private String itemJsonKey;
+    private List<T> items;
+
+    public ListAttribute(String itemJsonKey, List<T> items) {
+        this.itemJsonKey = itemJsonKey;
+        this.items = items;
+    }
+
+    public String getItemJsonKey() {
+        return itemJsonKey;
+    }
+
+    public List<T> getItems() {
+        return items;
+    }
+}
+
+class ListAttributeSerializer extends StdSerializer<ListAttribute> {
+    public ListAttributeSerializer() {
+        super(ListAttribute.class);
+    }
+
+    @Override
+    public void serialize(ListAttribute value, JsonGenerator jgen,
+                          SerializerProvider provider) throws IOException {
+        jgen.writeStartObject();
+        jgen.writeStringField("itemType", value.getItemJsonKey());
+        jgen.writeObjectField("items", value.getItems());
+        jgen.writeEndObject();
+    }
+}
+
+public class SerializationTest {
+
+    @Test
+    public void testListAttributeSerialization() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+        module.addSerializer(new ListAttributeSerializer());
+        mapper.registerModule(module);
+
+        ListAttribute<String> attribute = new ListAttribute<>("string", Arrays.asList("item1", "item2"));
+        
+        // Use the suggested workaround
+        byte[] jsonBytes = mapper.writeValueAsBytes(attribute);
+        JsonNode jsonNode = mapper.readTree(jsonBytes);
+
+        // Assert to check proper serialization
+        assertEquals("string", jsonNode.get("itemType").asText());
+        assertEquals("item1", jsonNode.get("items").get(0).asText());
+        assertEquals("item2", jsonNode.get("items").get(1).asText());
+    }
+}

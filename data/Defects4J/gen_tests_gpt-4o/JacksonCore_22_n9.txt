@@ -1,0 +1,48 @@
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.filter.FilteringParserDelegate;
+import com.fasterxml.jackson.core.filter.TokenFilter;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.io.StringReader;
+
+import static org.junit.Assert.assertEquals;
+
+public class FilteringParserDelegateTest {
+
+    @Test
+    public void testFilteringParserDelegateMatchCount() throws IOException {
+        String json = "{\"name\":\"John\",\"age\":30,\"city\":\"New York\"}";
+
+        JsonFactory jsonFactory = new JsonFactory();
+        TokenFilter filter = new TokenFilter() {
+            @Override
+            public TokenFilter includeProperty(String name) {
+                // Include only the property named "name"
+                return "name".equals(name) ? this : null;
+            }
+        };
+
+        FilteringParserDelegate parser = new FilteringParserDelegate(
+                jsonFactory.createParser(new StringReader(json)),
+                filter,
+                false, // do not allow multiple matches
+                false  // do not include path information
+        );
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonParser filteredParser = objectMapper.getFactory().createParser(parser);
+
+        int matchCount = 0;
+        while (filteredParser.nextToken() != null) {
+            matchCount++;
+        }
+
+        // Ideally after the bug is fixed, this should reflect the accurate count of matches
+        // Since we expect only the "name" attribute to be matched, matchCount should be 1
+        assertEquals("Expecting one match for attribute 'name'", 1, matchCount);
+    }
+}

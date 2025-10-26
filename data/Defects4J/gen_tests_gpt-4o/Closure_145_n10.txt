@@ -1,0 +1,49 @@
+
+import com.google.javascript.jscomp.CompilationLevel;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.JSError;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+
+import static org.junit.Assert.assertTrue;
+
+public class LabeledLoopTest {
+
+    @Test
+    public void testCompilerOutputForLabeledLoop() {
+        String jsCode = "var i = 0;\n" +
+                        "lab1: do{\n" +
+                        "    lab2: do{\n" +
+                        "        i++;\n" +
+                        "        if (1) {\n" +
+                        "            break lab2;\n" +
+                        "        } else {\n" +
+                        "            break lab1;\n" +
+                        "        }\n" +
+                        "    } while(false);\n" +
+                        "} while(false);\n" +
+                        "\n" +
+                        "console.log(i);";
+
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        SourceFile extern = SourceFile.fromCode("externs.js", "");
+        SourceFile input = SourceFile.fromCode("test.js", jsCode);
+        
+        Result result = compiler.compile(extern, input, options);
+
+        // Expect no errors in compilation
+        assertTrue("Compilation failed with errors", result.success);
+
+        String generatedCode = compiler.toSource();
+
+        // This will verify if the specific bug appeared in the minified code
+        String expectedOutputInIe = "var a=0;do b:do{a++;break b}while(0);while(0);console.log(a);";
+        assertTrue("Generated code does not match the expected IE-incompatible output",
+                   generatedCode.equals(expectedOutputInIe));
+    }
+}

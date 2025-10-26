@@ -1,0 +1,73 @@
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.junit.Assert.assertEquals;
+
+public class JsonDeserializeBugTest {
+
+    public static class MyHashMap<K, V> extends java.util.HashMap<K, V> {
+        // Custom logic, assuming it maps "id" key from JSON to Map key
+    }
+
+    public interface MyCustomIdInterface {
+        UUID getId();
+    }
+
+    public static class Foo implements MyCustomIdInterface {
+        private UUID id;
+        private String property;
+
+        @Override
+        public UUID getId() {
+            return id;
+        }
+
+        public void setId(UUID id) {
+            this.id = id;
+        }
+
+        public String getProperty() {
+            return property;
+        }
+
+        public void setProperty(String property) {
+            this.property = property;
+        }
+    }
+
+    public static class Container {
+        @JsonDeserialize(as = MyHashMap.class)
+        private Map<UUID, Foo> something;
+
+        public Map<UUID, Foo> getSomething() {
+            return something;
+        }
+
+        public void setSomething(Map<UUID, Foo> something) {
+            this.something = something;
+        }
+    }
+
+    @Test
+    public void testJsonDeserializeWithCustomMap() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+        String json = "{ \"something\": [{ \"id\": \"550e8400-e29b-41d4-a716-446655440000\", \"property\": \"value\" }] }";
+
+        Container container = mapper.readValue(json, Container.class);
+
+        // Validate the deserialization
+        assertEquals(1, container.getSomething().size());
+        Foo foo = container.getSomething().get(UUID.fromString("550e8400-e29b-41d4-a716-446655440000"));
+        assertEquals("value", foo.getProperty());
+    }
+}

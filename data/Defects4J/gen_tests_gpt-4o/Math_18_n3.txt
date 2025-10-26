@@ -1,0 +1,56 @@
+
+import org.apache.commons.math3.optim.InitialGuess;
+import org.apache.commons.math3.optim.MaxEval;
+import org.apache.commons.math3.optim.PointValuePair;
+import org.apache.commons.math3.optim.nonlinear.scalar.GoalType;
+import org.apache.commons.math3.optim.nonlinear.scalar.ObjectiveFunction;
+import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.CMAESOptimizer;
+import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.CMAESOptimizer.Sigma;
+import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.CMAESOptimizer.PopulationSize;
+import org.apache.commons.math3.random.JDKRandomGenerator;
+import org.apache.commons.math3.random.RandomGenerator;
+import static org.junit.Assert.assertEquals;
+import org.junit.Test;
+
+public class CMAESOptimizerTest {
+
+    @Test
+    public void testCMAESOptimizerBoundsResolution() {
+        double[] lowerBound = {0.0};
+        double[] upperBound = {1.0};
+        double[] startPoint = {0.6};
+        RandomGenerator random = new JDKRandomGenerator();
+        random.setSeed(123456789);
+
+        CMAESOptimizer optimizer = new CMAESOptimizer(
+                10000,  // max iterations
+                Double.MIN_VALUE, // stop fitness
+                true,    // isActiveCMA
+                10,      // diagonalOnly
+                0,       // checkFeasableCount
+                random, 
+                false,   // generateStatistics
+                null     // convergenceChecker
+        );
+
+        PointValuePair result = optimizer.optimize(
+                new MaxEval(100000),
+                new ObjectiveFunction(point -> {
+                    // Objective function that equals zero in [0.6, 0.61] and one elsewhere
+                    double val = point[0];
+                    if (val >= 0.6 && val <= 0.61) return 0.0;
+                    else return 1.0;
+                }),
+                GoalType.MINIMIZE,
+                new InitialGuess(startPoint),
+                new Sigma(new double[]{0.1}),
+                new PopulationSize(5),
+                new org.apache.commons.math3.optim.nonlinear.scalar.noderiv.CMAESOptimizer.SimpleBounds(lowerBound, upperBound)
+        );
+
+        // Check if the optimizer found a point in the correct interval
+        double fittedValue = result.getPoint()[0];
+        // Expect the optimizer to finely resolve and find a value near 0.6
+        assertEquals(0.6, fittedValue, 0.01);
+    }
+}

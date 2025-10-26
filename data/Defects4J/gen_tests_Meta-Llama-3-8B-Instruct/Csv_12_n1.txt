@@ -1,0 +1,55 @@
+
+import org.junit.Test;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVPrinter;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
+
+import java.io.*;
+import java.util.List;
+
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
+
+public class CSVFormatIgnoreEmptyHeaderTest {
+
+    @Rule
+    public TemporaryFolder folder = new TemporaryFolder();
+
+    @Test
+    public void testCSVFormatIgnoreEmptyHeader() throws IOException {
+        File file = folder.newFile("test.csv");
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+            CSVPrinter printer = CSVFormat.EXCEL.withHeader().print(writer);
+            printer.printRecord("A", "B", "C", "", "E");
+            printer.printRecord("a", "b", "c", "d", "e");
+        }
+
+        CSVParser parser = CSVFormat.EXCEL.parse(file);
+        List<String[]> records = parser.getRecords();
+
+        // Check that the parser does not throw an exception
+        assertTrue(records.size() == 2);
+
+        // Check that the header does not contain empty values
+        String[] header = parser.getHeaderMap().getKeys();
+        for (String headerValue : header) {
+            assertTrue(!headerValue.isEmpty());
+        }
+    }
+
+    @Test
+    public void testCSVFormatThrowsIAEOnEmptyHeader() {
+        File file = folder.newFile("test.csv");
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+            CSVPrinter printer = CSVFormat.EXCEL.print(writer);
+            printer.printRecord("A", "B", "C", "", "E");
+            printer.printRecord("a", "b", "c", "d", "e");
+        }
+
+        // Check that the parser throws an IAE
+        assertThrows(IllegalArgumentException.class, () -> CSVFormat.EXCEL.parse(file));
+    }
+}

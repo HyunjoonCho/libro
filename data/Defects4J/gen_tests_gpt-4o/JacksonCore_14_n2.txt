@@ -1,0 +1,51 @@
+
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertNotSame;
+
+import org.junit.Test;
+import org.mockito.Mockito;
+
+public class IOContextTest {
+
+    // A mock class representing a minimal version of IOContext to demonstrate the issue.
+    private class IOContext {
+        private byte[] buffer;
+
+        public IOContext(int bufferSize) {
+            buffer = new byte[bufferSize];
+        }
+
+        public byte[] getBuffer() {
+            return buffer;
+        }
+
+        public void setBuffer(byte[] newBuffer) {
+            if (newBuffer.length != buffer.length) {
+                // The original check might only allow buffers to grow.
+                // For this test case, we assume it raises issues when the size stays the same.
+                // We return automatically in this case to represent buffer neutrality.
+                return;
+            }
+            buffer = newBuffer; // Relaxing such ownership checks.
+        }
+    }
+
+    @Test
+    public void testBufferOwnershipRelaxation() {
+        IOContext ioContext = new IOContext(1024);
+        byte[] originalBuffer = ioContext.getBuffer();
+
+        // Suppose we create a new buffer of the same size
+        byte[] newBuffer = new byte[1024];
+
+        // Normally, the context might expect the buffer to grow.
+        // But let's see if it can accept a similar-sized buffer.
+        ioContext.setBuffer(newBuffer);
+
+        // If the ownership checks were relaxed, the buffer should now be different.
+        assertNotSame("The buffer should have been set to the new buffer", originalBuffer, ioContext.getBuffer());
+
+        // If not, the ownership change is not properly handled:
+        assertSame("The ownership should have been relaxed to allow same size buffers", newBuffer, ioContext.getBuffer());
+    }
+}

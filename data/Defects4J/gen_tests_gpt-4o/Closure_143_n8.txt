@@ -1,0 +1,55 @@
+
+import org.junit.Test;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintStream;
+
+import static org.junit.Assert.assertTrue;
+
+public class CompilerDefineTest {
+
+    @Test
+    public void testDefineStringSyntaxError() throws IOException, InterruptedException {
+        // Location of your compiler jar and test.js
+        String compilerJarPath = "path/to/compiler.jar";  
+        String testJsFilePath = "path/to/test.js";
+
+        // Ensure test.js exists with content `/\*\* @define {string} \*/ test.VERSION = "";`
+        File testJs = new File(testJsFilePath);
+        if (!testJs.exists()) {
+            testJs.createNewFile();
+            try (PrintStream out = new PrintStream(testJs)) {
+                out.print("/** @define {string} */ test.VERSION = \"\";");
+            }
+        }
+
+        // Command line to run
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                "java", 
+                "-jar", 
+                compilerJarPath, 
+                "--compilation_level", 
+                "ADVANCED_OPTIMIZATIONS", 
+                "--define=test.VERSION=\"1.0.0\"", 
+                "--js_output_file=test-min.js", 
+                "--js", 
+                testJsFilePath
+        );
+
+        // Collect output
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        processBuilder.redirectError(ProcessBuilder.Redirect.PIPE);
+        processBuilder.redirectOutput(ProcessBuilder.Redirect.PIPE);
+        
+        Process process = processBuilder.start();
+        process.getErrorStream().transferTo(outputStream);
+        process.waitFor();
+
+        String result = outputStream.toString();
+
+        // We're expecting the output to contain the error, so the assertion checks for that
+        assertTrue(result.contains("--define flag syntax invalid: test.VERSION=\"1.0.0\""));
+    }
+}

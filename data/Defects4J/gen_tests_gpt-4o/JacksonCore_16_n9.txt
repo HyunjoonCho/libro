@@ -1,0 +1,50 @@
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.util.JsonParserSequence;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class JsonParserSequenceTest {
+
+    @Test
+    public void testJsonParserSequenceSkipsToken() throws Exception {
+        JsonFactory factory = new JsonFactory();
+        
+        // Parser 1: Contains a single token
+        JsonParser parser1 = factory.createParser("[1]");
+
+        // Manually advance to the first token, which is `[`
+        assertEquals(JsonToken.START_ARRAY, parser1.nextToken());
+        
+        // Parser 2: Contains another token
+        JsonParser parser2 = factory.createParser("[2]");
+        
+        // JsonParserSequence should be created with both parsers
+        JsonParserSequence sequence = JsonParserSequence.createFlattened(false, parser1, parser2);
+
+        // Move to START_ARRAY from parser1
+        assertEquals(JsonToken.START_ARRAY, sequence.nextToken());
+
+        // Move to 1 from parser1
+        assertEquals(JsonToken.VALUE_NUMBER_INT, sequence.nextToken());
+        assertEquals(1, sequence.getIntValue());
+
+        // Now advance to END_ARRAY from parser1
+        assertEquals(JsonToken.END_ARRAY, sequence.nextToken());
+
+        // Here is the potential issue: it should not skip START_ARRAY from parser2
+        assertEquals(JsonToken.START_ARRAY, sequence.nextToken());
+
+        // Move to 2 from parser2 (This may be skipped if the bug occurs)
+        assertEquals(JsonToken.VALUE_NUMBER_INT, sequence.nextToken());
+        assertEquals(2, sequence.getIntValue());
+
+        // Finally expecting END_ARRAY from parser2
+        assertEquals(JsonToken.END_ARRAY, sequence.nextToken());
+        
+        // Ensure no more tokens are present
+        assertNull(sequence.nextToken());
+    }
+}

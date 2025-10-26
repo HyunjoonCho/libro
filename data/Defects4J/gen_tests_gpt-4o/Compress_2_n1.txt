@@ -1,0 +1,94 @@
+
+import org.apache.commons.compress.archivers.ar.ArArchiveEntry;
+import org.apache.commons.compress.archivers.ar.ArArchiveInputStream;
+import org.apache.commons.compress.archivers.ar.ArArchiveOutputStream;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class ArUtilsTest {
+
+    @Test
+    public void testDeletionFromArArchive() throws IOException {
+        // Create an AR archive with test1.xml and test2.xml
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        ArArchiveOutputStream arOutput = new ArArchiveOutputStream(byteArrayOutputStream);
+
+        List<String> entries = Arrays.asList("test1.xml", "test2.xml");
+        for (String entryName : entries) {
+            byte[] content = ("Content of " + entryName).getBytes();
+            ArArchiveEntry entry = new ArArchiveEntry(entryName, content.length);
+            arOutput.putArchiveEntry(entry);
+            arOutput.write(content);
+            arOutput.closeArchiveEntry();
+        }
+        arOutput.finish();
+        arOutput.close();
+
+        // Simulate deletion of test2.xml
+        ByteArrayOutputStream updatedArchive = new ByteArrayOutputStream();
+        try (ArArchiveInputStream arInputStream = new ArArchiveInputStream(new ByteArrayInputStream(byteArrayOutputStream.toByteArray()));
+             ArArchiveOutputStream arOutputStream = new ArArchiveOutputStream(updatedArchive)) {
+            
+            ArArchiveEntry entry;
+            while ((entry = arInputStream.getNextArEntry()) != null) {
+                if (!entry.getName().equals("test2.xml")) {
+                    // Copy over test1.xml, omit test2.xml
+                    byte[] content = new byte[(int) entry.getLength()];
+                    arInputStream.read(content);
+                    arOutputStream.putArchiveEntry(new ArArchiveEntry(entry.getName(), content.length));
+                    arOutputStream.write(content);
+                    arOutputStream.closeArchiveEntry();
+                }
+            }
+            arOutputStream.finish();
+        }
+
+        // Validate the AR archive content
+        try (ArArchiveInputStream arInputStream = new ArArchiveInputStream(new ByteArrayInputStream(updatedArchive.toByteArray()))) {
+            while (arInputStream.getNextArEntry() != null) {
+                // This should only return test1.xml
+            }
+            
+            // Create the file for manual inspection
+            File outputFile = new File("/tmp/dir26673/bla.ar");
+            try (FileOutputStream fileOutputStream = new FileOutputStream(outputFile)) {
+                fileOutputStream.write(updatedArchive.toByteArray());
+            }
+            // Check if we can read only the entries we expect
+            assertEquals("The archive should now contain only one entry 'test1.xml'", 1, countEntries(updatedArchive.toByteArray()));
+            assertTrue("The old entry 'test2.xml' should not exist anymore", !fileContainsEntry(updatedArchive.toByteArray(), "test2.xml"));
+        }
+    }
+
+    private int countEntries(byte[] archive) throws IOException {
+        int count = 0;
+        try (ArArchiveInputStream arInputStream = new ArArchiveInputStream(new ByteArrayInputStream(archive))) {
+            while (arInputStream.getNextArEntry() != null) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private boolean fileContainsEntry(byte[] archive, String entryName) throws IOException {
+        try (ArArchiveInputStream arInputStream = new ArArchiveInputStream(new ByteArrayInputStream(archive))) {
+            ArArchiveEntry entry;
+            while ((entry = arInputStream.getNextArEntry()) != null) {
+                if (entry.getName().equals(entryName)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+}

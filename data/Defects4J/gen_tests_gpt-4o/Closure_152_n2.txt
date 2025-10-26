@@ -1,0 +1,53 @@
+
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.Result;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+
+import org.junit.Test;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+
+import static org.junit.Assert.*;
+
+public class ClosureCompilerIssueTest {
+
+    @Test
+    public void testUnionTypeCastingError() {
+        Compiler compiler = new Compiler();
+
+        // Capture the compiler output
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        compiler.setErrorManager(new com.google.javascript.jscomp.PrintStreamErrorManager(new PrintStream(output)));
+
+        CompilerOptions options = new CompilerOptions();
+        options.setClosurePass(true);
+        options.setCheckTypes(true);
+        options.setWarningLevel(com.google.javascript.jscomp.DiagnosticGroups.MISSING_PROPERTIES, com.google.javascript.jscomp.CheckLevel.WARNING);
+        options.setWarningLevel(com.google.javascript.jscomp.DiagnosticGroups.STRICT_MODULE_DEP_CHECK, com.google.javascript.jscomp.CheckLevel.ERROR);
+        options.setWarningLevel(com.google.javascript.jscomp.DiagnosticGroups.INVALID_CASTS, com.google.javascript.jscomp.CheckLevel.ERROR);
+        options.setLanguageIn(com.google.javascript.jscomp.CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setLanguageOut(com.google.javascript.jscomp.CompilerOptions.LanguageMode.ECMASCRIPT5);
+        options.setWarningLevel(com.google.javascript.jscomp.DiagnosticGroups.UNDEFINED_VARIABLES, com.google.javascript.jscomp.CheckLevel.WARNING);
+        options.setWarningLevel(com.google.javascript.jscomp.DiagnosticGroups.CHECK_TYPES, com.google.javascript.jscomp.CheckLevel.WARNING);
+        options.setSummaryDetailLevel(3);
+        options.setCompilationLevel(com.google.javascript.jscomp.CompilationLevel.ADVANCED_OPTIMIZATIONS);
+
+        String code = ""
+            + "/** @constructor */ function Person() {} \n"
+            + "Person.prototype = { \n"
+            + "  /** @type {number|string} */ ageOrName: 0, \n" // This introduces a UnionType
+            + "  compiles: function() { return this.ageOrName; }\n"
+            + "};";
+
+        JSTypeRegistry registry = compiler.getTypeRegistry(); 
+        registry.getNativeObjectType(com.google.javascript.rhino.jstype.JSTypeNative.OBJECT_PROTOTYPE);
+
+        Result result = compiler.compile(com.google.javascript.jscomp.CommandLineRunner.getDefaultExterns(), com.google.javascript.jscomp.SourceFile.fromCode("example.js", code), options);
+        
+        // Check if the compiler result has errors related to ClassCastException
+        String compilerOutput = new String(output.toByteArray());
+        assertFalse("Compilation should not fail with ClassCastException: " + compilerOutput, result.success && !compilerOutput.contains("UnionType cannot be cast to ObjectType"));
+    }
+}

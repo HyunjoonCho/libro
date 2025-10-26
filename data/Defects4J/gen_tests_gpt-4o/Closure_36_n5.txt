@@ -1,0 +1,51 @@
+
+import static org.junit.Assert.assertFalse;
+
+import com.google.javascript.jscomp.*;
+import com.google.javascript.jscomp.Compiler;
+
+import org.junit.Test;
+
+public class SingletonGetterTest {
+
+    @Test
+    public void testUnusedSingletonClassRemoval() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+
+        // Set up the compiler options to simulate the bug report config
+        CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+        options.setWarningLevel(DiagnosticGroups.ALL_CHECKS, CheckLevel.WARNING);
+        options.setPrettyPrint(true);
+        options.setUseClosureLibrary(true);
+        
+        // The JavaScript code to compile
+        String jsCode = 
+            "/** @define {boolean} */\n" +
+            "var COMPILED = false;\n" +
+            "goog.provide('foo');\n" +
+            "var foo = function() { this.values = []; };\n" +
+            "goog.addSingletonGetter(foo);\n" +
+            "foo.prototype.add = function(value) {this.values.push(value)};";
+
+        // Run the compiler
+        CompilerInput input = new CompilerInput(SourceFile.fromCode("test.js", jsCode));
+        compiler.initOptions(options);
+        compiler.init(
+            ImmutableList.of(), // No externs provided for this test
+            ImmutableList.of(input), 
+            options);
+        compiler.parse();
+        Node root = compiler.getRoot();
+        compiler.check();
+        compiler.performOptimizations();
+
+        // Assert that the function is removed due to unused code elimination
+        Node scriptNode = root.getFirstChild();
+        String compiledCode = compiler.toSource();
+        
+        // Check that the function body is effectively empty
+        String expectedOutput = "var foo={};";
+        assertFalse("Expected unused class 'foo' removal", compiledCode.contains(expectedOutput));
+    }
+}
