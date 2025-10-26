@@ -140,5 +140,5 @@ if __name__ == '__main__':
     with open(args.out, 'w') as f:
         f.write(gen_test)
 
-    with open(args.out.replace('.', '_cost.'), 'w') as f:
+    with open(args.out.replace('.txt', '_cost.json'), 'w') as f:
         json.dump(cost, f, indent=2)

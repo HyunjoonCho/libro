@@ -44,7 +44,7 @@ if __name__ == '__main__':
                 prompt_save_path=args.prompt_out
             )
             test_path = f'{output_dir}/{project}_{bug_id}_n{i}.txt'
-            cost_path = f'{output_dir}/{project}_{bug_id}_n{i}_cost.txt'
+            cost_path = f'{output_dir}/{project}_{bug_id}_n{i}_cost.json'
 
             with open(test_path, 'w') as f:
                 f.write(gen_test)

@@ -231,8 +231,6 @@ if __name__ == '__main__':
         bug2tests = defaultdict(list)
         
         for gen_test_file in glob.glob(os.path.join(GEN_TEST_DIR, '*.txt')):
-            if gen_test_file.endswith("cost.txt"):
-                continue
             bug_id = '_'.join(os.path.basename(gen_test_file).split('_')[:2])
             bug2tests[bug_id].append(gen_test_file)
 
