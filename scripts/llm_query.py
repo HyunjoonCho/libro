@@ -69,10 +69,13 @@ def make_prompt_from_file(rep_title, rep_content,
     return prompt, [end_string]
 
 def extract_code_block(query_result):
-    match = re.search(r"```(?:\w+)?\s*([\s\S]*?)\s*```", query_result)
-    if match:
-        return match.group(1).strip()
-    return query_result.strip()
+    opening_code_fence = query_result.find('```')
+    if opening_code_fence != -1:
+        query_result = query_result[opening_code_fence:]
+    lines = query_result.splitlines()
+    filtered_lines = [line for line in lines if not line.startswith('```') and not line.startswith('@Test')]
+    
+    return '\n'.join(filtered_lines)
 
 def query_llm_for_gentest(proj, bug_id, model, template, use_plain_text=False, use_html=False, save_prompt=False, prompt_save_path=None):
     with open(BR_DIR + proj + '-' + str(bug_id) + '.json') as f:
