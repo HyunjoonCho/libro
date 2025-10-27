@@ -1,0 +1,40 @@
+public void testThreadLocalMemoryLeak() {
+    // Simulate setting a ThreadLocal in ToStringStyle
+    ToStringStyle style = ToStringStyle.DEFAULT_STYLE;
+    Thread thread = Thread.currentThread();
+    
+    try {
+        // Simulate the scenario where ToStringStyle might be used and a value is set in the ThreadLocal
+        ThreadLocal<Object> threadLocalField = getThreadLocalField(style);
+        threadLocalField.set(new Object());
+
+        // Simulate web application reload by clearing and forcing garbage collection
+        performFullGC();
+
+        // Check if the ThreadLocal still has a value, which should not be the case if cleared properly
+        assertNull("ThreadLocal should be cleared to prevent memory leaks", threadLocalField.get());
+
+    } finally {
+        // Clean up: remove the ThreadLocal value, if any
+        clearThreadLocalField(style);
+    }
+}
+
+@SuppressWarnings("unchecked")
+private ThreadLocal<Object> getThreadLocalField(ToStringStyle style) throws Exception {
+    // Reflectively get the ThreadLocal field from ToStringStyle class
+    java.lang.reflect.Field field = ToStringStyle.class.getDeclaredField("threadLocalField"); // Assuming 'threadLocalField' is the thread-local field's name
+    field.setAccessible(true);
+    return (ThreadLocal<Object>) field.get(style);
+}
+
+private void clearThreadLocalField(ToStringStyle style) throws Exception {
+    ThreadLocal<Object> threadLocalField = getThreadLocalField(style);
+    threadLocalField.remove();
+}
+
+private void performFullGC() {
+    System.gc();
+    System.runFinalization();
+    System.gc();
+}

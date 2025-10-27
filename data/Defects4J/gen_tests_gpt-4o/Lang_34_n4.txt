@@ -1,0 +1,38 @@
+public void testThreadLocalMemoryLeak() {
+    // Create a loop to simulate multiple requests to the web application
+    for (int i = 0; i < 100; i++) {
+        // Instantiate an object and use ToStringStyle
+        Object obj = new Object();
+        String description = new ToStringBuilder(obj, ToStringStyle.DEFAULT_STYLE).toString();
+        assertNotNull(description);
+    }
+    
+    try {
+        // Force garbage collection
+        System.gc();
+        // Attempt to retrieve the ThreadLocal map
+        Class<?> threadLocalMapClass = Class.forName("java.lang.ThreadLocal$ThreadLocalMap");
+        java.lang.reflect.Field tableField = threadLocalMapClass.getDeclaredField("table");
+        tableField.setAccessible(true);
+        Object[] table = (Object[]) tableField.get(Thread.currentThread().threadLocals);
+        
+        // Check if ToStringStyle reference is cleared
+        boolean isLeak = false;
+        for (Object entry : table) {
+            if (entry != null) {
+                java.lang.reflect.Field valueField = entry.getClass().getDeclaredField("value");
+                valueField.setAccessible(true);
+                Object value = valueField.get(entry);
+                if (value instanceof ToStringStyle) {
+                    isLeak = true;
+                    break;
+                }
+            }
+        }
+
+        // Assert that there is no reference left in thread locals implying no memory leak
+        assertFalse("Memory leak detected due to ThreadLocal usage in ToStringStyle", isLeak);
+    } catch (Exception e) {
+        fail("An exception occurred during the test: " + e.getMessage());
+    }
+}
