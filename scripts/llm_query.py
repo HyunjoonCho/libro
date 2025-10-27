@@ -75,7 +75,7 @@ def extract_code_block(query_result):
     lines = query_result.splitlines()
     filtered_lines = [line for line in lines if not line.startswith('```') and not line.startswith('@Test')]
     
-    return '\n'.join(filtered_lines)
+    return '\n'.join(filtered_lines).strip()
 
 def query_llm_for_gentest(proj, bug_id, model, template, use_plain_text=False, use_html=False, save_prompt=False, prompt_save_path=None):
     with open(BR_DIR + proj + '-' + str(bug_id) + '.json') as f:
