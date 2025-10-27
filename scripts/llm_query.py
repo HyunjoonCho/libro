@@ -68,6 +68,11 @@ def make_prompt_from_file(rep_title, rep_content,
 
     return prompt, [end_string]
 
+def extract_code_block(query_result):
+    match = re.search(r"```(?:\w+)?\s*([\s\S]*?)\s*```", query_result)
+    if match:
+        return match.group(1).strip()
+    return query_result.strip()
 
 def query_llm_for_gentest(proj, bug_id, model, template, use_plain_text=False, use_html=False, save_prompt=False, prompt_save_path=None):
     with open(BR_DIR + proj + '-' + str(bug_id) + '.json') as f:
@@ -103,12 +108,7 @@ def query_llm_for_gentest(proj, bug_id, model, template, use_plain_text=False, u
     if not chat_mode:
         gen_test = 'public void test' + query_result
     else:
-        if ("```java") in query_result:
-            gen_test = query_result.split("```java")[1]
-        elif ("```") in query_result:
-            gen_test = query_result.split("```")[1]
-        else:
-            gen_test = query_result
+        gen_test = extract_code_block(query_result)
     return gen_test, cost
 
 
