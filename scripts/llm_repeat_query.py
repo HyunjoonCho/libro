@@ -11,6 +11,7 @@ from llm_query import *
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--dataset', default='d4j', help='dataset to use: d4j or ghrb')
+    parser.add_argument('-p', '--projects', nargs='*') 
     parser.add_argument('-b', '--bug_report_path', default='/root/libro/data/Defects4J/bug_report')
     parser.add_argument('--use_html', action='store_true')
     parser.add_argument('--use_plain_text', action='store_true')
@@ -29,8 +30,12 @@ if __name__ == '__main__':
     output_dir = f'{args.output_prefix}{model_short}'
     os.makedirs(output_dir, exist_ok=True)
 
+    project_list = args.projects
+
     for file in sorted(os.listdir(args.bug_report_path)):
         project, bug_id = tuple(file.split('.')[0].split('-'))
+        if project_list and project not in project_list:
+            continue
         print(f'p={project}, v={bug_id}')
 
         for i in range(1, args.num_tests + 1):
