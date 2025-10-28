@@ -1,0 +1,79 @@
+public void testEventStateNotUpdatedOnResetState() {
+    // Dummy ODE with arbitrary dynamics
+    FirstOrderDifferentialEquations ode = new FirstOrderDifferentialEquations() {
+        public int getDimension() {
+            return 1;
+        }
+
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = 1;
+        }
+    };
+
+    // Event handler that triggers RESET_STATE
+    EventHandler resetEventHandler = new EventHandler() {
+        public double g(double t, double[] y) {
+            return y[0] - 0.5;
+        }
+
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.RESET_STATE;
+        }
+
+        public void resetState(double t, double[] y) {
+            y[0] = 0.0;
+        }
+
+        public double getMaxCheckInterval() {
+            return 1.0;
+        }
+
+        public int getOrder() {
+            return 1;
+        }
+
+        public double getT0() {
+            return 0;
+        }
+    };
+
+    // Second event handler that does not trigger a reset
+    EventHandler nonResetEventHandler = new EventHandler() {
+        public double g(double t, double[] y) {
+            return y[0] - 0.8;
+        }
+
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.CONTINUE;
+        }
+
+        public void resetState(double t, double[] y) {
+        }
+
+        public double getMaxCheckInterval() {
+            return 1.0;
+        }
+
+        public int getOrder() {
+            return 2;
+        }
+
+        public double getT0() {
+            return 0;
+        }
+    };
+
+    double[] y = new double[] {0.0};
+
+    // Integrator with both handlers
+    AdaptiveStepsizeIntegrator integrator = new DormandPrince853Integrator(1.0e-8, 100.0, 1.0e-10, 1.0e-10);
+    integrator.addEventHandler(resetEventHandler, 1.0, 1.0e-10, 100);
+    integrator.addEventHandler(nonResetEventHandler, 1.0, 1.0e-10, 100);
+
+    // Integrate over an interval
+    integrator.integrate(ode, 0, y, 1, y);
+
+    // Assert the event that did not reset is updated correctly (g should not exceed bounds)
+    double gValue = nonResetEventHandler.g(integrator.getCurrentStepStart(), y);
+    assertTrue(gValue <= 1.0 && gValue >= -1.0, "Unexpected value for g function: " + gValue);
+}

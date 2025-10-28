@@ -1,0 +1,60 @@
+public void testEventStateNotUpdatedOnResetStateDuringOdeIntegration() {
+    // Assuming a mock ODE system, events, and solver setup are already available in the test class
+    TestProblem1 pb = new TestProblem1(); // Replace with an existing ODE problem suited for the test class
+    double maxStep = 0.1;
+    
+    // Create first event handler that triggers RESET_STATE
+    EventHandler resetStateEvent = new EventHandler() {
+        @Override
+        public double g(double t, double[] y) {
+            return t - 1.0;
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.RESET_STATE;
+        }
+
+        @Override
+        public void resetState(double t, double[] y) {
+            y[0] = y[0] / 2;
+        }
+    };
+
+    // Create another event handler that should be updated
+    EventHandler standardEvent = new EventHandler() {
+        private double lastGValue;
+        
+        @Override
+        public double g(double t, double[] y) {
+            lastGValue = y[0] - 1.0;
+            return lastGValue;
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.CONTINUE;
+        }
+
+        @Override
+        public void resetState(double t, double[] y) {
+            // No state reset
+        }
+
+        public double getLastGValue() {
+            return lastGValue;
+        }
+    };
+
+    // Setup the integrator and add both event handlers
+    AdamsBashforthIntegrator integrator = new AdamsBashforthIntegrator(5, 0.01, maxStep, 1.0e-10, 1.0e-10); // Example integrator
+    integrator.addEventHandler(resetStateEvent, 1.0, 1.0e-6, 100);
+    integrator.addEventHandler(standardEvent, 1.0, 1.0e-6, 100);
+
+    double[] y = pb.initialState();
+    integrator.integrate(pb, pb.getFinalTime(), y);
+
+    // Check if the standardEvent was correctly updated
+    assertTrue("Event handler was not updated correctly after a RESET_STATE by another event",
+               standardEvent.getLastGValue() < 1.0e20);
+}

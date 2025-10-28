@@ -1,0 +1,50 @@
+public void testEventStateNotUpdatedOnResetState() {
+    // Mock ODE events for testing
+    ODEEventHandler resettingEvent = new ODEEventHandler() {
+        public double g(double t, double[] y) {
+            return y[0] - 0.5;
+        }
+        
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.RESET_STATE;
+        }
+        
+        public void resetState(double t, double[] y) {
+            y[0] = 0.0;
+        }
+    };
+
+    ODEEventHandler regularEvent = new ODEEventHandler() {
+        public double g(double t, double[] y) {
+            return y[0] - 0.5;
+        }
+        
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.CONTINUE;
+        }
+        
+        public void resetState(double t, double[] y) {
+            // No-op
+        }
+    };
+
+    // Set up ODE integrator
+    double[] y = {0.0};
+    AbstractIntegrator integrator = new ClassicalRungeKuttaIntegrator(0.1);
+    integrator.addEventHandler(resettingEvent, 1.0, 1.0e-6, 100);
+    integrator.addEventHandler(regularEvent, 1.0, 1.0e-6, 100);
+
+    // Attempt integration
+    integrator.integrate(new OrdinaryDifferentialEquation() {
+        public int getDimension() {
+            return 1;
+        }
+
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = 1.0;
+        }
+    }, 0.0, y, 10.0, y);
+
+    // Assert that this doesn't lead to wrong states
+    assertTrue("State should be reasonable", Math.abs(y[0]) < 100);
+}

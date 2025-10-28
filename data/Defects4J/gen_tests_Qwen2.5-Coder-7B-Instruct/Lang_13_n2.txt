@@ -1,0 +1,39 @@
+import org.apache.commons.lang3.SerializationUtils;
+
+import java.io.IOException;
+import java.io.ObjectStreamClass;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+public class SerializationUtilsTest {
+
+    @Test(expected = ClassNotFoundException.class)
+    public void primitiveTypeClassSerializationThrowsException() throws IOException {
+        Class<?> primitiveType = int.class;
+        
+        SerializationUtils.clone(primitiveType);
+    }
+
+    @Test
+    public void customResolveClassFallbackToDefault() throws Exception {
+        ClassLoaderAwareObjectInputStream stream = new ClassLoaderAwareObjectInputStream(new java.io.ByteArrayInputStream(new byte[0])) {
+            @Override
+            protected Class<?> resolveClass(ObjectStreamClass desc) throws IOException, ClassNotFoundException {
+                String name = desc.getName();
+                try {
+                    return Class.forName(name, false, classLoader);
+                } catch (ClassNotFoundException ex) {
+                    try {
+                        return Class.forName(name, false, Thread.currentThread().getContextClassLoader());
+                    } catch (Exception e) {
+                        return super.resolveClass(desc);
+                    }
+                }
+            }
+        };
+
+        // This should not throw an exception
+        stream.resolveClass(ObjectStreamClass.lookup(java.lang.String.class));
+    }
+}

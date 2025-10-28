@@ -1,0 +1,49 @@
+public void testWrongInitialStepSizeInDOP853() {
+    // Define a simple example of an ODE problem
+    FirstOrderDifferentialEquations equations = new FirstOrderDifferentialEquations() {
+        public int getDimension() {
+            return 2;
+        }
+
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = y[1];
+            yDot[1] = -y[0];
+        }
+    };
+
+    // Initial state of the system
+    double[] y0 = {1.0, 0.0};
+
+    // Time span
+    double t0 = 0.0;
+    double tFinal = 1.0;
+
+    // Tolerances
+    double scalAbsoluteTolerance = 1e-6;
+    double scalRelativeTolerance = 1e-6;
+
+    // Prepare the integrator
+    DormandPrince853Integrator integrator = new DormandPrince853Integrator(1.0e-10, 1.0e-2,
+            scalAbsoluteTolerance, scalRelativeTolerance);
+
+    // Hook method to intercept the initial step size calculation and assert on it
+    AdaptiveStepsizeIntegrator adaptiveIntegrator = (AdaptiveStepsizeIntegrator) integrator;
+
+    double[] scale = new double[y0.length];
+    Arrays.fill(scale, scalAbsoluteTolerance); // Original faulty implementation
+
+    for (int i = 0; i < scale.length; ++i) {
+        double yi = Math.max(Math.abs(y0[i]), Math.abs(y0[i])); // Proper calculation
+        scale[i] = scalAbsoluteTolerance + scalRelativeTolerance * yi;
+    }
+
+    // Integrate and expect an exception or bad behavior due to erroneous initial step size
+    try {
+        integrator.integrate(equations, t0, y0, tFinal, new double[y0.length]);
+        fail("Expected an exception due to incorrect initial step size calculation.");
+    } catch (Exception e) {
+        // Expected behavior, check if the exception is related to step size issues or other indication
+        // that the step size has not been correctly adapted.
+        assertTrue(e.getMessage().contains("step size"));
+    }
+}

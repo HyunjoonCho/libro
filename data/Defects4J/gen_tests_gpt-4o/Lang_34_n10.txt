@@ -1,23 +1,20 @@
-@Test
-public void testMemoryLeakDueToThreadLocalInToStringStyle() {
-    final String threadLocalTestOldValue = ToStringStyle.getDefaultStyle().toString();
-    
-    // Create a custom Thread to simulate web application behavior
-    Thread thread = new Thread(() -> {
-        ToStringBuilder.setDefaultStyle(ToStringStyle.SHORT_PREFIX_STYLE);
-        ToStringBuilder.reflectionToString(this); // Trigger loading of ToStringStyle
-    });
+public void testThreadLocalMemoryLeak() {
+    // Force the initialization of the ToStringStyle class and its ThreadLocal
+    ToStringBuilder.setDefaultStyle(ToStringStyle.DEFAULT_STYLE);
 
-    thread.start();
+    // Simulate a web application reload by clearing the reference
+    ToStringBuilder.setDefaultStyle(null);
+
+    // Trigger garbage collection to check for potential memory leaks
+    System.gc();
+
+    // Check if ToStringStyle's ThreadLocal can be cleared to prevent memory leak
     try {
-        thread.join();
-    } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        fail("Thread was interrupted");
+        Field threadLocalField = ToStringStyle.class.getDeclaredField("threadLocal");
+        threadLocalField.setAccessible(true);
+        ThreadLocal<?> threadLocal = (ThreadLocal<?>) threadLocalField.get(null);
+        assertNull("ThreadLocal should be null to prevent memory leaks.", threadLocal.get());
+    } catch (Exception e) {
+        fail("Exception occurred while checking for memory leaks: " + e.getMessage());
     }
-
-    // Check if default ToStringStyle has changed (indicating a possible memory leak)
-    assertNotEquals("Default ToStringStyle should restore after thread finishes",
-                    ToStringStyle.getDefaultStyle().toString(),
-                    threadLocalTestOldValue);
 }

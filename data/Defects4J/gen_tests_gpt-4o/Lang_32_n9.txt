@@ -1,20 +1,24 @@
-public void testThreadLocalMemoryLeakInToStringStyle() {
-    // Creating an instance of ToStringStyle to trigger the ThreadLocal creation
-    ToStringStyle style = ToStringStyle.DEFAULT_STYLE;
+public void testThreadLocalMemoryLeak() {
+    Runnable styleUsage = () -> {
+        ToStringStyle style = ToStringStyle.DEFAULT_STYLE;
+        // Using the ToStringStyle, but never manually clearing the ThreadLocal
+        String result = new ToStringBuilder(new Object(), style).append("test", 123).toString();
+        assertNotNull(result);
+    };
 
-    // Mock a scenario where the web application is reloaded by forcibly removing thread locals
+    // Simulate usage in a thread to trigger the ThreadLocal setup
+    Thread thread = new Thread(styleUsage);
+    thread.start();
     try {
-        // Use reflection to access the ThreadLocal field
-        Field field = ToStringStyle.class.getDeclaredField("threadLocal");
-        field.setAccessible(true);
-        ThreadLocal<?> threadLocal = (ThreadLocal<?>) field.get(null);
-
-        // Clear the thread local
-        threadLocal.remove();
-        
-        // Ensure the removal does not throw any error; this could be a memory leak indicator if still there
-        assertNull(threadLocal.get());
-    } catch (NoSuchFieldException | IllegalAccessException e) {
-        fail("Reflection access to ToStringStyle's ThreadLocal failed");
+        thread.join();
+    } catch (InterruptedException e) {
+        e.printStackTrace();
     }
+
+    // Simulate a check for memory leak by attempting to garbage collect and analyze
+    // Assuming we have a fix available, we'd expect no references to linger.
+    System.gc();
+
+    // This is a structural test for memory leaks; no direct assertion here, but
+    // in correct practice, we should find a way to check for lingering memory usage.
 }

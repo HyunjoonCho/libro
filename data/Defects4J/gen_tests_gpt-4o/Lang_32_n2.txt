@@ -1,23 +1,29 @@
-@Test
-public void testThreadLocalMemoryLeakInToStringStyle() throws Exception {
-    // Simulate usage of ToStringStyle in a web application
-    for (int i = 0; i < 100; i++) {
-        String result = new ToStringBuilder(this, ToStringStyle.DEFAULT_STYLE)
-                .append("testField", "testValue")
-                .toString();
-        assertNotNull(result); // sanity check
-    }
-
-    // Attempt to force garbage collection
-    System.gc();
-
-    // Simulate web application context reload
-    Field threadLocalField = ToStringStyle.class.getDeclaredField("threadLocal");
-    threadLocalField.setAccessible(true);
-    ThreadLocal<?> threadLocal = (ThreadLocal<?>) threadLocalField.get(null);
-
-    // Verify if the ThreadLocal has been cleaned up
-    if (threadLocal != null) {
-        assertNull("ThreadLocal should be null to avoid memory leaks", threadLocal.get());
+public void testThreadLocalMemoryLeak() {
+    ClassLoader originalClassLoader = Thread.currentThread().getContextClassLoader();
+    try {
+        // Create a temporary class loader and set it to the current thread
+        URL[] urls = ((URLClassLoader) originalClassLoader).getURLs();
+        URLClassLoader tempClassLoader = new URLClassLoader(urls);
+        Thread.currentThread().setContextClassLoader(tempClassLoader);
+        
+        // Simulate usage of ToStringStyle to initialize the ThreadLocal
+        ToStringBuilder.reflectionToString(new Object(), ToStringStyle.DEFAULT_STYLE);
+        
+        // Trigger garbage collection to check for possible memory leak
+        System.gc();
+        
+        // Check if the ThreadLocal is still holding a reference in the new class loader
+        Field field = ToStringStyle.class.getDeclaredField("CURRENT_STYLE");
+        field.setAccessible(true);
+        ThreadLocal<?> threadLocal = (ThreadLocal<?>) field.get(null);
+        
+        assertNotNull(threadLocal.get());
+        // Unload the temporary class loader and clear reference
+        tempClassLoader = null;
+        field.set(null, null);
+    } catch (Exception e) {
+        fail("Exception during test: " + e.getMessage());
+    } finally {
+        Thread.currentThread().setContextClassLoader(originalClassLoader);
     }
 }

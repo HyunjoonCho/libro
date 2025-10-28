@@ -1,0 +1,43 @@
+public void testVeryCloseEventsNotDetected() {
+    FirstOrderDifferentialEquations ode = new FirstOrderDifferentialEquations() {
+        public int getDimension() {
+            return 1;
+        }
+
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = 1; // simple linear dynamics for testing
+        }
+    };
+
+    SwitchingFunction switchingFunction = new SwitchingFunction() {
+        public double g(double t, double[] y) {
+            // A switching function with two close events
+            if (t < 90) {
+                return t - 90;
+            } else {
+                return 135 - t;
+            }
+        }
+
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.STOP;
+        }
+
+        public double getEventTime() {
+            return Double.POSITIVE_INFINITY;
+        }
+    };
+
+    EclipseIntegrator integrator = new EclipseIntegrator(1.0);
+    integrator.addSwitchingFunction(switchingFunction, 1e-8, 1e-8, 100);
+
+    double[] yStart = new double[] { 0.0 };
+    double[] yEnd = new double[1];
+    try {
+        integrator.integrate(ode, 0.0, yStart, 200.0, yEnd);
+        fail("Event at t=135 should have been detected but wasn't.");
+    } catch (EventOccurrenceException e) {
+        // As expected, an event should occur at t=135
+        assertTrue(e.getEventTime() > 134.999 && e.getEventTime() < 135.001);
+    }
+}

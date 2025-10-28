@@ -1,0 +1,57 @@
+public void testEventStateNotUpdatedOnReset() {
+    // Setup ODE problem
+    OrdinaryDifferentialEquation ode = new SimpleOscillator();
+    ODESolver solver = new ClassicalRungeKuttaSolver();
+    
+    // First Event Handler (triggers RESET_STATE)
+    ODEEventHandler resetStateEventHandler = new ODEEventHandler() {
+        @Override
+        public double g(double t, double[] y) {
+            return y[0] - 0.5;
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.RESET_STATE;
+        }
+
+        @Override
+        public void resetState(final double t, final double[] y) {
+            y[0] = 0.0;
+        }
+    };
+
+    // Second Event Handler (affected by the bug)
+    ODEEventHandler affectedEventHandler = new ODEEventHandler() {
+        @Override
+        public double g(double t, double[] y) {
+            // Expecting y values within a specific range
+            for (double v : y) {
+                assertTrue("State should be within expected range", v >= -1.0 && v <= 1.0);
+            }
+            return y[0] + 0.8;
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.CONTINUE;
+        }
+
+        @Override
+        public void resetState(final double t, final double[] y) {
+            // No reset needed
+        }
+    };
+
+    // Add event handlers
+    solver.addEventHandler(resetStateEventHandler, 1.0, 1.0e-6, 100);
+    solver.addEventHandler(affectedEventHandler, 1.0, 1.0e-6, 100);
+
+    // Initial state
+    double[] y0 = { 1.0, 0.0 };
+    double t0 = 0.0;
+    double t1 = 10.0;
+
+    // Integrate ODE problem
+    solver.integrate(ode, y0, t0, t1);
+}

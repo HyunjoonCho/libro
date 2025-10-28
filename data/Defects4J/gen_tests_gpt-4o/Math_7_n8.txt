@@ -1,0 +1,73 @@
+public void testEventStateNotUpdatedOnReset() {
+    // Assume we have two events, EventA and EventB
+    ODEIntegrator integrator = new DormandPrince54Integrator(1.0e-8, 1.0e-8, 1.0e-10, 1.0e-10);
+
+    // Create event handlers
+    ResettableEventHandler eventA = new ResettableEventHandler() {
+        @Override
+        public void init(double t0, double[] y0, double t) {}
+
+        @Override
+        public double g(double t, double[] y) {
+            return y[0] - 0.5;
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.RESET_STATE;
+        }
+
+        @Override
+        public void resetState(double t, double[] y) {
+            y[0] = 0.0;
+        }
+    };
+
+    EventHandler eventB = new EventHandler() {
+        private double lastEventTime = Double.NaN;
+        
+        @Override
+        public void init(double t0, double[] y0, double t) {}
+
+        @Override
+        public double g(double t, double[] y) {
+            // Expect y to be in a certain range
+            if (y[0] < -1 || y[0] > 1) {
+                fail("Event state not correctly updated on RESET_STATE");
+            }
+            if (!Double.isNaN(lastEventTime) && t <= lastEventTime) {
+                return Double.POSITIVE_INFINITY;
+            }
+            return y[0] - 0.6;
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            lastEventTime = t;
+            return Action.CONTINUE;
+        }
+
+        @Override
+        public void resetState(double t, double[] y) {}
+    };
+
+    // Add event handlers to the integrator
+    integrator.addEventHandler(eventA, 1.0, 1.0e-6, 100);
+    integrator.addEventHandler(eventB, 1.0, 1.0e-6, 100);
+
+    // Setup and integrate ODE
+    FirstOrderDifferentialEquations ode = new FirstOrderDifferentialEquations() {
+        @Override
+        public int getDimension() {
+            return 1;
+        }
+
+        @Override
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = -0.1 * y[0];
+        }
+    };
+
+    double[] yStart = new double[] { 0.6 };
+    integrator.integrate(ode, 0.0, yStart, 10.0, yStart);
+}

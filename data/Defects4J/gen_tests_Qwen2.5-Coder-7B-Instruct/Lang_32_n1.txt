@@ -1,0 +1,29 @@
+public void testThreadLocalMemoryLeak() throws Exception {
+    // Trigger loading of ToStringStyle class which initializes the ThreadLocal
+    ToStringBuilder.reflectionToString(new Object());
+
+    // Wait for some time to ensure the ThreadLocal has been set
+    Thread.sleep(100);
+
+    // Get all active threads
+    List<Thread> threads = new ArrayList<>(Collections.list(Thread.getAllStackTraces().keySet()));
+
+    // Check each thread for the presence of the ThreadLocal
+    for (Thread thread : threads) {
+        try {
+            Field field = ToStringStyle.class.getDeclaredField("contextData");
+            field.setAccessible(true);
+            assertNotNull("ThreadLocal contextData should not be null", field.get(thread));
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            // Ignore if the field doesn't exist or can't be accessed
+        }
+    }
+
+    // Assert that at least one thread has the ThreadLocal set
+    assertTrue("At least one thread should have the ThreadLocal contextData set", 
+               threads.stream().anyMatch(t -> {
+                   try {
+                       Field field = ToStringStyle.class.getDeclaredField("contextData");
+                       field.setAccessible(true);
+                       return field.get(t)!= null;
+                   } catch (NoSuchField

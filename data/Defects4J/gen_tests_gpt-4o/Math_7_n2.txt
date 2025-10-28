@@ -1,0 +1,64 @@
+public void testEventStateNotUpdated() {
+    // Create an ODE integrator with multiple event handlers
+    FirstOrderIntegrator integrator = new ClassicalRungeKuttaIntegrator(0.01);
+    double initialTime = 0.0;
+    double finalTime = 1.0;
+    double[] initialState = new double[] {0.0};
+
+    // Event handler that triggers a RESET_STATE
+    EventHandler resetStateHandler = new EventHandler() {
+        @Override
+        public double g(double t, double[] y) {
+            return t - 0.5; // Trigger event at t = 0.5
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.RESET_STATE;
+        }
+
+        @Override
+        public void resetState(double t, double[] y) {
+            y[0] = 0.1; // Reset state to some value
+        }
+    };
+
+    // Event handler that does not trigger but should update correctly
+    EventHandler nonTriggeringHandler = new EventHandler() {
+        @Override
+        public double g(double t, double[] y) {
+            return y[0] - 1; // This should not trigger during the integration
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.CONTINUE;
+        }
+
+        @Override
+        public void resetState(double t, double[] y) {}
+
+        @Override
+        public void init(double t0, double[] y0, double t) {
+            if (Math.abs(y0[0]) > 1) {
+                fail("Event handler called with incorrect state parameters");
+            }
+        }
+    };
+
+    integrator.addEventHandler(resetStateHandler, 1.0, 1.0e-9, 100);
+    integrator.addEventHandler(nonTriggeringHandler, 1.0, 1.0e-9, 100);
+
+    // Perform the integration
+    integrator.integrate(new FirstOrderDifferentialEquations() {
+        @Override
+        public int getDimension() {
+            return initialState.length;
+        }
+
+        @Override
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = 1.0;
+        }
+    }, initialTime, initialState, finalTime, new double[1]);
+}

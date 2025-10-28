@@ -1,0 +1,46 @@
+public void testCloseEvents() {
+    double tMin = 65.0;
+    double tMax = 155.0;
+    double tEvent1 = 90.0;
+    double tEvent2 = 135.0;
+
+    SwitchingFunction switchingFunction = new SwitchingFunction() {
+        public double g(double t, double[] y) {
+            if (t < tEvent1) {
+                return t - tEvent1;
+            } else if (t < tEvent2) {
+                return tEvent2 - t;
+            } else {
+                return t - tEvent2;
+            }
+        }
+
+        public int eventOccurred(double t, double[] y, boolean increasing) {
+            return SwitchingFunction.CONTINUE;
+        }
+
+        public double resetState(double t, double[] y) {
+            return y[0];
+        }
+    };
+
+    DormandPrince54Integrator integrator = new DormandPrince54Integrator(1.0e-8, 1.0e-1, 1.0e-10, 1.0e-10);
+
+    integrator.addSwitchingFunction(switchingFunction, 1.0e-3, 1.0e-3, 1000);
+
+    double[] yStart = {0.0};
+    double[] yEnd = new double[yStart.length];
+    integrator.integrate(new FirstOrderDifferentialEquations() {
+        public int getDimension() {
+            return yStart.length;
+        }
+
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = 1.0;
+        }
+    }, tMin, yStart, tMax, yEnd);
+
+    assertTrue(integrator.getEvaluations() > 0);
+    assertEquals(1, integrator.getLastCompletedStepEventIndex());
+    assertEquals(tEvent2, integrator.getLastStepEnd(), 1.0e-8);
+}

@@ -1,22 +1,19 @@
-public void testMemoryLeakDueToThreadLocals() {
-    org.apache.commons.lang3.builder.ToStringStyle toStringStyle =
-            org.apache.commons.lang3.builder.ToStringStyle.DEFAULT_STYLE;
+public void testThreadLocalMemoryLeak() throws Exception {
+    // Trigger loading of ToStringStyle class
+    String testString = new org.apache.commons.lang3.builder.ToStringBuilder(new Object()).toString();
 
-    // Simulate usage of ToStringStyle to trigger initialization of thread locals
-    String str = org.apache.commons.lang3.builder.ToStringBuilder.reflectionToString(new Object(), toStringStyle);
-
-    // Simulating the unloading/reloading of a web application
+    // Force garbage collection and check if there's a memory leak
     System.gc();
+    ReferenceQueue<Object> referenceQueue = new ReferenceQueue<>();
+    PhantomReference<Object> ref = new PhantomReference<>(testString, referenceQueue);
 
-    // Assert that at least a warning can be issued here; for demonstration purposes, check the presence of thread local map
-    Thread thread = Thread.currentThread();
-    try {
-        java.lang.reflect.Field threadLocalsField = Thread.class.getDeclaredField("threadLocals");
-        threadLocalsField.setAccessible(true);
-        java.lang.Object threadLocals = threadLocalsField.get(thread);
+    // Clear the strong reference
+    testString = null;
 
-        assertNotNull("ThreadLocal map should exist", threadLocals);
-    } catch (NoSuchFieldException | IllegalAccessException e) {
-        fail("Reflection access failed: " + e.getMessage());
-    }
+    System.gc();
+    
+    // Wait for a while to check if the object becomes reachable to the queue
+    Thread.sleep(1000);
+
+    assertNotNull(ref.isEnqueued());
 }

@@ -1,18 +1,25 @@
-public void testThreadLocalMemoryLeakInToStringStyle() throws Exception {
-    // Simulate webapp environment by creating a custom class loader
-    URLClassLoader classLoader = new URLClassLoader(new URL[0], null);
-    Class<?> toStringStyleClass = classLoader.loadClass("org.apache.commons.lang3.builder.ToStringStyle");
+public void testMemoryLeakDueToThreadLocalInToStringStyle() throws InterruptedException {
+    // Simulate the construction and usage of ToStringStyle in a container environment
+    Thread testThread = new Thread(() -> {
+        ToStringStyle style = ToStringStyle.DEFAULT_STYLE;
+        String result = new ToStringBuilder(new Object(), style)
+                        .append("test", "value")
+                        .toString();
+    });
 
-    // Force initialization of the ThreadLocal field in ToStringStyle
-    Field threadLocalField = toStringStyleClass.getDeclaredField("DEFAULT_STYLE");
-    threadLocalField.setAccessible(true);
-    threadLocalField.get(null);
+    // Start and join the thread to simulate usage and termination of a webapp thread
+    testThread.start();
+    testThread.join();
 
-    // Simulate webapp context reload by nullifying and collecting the custom class loader
-    classLoader = null;
+    // Enforce garbage collection and check for memory leaks
+    // Note: Weak references would typically be used in an actual environment-specific memory leak check
     System.gc();
 
-    // Assert that the ThreadLocal has been properly removed to prevent a memory leak
-    // In a real test, this might require some reflection tricks or a specific API from the library to test properly
-    // For illustration, it demonstrates awareness of the issue.
+    // Attempt to verify memory leak indirectly, by checking if the thread local was cleaned up (method is illustrative)
+    // The actual test framework may have container-specific checks
+    Field threadLocalsField = Thread.class.getDeclaredField("threadLocals");
+    threadLocalsField.setAccessible(true);
+    Object threadLocalMap = threadLocalsField.get(testThread);
+
+    assertNull("ThreadLocalMap should be null to prevent memory leaks", threadLocalMap);
 }

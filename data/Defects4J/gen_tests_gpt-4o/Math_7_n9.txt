@@ -1,0 +1,79 @@
+public void testEventStateNotUpdated() {
+    // Constants
+    double stepSize = 1.0;
+
+    // Simple ODE representing dy/dt = -y
+    FirstOrderDifferentialEquations ode = new FirstOrderDifferentialEquations() {
+        @Override
+        public int getDimension() {
+            return 1;
+        }
+
+        @Override
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = -y[0];
+        }
+    };
+
+    // Create the integrator
+    FirstOrderIntegrator integrator = new DormandPrince853Integrator(1.0e-8, 100.0, 1.0e-10, 1.0e-10);
+
+    // Event handler that resets state
+    EventHandler resetStateEvent = new EventHandler() {
+        @Override
+        public void init(double t0, double[] y0, double t) {}
+
+        @Override
+        public double g(double t, double[] y) {
+            return y[0] - 0.5;
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.RESET_STATE;
+        }
+
+        @Override
+        public void resetState(double t, double[] y) {
+            y[0] = -y[0]; // Negate the state
+        }
+    };
+
+    // Unrelated event handler, with internal state
+    EventHandler unrelatedEvent = new EventHandler() {
+        private double lastTime = 0;
+
+        @Override
+        public void init(double t0, double[] y0, double t) {
+            lastTime = t0;
+        }
+
+        @Override
+        public double g(double t, double[] y) {
+            return lastTime - t + 0.1;
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            lastTime = t;
+            return Action.CONTINUE;
+        }
+
+        @Override
+        public void resetState(double t, double[] y) {}
+    };
+
+    // Add event handlers to integrator
+    integrator.addEventHandler(resetStateEvent, stepSize, 1.0e-8, 100);
+    integrator.addEventHandler(unrelatedEvent, stepSize, 1.0e-8, 100);
+
+    // Initial state
+    double[] y0 = {1.0};
+    double[] y = new double[1];
+
+    // Integrate ODE
+    integrator.integrate(ode, 0.0, y0, 10.0, y);
+
+    // Check for non-realistic state values
+    assertTrue("State values are too large", y[0] < 1.0e10);
+}

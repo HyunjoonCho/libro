@@ -1,23 +1,18 @@
-@Test
-public void testThreadLocalMemoryLeak() {
-    // Simulate the condition where ToStringStyle uses ThreadLocal
-    ToStringBuilder.setDefaultStyle(ToStringStyle.SHORT_PREFIX_STYLE);
+public void testMemoryLeakInToStringStyle() {
+    // Trigger the loading of ToStringStyle by calling ToStringBuilder
+    ToStringBuilder.reflectionToString(new Object(), ToStringStyle.DEFAULT_STYLE);
     
-    // Use ToStringBuilder to trigger ThreadLocal usage
-    ToStringBuilder builder = new ToStringBuilder(new Object());
-    builder.append("key", "value");
-    builder.toString(); // Trigger the use of ThreadLocal
-    
-    // Attempt to clear the ThreadLocal (which currently there's no API for)
-    // This is where the bug in handling occurs, as there's no way to clear the ThreadLocal, causing memory leak
+    // Simulate web application reload by calling the Thread's remove method
+    // This would usually be verified through memory analysis, but here we check if the resources are released 
+    // by looking for the absence of specific side effects or errors after clearing ThreadLocals
+    try {
+        Method clearMethod = ToStringStyle.class.getDeclaredMethod("clearCache");
+        clearMethod.setAccessible(true);
+        clearMethod.invoke(null);  // Assuming a static method for cache clearing
 
-    // Set ToStringStyle to null for clean-up
-    ToStringBuilder.setDefaultStyle(null);
-    
-    // Force a GC run (note: this doesn't guarantee immediate memory clearance)
-    System.gc();
-
-    // Simulate webapp reload by attempting to reclaim memory and check for leaks
-    // Actual assertion of memory leak is complex and typically can't be done in a unit test easily
-    // However, observing heap dump analysis in a real test scenario may provide insight post-reloading
+        // Check if no exception occurs after explicitly clearing, as a proxy to detecting memory leaks
+        ToStringBuilder.reflectionToString(new Object(), ToStringStyle.DEFAULT_STYLE);
+    } catch (Exception e) {
+        fail("Clearing cache or further usage failed, indicating potential memory leak: " + e.getMessage());
+    }
 }

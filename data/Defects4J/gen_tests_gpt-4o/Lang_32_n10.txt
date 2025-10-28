@@ -1,19 +1,31 @@
-@Test
-public void testMemoryLeakDueToThreadLocal() throws Exception {
-    // Step 1: Simulate invoking ToStringStyle in a way that initializes the ThreadLocal
-    String result = new org.apache.commons.lang3.builder.ToStringBuilder(this, org.apache.commons.lang3.builder.ToStringStyle.DEFAULT_STYLE)
-        .append("memoryLeakTest", "value")
-        .toString();
-    
-    // Step 2: Attempt to trigger garbage collection and detect any memory leaks
-    WeakReference<ThreadLocal<?>> threadLocalWeakReference = 
-        new WeakReference<>(org.apache.commons.lang3.builder.ToStringStyle.getThreadLocal());
-    
-    result = null;  // clear strong reference
+public void testThreadLocalMemoryLeakInToStringStyle() throws Exception {
+    ToStringStyle style = ToStringStyle.DEFAULT_STYLE;
+    // Simulate usage of ToStringStyle in a container environment
+    for (int i = 0; i < 1000; i++) {
+        new ToStringBuilder(new Object(), style).append("field", "value").toString();
+    }
 
-    System.gc();
-    System.runFinalization();
-    
-    // Step 3: Assert that the ThreadLocal has been garbage collected and no leaks remain
-    assertNull("ThreadLocal should have been garbage collected", threadLocalWeakReference.get());
+    // Simulate a web application reload by checking if ThreadLocal is cleared
+    System.gc(); // Hint to JVM to clean up unused objects
+    Field threadLocalsField = Thread.class.getDeclaredField("threadLocals");
+    threadLocalsField.setAccessible(true);
+    Object threadLocalsMap = threadLocalsField.get(Thread.currentThread());
+
+    // Check if the ToStringStyle class still has any lingering references
+    Field tableField = threadLocalsMap.getClass().getDeclaredField("table");
+    tableField.setAccessible(true);
+    Object[] table = (Object[]) tableField.get(threadLocalsMap);
+
+    boolean isLeaked = false;
+    for (Object entry : table) {
+        if (entry != null) {
+            Object value = ((WeakReference<?>) entry).get();
+            if (value != null && value.getClass().getName().contains("ToStringStyle")) {
+                isLeaked = true;
+                break;
+            }
+        }
+    }
+
+    assertFalse("Detected a memory leak via a lingering ThreadLocal reference to ToStringStyle", isLeaked);
 }

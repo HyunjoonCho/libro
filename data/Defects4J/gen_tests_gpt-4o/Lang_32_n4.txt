@@ -1,25 +1,29 @@
-public void testThreadLocalMemoryLeakInToStringStyle() {
-    // Attempt to trigger the use of ThreadLocal in ToStringStyle
-    for (int i = 0; i < 1000; i++) {
-        String testString = new org.apache.commons.lang3.builder.ToStringBuilder(this, ToStringStyle.DEFAULT_STYLE)
-            .append("index", i)
-            .toString();
-    }
+public void testThreadLocalMemoryLeak() throws Exception {
+    Class<?> clazz = Class.forName("org.apache.commons.lang3.builder.ToStringStyle");
+    Field threadLocalField = clazz.getDeclaredField("threadLocal");
+    threadLocalField.setAccessible(true);
+    ThreadLocal<?> threadLocal = (ThreadLocal<?>) threadLocalField.get(null);
 
-    // Simulating the unloading of web application class loaders
-    try {
-        System.gc();
-        Thread.sleep(100); // Allow Garbage Collector to do its job
-    } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        fail("Test interrupted");
-    }
+    Object before = threadLocal.get();
 
-    // Inspect memory usage to detect if there's any unexpected memory holding references to ThreadLocal
-    long memoryUsed = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+    // Simulate use of ToStringStyle
+    Method appendClassNameMethod = clazz.getDeclaredMethod("appendClassName", StringBuffer.class, Object.class);
+    appendClassNameMethod.setAccessible(true);
+    appendClassNameMethod.invoke(getCustomToStringStyleInstance(), new StringBuffer(), new Object());
 
-    // Arbitrary threshold for detecting excessive memory usage due to retained ThreadLocals
-    long threshold = 10_000_000; // 10 MB, adjust according to environment
-    assertTrue("Potential memory leak detected due to ThreadLocal usage in ToStringStyle",
-            memoryUsed < threshold);
+    assertNotNull("ThreadLocal should have a value set after usage", threadLocal.get());
+
+    // Clear ThreadLocal to simulate memory leak resolution
+    threadLocal.remove();
+
+    assertNull("ThreadLocal should be cleared after removal", threadLocal.get());
+}
+
+private Object getCustomToStringStyleInstance() throws Exception {
+    // Normally we would create or obtain an instance of a class that uses ToStringStyle,
+    // for the purposes of this test, a mock or similar logic may be used
+    Class<?> clazz = Class.forName("org.apache.commons.lang3.builder.ToStringStyle$DefaultToStringStyle");
+    Constructor<?> constructor = clazz.getDeclaredConstructor();
+    constructor.setAccessible(true);
+    return constructor.newInstance();
 }

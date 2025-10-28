@@ -1,0 +1,77 @@
+public void testEventStateReset() {
+    // Define dummy ODE problem
+    FirstOrderDifferentialEquations ode = new FirstOrderDifferentialEquations() {
+        public int getDimension() {
+            return 1;
+        }
+
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = 1.0;
+        }
+    };
+
+    // Create an integrator
+    FirstOrderIntegrator integrator = new DormandPrince54Integrator(1.0e-8, 100.0, 1.0e-10, 1.0e-10);
+
+    // Define two event handlers
+    EventHandler resetEventHandler = new EventHandler() {
+        public int eventOccurred(double t, double[] y, boolean increasing) {
+            // Request reset state
+            return RESET_STATE;
+        }
+
+        public double g(double t, double[] y) {
+            return y[0] - 0.5; // Trigger event when y[0] crosses 0.5
+        }
+
+        public void resetState(double t, double[] y) {
+            y[0] = 0.0; // Reset y[0] to 0
+        }
+
+        public double getSwitchingFunctionValue(double t, double[] y) {
+            return g(t, y);
+        }
+
+        public double getTolerance() {
+            return 1.0e-7; // Call g(t, y) with small tolerance
+        }
+    };
+
+    EventHandler dummyHandler = new EventHandler() {
+        public int eventOccurred(double t, double[] y, boolean increasing) {
+            return CONTINUE;
+        }
+
+        public double g(double t, double[] y) {
+            // Return a constant value
+            return 1.0;
+        }
+
+        public void resetState(double t, double[] y) {
+            // No-op
+        }
+
+        public double getSwitchingFunctionValue(double t, double[] y) {
+            return g(t, y);
+        }
+
+        public double getTolerance() {
+            return 0.1;
+        }
+    };
+
+    integrator.addEventHandler(resetEventHandler, 0.1, 1.0e-10, 100);
+    integrator.addEventHandler(dummyHandler, 0.1, 1.0e-10, 100);
+
+    // Initial time and state
+    double t0 = 0.0;
+    double[] y0 = {0.0};
+
+    // Integrate the ODE
+    double t1 = 2.0;
+    double[] y = new double[y0.length];
+    integrator.integrate(ode, t0, y0, t1, y);
+
+    // Ensure that g is called with a reasonable state, not extreme values
+    assertTrue(Math.abs(y[0]) <= 1.0, "The state should be within valid bounds after event handling.");
+}

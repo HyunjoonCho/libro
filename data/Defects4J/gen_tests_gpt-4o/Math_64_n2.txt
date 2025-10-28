@@ -1,0 +1,67 @@
+public void testLevenbergMarquardtInconsistentResult() {
+    // Setup the Levenberg-Marquardt optimizer with a sample problem
+    MultivariateJacobianFunction modelFunction = (point) -> {
+        double[] values = new double[]{point[0] * point[0], point[1] * point[1]};
+        double[][] jacobian = new double[][]{{2 * point[0], 0}, {0, 2 * point[1]}};
+        return new Pair<>(values, jacobian);
+    };
+
+    double[] initialGuess = new double[]{1.0, 1.0};
+    double[] target = new double[]{2.0, 2.0};
+    double[][] weights = new double[][]{{1.0, 0.0}, {0.0, 1.0}};
+    
+    LevenbergMarquardtOptimizer optimizer = new LevenbergMarquardtOptimizer();
+    PointVectorValuePair result = optimizer.optimize(
+            new LeastSquaresProblem() {
+                @Override
+                public int getObservationSize() {
+                    return target.length;
+                }
+                
+                @Override
+                public int getParameterSize() {
+                    return initialGuess.length;
+                }
+                
+                @Override
+                public RealVector getStart() {
+                    return new ArrayRealVector(initialGuess);
+                }
+                
+                @Override
+                public RealLinearOperator getJacobian() {
+                    return new AbstractRealLinearOperator(target.length, initialGuess.length) {
+                        @Override
+                        public void operate(RealVector x, RealVector y) {
+                            y.setSubVector(0, modelFunction.value(x.toArray()).getSecond()[0]);
+                        }
+                    };
+                }
+                
+                @Override
+                public RealVector getObservations() {
+                    return new ArrayRealVector(target);
+                }
+                
+                @Override
+                public RealLinearOperator getWeight() {
+                    return new Array2DRowRealMatrix(weights);
+                }
+                
+                @Override
+                public double getCost() {
+                    double[] residuals = getObservations().subtract(getStart()).toArray();
+                    return Math.sqrt(new ArrayRealVector(residuals).dotProduct(new ArrayRealVector(residuals)));
+                }
+            });
+
+    // Check if the returned point leads to the correct residuals and cost
+    double[] point = result.getPoint();
+    double[] residuals = new double[]{point[0] * point[0] - target[0], point[1] * point[1] - target[1]};
+    double cost = Math.sqrt(new ArrayRealVector(residuals).dotProduct(new ArrayRealVector(residuals)));
+    
+    assertArrayEquals(initialGuess, point, 1e-5);
+    assertEquals(target[0], residuals[0] + target[0], 1e-5);
+    assertEquals(target[1], residuals[1] + target[1], 1e-5);
+    assertEquals(Math.sqrt(2.0), cost, 1e-5);
+}

@@ -1,0 +1,51 @@
+public void testUnboundedSolutionException() {
+    // Using Apache Commons Math3 library for creating linear programming problems
+    int entitesCount = 15;
+
+    // Coefficients for the objective function
+    double[] objectiveCoefficients = new double[entitesCount + 1]; // include t
+    objectiveCoefficients[0] = 1.0; // Coefficient for t
+    // Coefficients for L are zero, hence already initialized by default
+
+    // Setting up the objective function for minimization
+    LinearObjectiveFunction objectiveFunction = new LinearObjectiveFunction(objectiveCoefficients, 0);
+
+    // Constraints
+    Collection<LinearConstraint> constraints = new ArrayList<>();
+    Random rand = new Random();
+
+    for (int r = 0; r < entitesCount; r++) {
+        double q_r = rand.nextDouble();
+        double[] coefficients = new double[entitesCount + 1];
+        coefficients[r + 1] = -1.0; // L part of L >= q(r) / Q
+        constraints.add(new LinearConstraint(coefficients, Relationship.GEQ, -q_r));
+
+        double x_r = rand.nextDouble();
+        coefficients = new double[entitesCount + 1];
+        coefficients[0] = x_r; // t part of x(r)t >= x(r)L
+        coefficients[r + 1] = -1.0; // L part
+        constraints.add(new LinearConstraint(coefficients, Relationship.GEQ, 0));
+    }
+
+    for (int r = 0; r < entitesCount; r++) {
+        // L >= 0 for each L
+        double[] coefficients = new double[entitesCount + 1];
+        coefficients[r + 1] = 1.0; // Coefficient for each L
+        constraints.add(new LinearConstraint(coefficients, Relationship.GEQ, 0));
+    }
+
+    // Create the solver and solve the problem
+    SimplexSolver solver = new SimplexSolver();
+    try {
+        PointValuePair solution = solver.optimize(
+            new MaxIter(1000),
+            objectiveFunction,
+            new LinearConstraintSet(constraints),
+            GoalType.MINIMIZE,
+            new NonNegativeConstraint(true)
+        );
+        assertNotNull("Solution should not be null or unbounded", solution);
+    } catch (UnboundedSolutionException e) {
+        fail("Unexpected UnboundedSolutionException for " + entitesCount + " variables");
+    }
+}

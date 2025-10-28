@@ -39,6 +39,11 @@ if __name__ == '__main__':
         print(f'p={project}, v={bug_id}')
 
         for i in range(1, args.num_tests + 1):
+            test_path = f'{output_dir}/{project}_{bug_id}_n{i}.txt'
+            cost_path = f'{output_dir}/{project}_{bug_id}_n{i}_cost.json'
+            if os.path.exists(test_path) and os.path.exists(cost_path):
+                continue
+
             gen_test, cost = query_llm_for_gentest(
                 project, bug_id, 
                 args.model,
@@ -48,9 +53,6 @@ if __name__ == '__main__':
                 save_prompt=args.save_prompt, 
                 prompt_save_path=args.prompt_out
             )
-            test_path = f'{output_dir}/{project}_{bug_id}_n{i}.txt'
-            cost_path = f'{output_dir}/{project}_{bug_id}_n{i}_cost.json'
-
             with open(test_path, 'w') as f:
                 f.write(gen_test)
 

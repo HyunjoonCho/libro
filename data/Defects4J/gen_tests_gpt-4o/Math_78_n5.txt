@@ -1,0 +1,61 @@
+public void testCloseEventsDetection() {
+    double tStart = 67.5;
+    double tEnd = 153.0;
+    double tEvent1 = 90.0;
+    double tEvent2 = 135.0; 
+    double tolerance = 1e-9;
+    
+    // Create a switching function to simulate the problem
+    UnivariateFunction switchingFunction = new UnivariateFunction() {
+        public double value(double t) {
+            if (t < tEvent1) {
+                return 2 * (t - tEvent1);
+            } else {
+                return -2 * (t - tEvent2);
+            }
+        }
+    };
+    
+    // Create an event handler based on the switching function
+    EventHandler eventHandler = new EventHandler() {
+        public double g(double t, double[] y) {
+            return switchingFunction.value(t);
+        }
+
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.STOP;
+        }
+
+        public void init(double t0, double[] y0, double t) {}
+
+        public void resetState(double t, double[] y) {}
+    };
+    
+    // Set up the integrator with the event handler
+    ODEIntegrator integrator = new DormandPrince853Integrator(1.0e-8, 100.0, 1.0e-10, 1.0e-10);
+    integrator.addEventHandler(eventHandler, tolerance, tolerance, 100);
+
+    // Solve the differential equation starting at tStart
+    FirstOrderDifferentialEquations ode = new FirstOrderDifferentialEquations() {
+        public int getDimension() {
+            return 1;
+        }
+
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = 1.0;
+        }
+    };
+
+    double[] y = new double[] { 0.0 };
+    integrator.integrate(ode, tStart, y, tEnd, y);
+
+    // Check if both events (tEvent1 and tEvent2) were detected
+    assertEquals(tEvent1, integrator.getFinalTime(), tolerance);
+    
+    // Restart integration to catch the second event
+    integrator.setInitialStepSize(1.0e-8); // Ensure minimal step to detect close events
+    y[0] = 0.0;
+    integrator.integrate(ode, tEvent1 + tolerance, y, tEnd, y);
+
+    assertEquals(tEvent2, integrator.getFinalTime(), tolerance);
+}

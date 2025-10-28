@@ -1,19 +1,19 @@
-public void testToStringStyleMemoryLeak() throws InterruptedException {
-    // Create a separate thread to simulate the environment similar to a web application container
-    Thread testThread = new Thread(() -> {
-        // Trigger the loading and usage of ToStringStyle which involves using ThreadLocal
+public void testThreadLocalMemoryLeakInToStringStyle() {
+    System.gc();
+    int availableMemoryBefore = getAvailableMemory();
+
+    for (int i = 0; i < 10000; i++) {
         ToStringStyle style = ToStringStyle.DEFAULT_STYLE;
-        String result = new ToStringBuilder(this, style).append("test", "value").toString();
-        
-        // Ensure that the result is not null, as this is part of the functionality
-        assertNotNull(result);
-    });
+        new ToStringBuilder(new Object(), style).append("test", "value").toString();
+    }
 
-    // Start and wait for the thread to complete
-    testThread.start();
-    testThread.join();
+    System.gc();
+    int availableMemoryAfter = getAvailableMemory();
 
-    // At this point, in a real container environment, if the ThreadLocal wasn't properly managed,
-    // memory leak would occur upon thread reuse. In this test, we can't directly check the memory leak.
-    // However, we can ensure our functionality executed without exceptions and hint at the area of concern.
+    assertTrue(availableMemoryAfter >= availableMemoryBefore * 0.9, 
+               "Memory leak detected in ToStringStyle due to ThreadLocal");
+}
+
+private int getAvailableMemory() {
+    return (int) (Runtime.getRuntime().freeMemory() + (Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory()));
 }

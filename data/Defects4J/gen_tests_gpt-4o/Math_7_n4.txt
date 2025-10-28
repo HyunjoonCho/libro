@@ -1,0 +1,84 @@
+public void testResetStateWithMultipleEvents() {
+    // Define a simple ODE
+    FirstOrderDifferentialEquations ode = new FirstOrderDifferentialEquations() {
+        public int getDimension() {
+            return 2;
+        }
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = y[1];
+            yDot[1] = -y[0];
+        }
+    };
+    
+    // Initial state
+    double[] y0 = new double[] {0.0, 1.0};
+    
+    // Event handler that triggers a reset
+    EventHandler resetEventHandler = new EventHandler() {
+        public double g(double t, double[] y) {
+            return y[0] - 0.5;
+        }
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.RESET_STATE;
+        }
+        public void resetState(double t, double[] y) {
+            y[0] = 0.0;
+            y[1] = 1.0;
+        }
+        public double getMaxCheckInterval() {
+            return 1.0;
+        }
+        public int getMaxIterationCount() {
+            return 1000;
+        }
+        public double getConvergence() {
+            return 1.0e-9;
+        }
+    };
+    
+    // Second event handler that should not trigger but still update its internal state
+    EventHandler secondEventHandler = new EventHandler() {
+        private double lastCallTime = Double.NaN;
+        
+        public double g(double t, double[] y) {
+            double ret = y[1] - 0.2;
+            // Simulate unexpected large values for wrong state handling
+            if (y[1] > 1.0e5) {
+                fail("Unrealistic event state parameter detected: " + y[1]);
+            }
+            lastCallTime = t;
+            return ret;
+        }
+        
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.CONTINUE;
+        }
+        
+        public void resetState(double t, double[] y) {}
+        
+        public double getMaxCheckInterval() {
+            return 1.0;
+        }
+        
+        public int getMaxIterationCount() {
+            return 1000;
+        }
+        
+        public double getConvergence() {
+            return 1.0e-9;
+        }
+    };
+    
+    // Create integrator and add event handlers
+    FirstOrderIntegrator integrator = new DormandPrince853Integrator(
+        1.0e-8, 100.0, 1.0e-10, 1.0e-10);
+    integrator.addEventHandler(resetEventHandler, resetEventHandler.getMaxCheckInterval(),
+                               resetEventHandler.getConvergence(), resetEventHandler.getMaxIterationCount());
+    integrator.addEventHandler(secondEventHandler, secondEventHandler.getMaxCheckInterval(),
+                               secondEventHandler.getConvergence(), secondEventHandler.getMaxIterationCount());
+
+    // Integrate
+    integrator.integrate(ode, 0.0, y0, 10.0, y0);
+
+    // If the test completes without failing, then the event handling is correct
+}

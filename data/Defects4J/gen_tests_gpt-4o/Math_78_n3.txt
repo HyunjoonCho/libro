@@ -1,0 +1,46 @@
+public void testLastEventInClosePairNotDetected() {
+    // Define a switching function that is increasing around t = 90 and decreasing around t = 135
+    SwitchingFunction switchFunction = new SwitchingFunction() {
+        @Override
+        public double g(double t, double[] y) {
+            if (t < 90) {
+                return t - 85; // Increasing until it reaches maximum at t = 90
+            } else if (t < 135) {
+                return 90 - (t - 90); // Decreasing past the maximum
+            } else {
+                return -1 * (t - 135); // Decreasing towards t = 135
+            }
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            return Action.STOP;
+        }
+    };
+
+    // Set up the ODE integrator with the switching function
+    double[] yStart = {0};
+    double tStart = 67.5;
+    double tEnd = 153.0;
+    FirstOrderDifferentialEquations ode = new FirstOrderDifferentialEquations() {
+        @Override
+        public int getDimension() {
+            return 1;
+        }
+
+        @Override
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = 1; // Dummy derivative, not relevant for event detection
+        }
+    };
+
+    AdamsBashforthIntegrator integrator = new AdamsBashforthIntegrator(2, 10e-8, 10e-8, 10e-10, 10e-10);
+    integrator.addSwitchingFunction(switchFunction, 10e-8, 10e-8, 100);
+
+    // Perform integration
+    double[] y = yStart.clone();
+    integrator.integrate(ode, tStart, y, tEnd, y);
+
+    // The event should have been detected around t = 135
+    assertEquals(135.0, integrator.getCurrentTime(), 1.0);
+}
