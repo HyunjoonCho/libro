@@ -222,6 +222,7 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--test_no', type=int, default=None)
     parser.add_argument('--gen_test_dir', default='/root/libro/data/Defects4J/gen_tests_gpt3.5/')
     parser.add_argument('--all', action='store_true')
+    parser.add_argument('--projects', nargs='*') 
     parser.add_argument('--exp_name', default='gpt3.5')
     args = parser.parse_args()
 
@@ -229,9 +230,12 @@ if __name__ == '__main__':
 
     if args.all:
         bug2tests = defaultdict(list)
-        
+      
+        project_list = args.projects
         for gen_test_file in glob.glob(os.path.join(GEN_TEST_DIR, '*.txt')):
             bug_id = '_'.join(os.path.basename(gen_test_file).split('_')[:2])
+            if project_list and not any([bug_id.startswith(p) for p in project_list]):
+                continue
             bug2tests[bug_id].append(gen_test_file)
 
         exec_results = {}
@@ -262,8 +266,8 @@ if __name__ == '__main__':
                 res_for_bug[os.path.basename(test_path)] = res
             exec_results[bug_key] = res_for_bug
 
-        with open(f'/root/libro/results/{args.exp_name}.json', 'w') as f:
-            json.dump(exec_results, f, indent=4)
+            with open(f'/root/libro/results/{args.exp_name}.json', 'w') as f:
+                json.dump(exec_results, f, indent=4)
 
     elif args.test_no is None:
         test_files = glob.glob(os.path.join(GEN_TEST_DIR, f'{args.project}_{args.bug_id}_*.txt'))
