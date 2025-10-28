@@ -237,9 +237,17 @@ if __name__ == '__main__':
             if project_list and not any([bug_id.startswith(p) for p in project_list]):
                 continue
             bug2tests[bug_id].append(gen_test_file)
+    
+        output_path = f'/root/libro/results/{args.exp_name}.json'
+        if os.path.exists(output_path):
+            with open(output_path) as f:
+                exec_results = json.load(f)
+        else:
+            exec_results = {}
 
-        exec_results = {}
         for bug_key, tests in tqdm(bug2tests.items()):
+            if bug_key in exec_results:
+                continue
             project, bug_id = bug_key.split('_')
             bug_id = int(bug_id)
             res_for_bug = {}
@@ -266,7 +274,7 @@ if __name__ == '__main__':
                 res_for_bug[os.path.basename(test_path)] = res
             exec_results[bug_key] = res_for_bug
 
-            with open(f'/root/libro/results/{args.exp_name}.json', 'w') as f:
+            with open(output_path, 'w') as f:
                 json.dump(exec_results, f, indent=4)
 
     elif args.test_no is None:
