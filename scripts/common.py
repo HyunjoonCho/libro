@@ -460,8 +460,6 @@ def process_result(result_json_path, gen_test_path):
             if not filename.endswith('.txt'):
                 filename = filename + '.txt'
             test_file = os.path.join(gen_test_path, filename)
-            result_processed[bug_id][filename] = test_result
-            result_processed[bug_id][filename]['fib_test_id'] = test_result['buggy']['failed_tests'][0] if len(test_result['buggy']['failed_tests']) > 0 else None
 
             if isinstance(test_result, str):
                 result_processed[bug_id][filename] = {
@@ -475,6 +473,8 @@ def process_result(result_json_path, gen_test_path):
                 }
                 continue
 
+            result_processed[bug_id][filename] = test_result
+            result_processed[bug_id][filename]['fib_test_id'] = test_result['buggy']['failed_tests'][0] if len(test_result['buggy']['failed_tests']) > 0 else None
 
             compile_error_in_fixed = (test_result['fixed']['compile_error']) if test_result['fixed'] is not None else False
             runtime_error_in_fixed = (test_result['fixed']['runtime_error']) if test_result['fixed'] is not None else False
