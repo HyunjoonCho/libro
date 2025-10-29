@@ -420,6 +420,17 @@ if __name__ == "__main__":
     print(f'* Total (success): {len(rank_df[rank_df.first_success_rank < BIG_NUMBER])}')
     print(f'* Total (fib): {len(rank_df)}')
 
+    # binary result for routing: at least one BRT generated or not?
+    rank_dict = dict([(row['bug_id'], row['first_success_rank']) for _, row in rank_df.iterrows()]) 
+    simple_result_dict = dict()
+    for bug_id in result_dict:
+        if bug_id not in rank_dict:
+            simple_result_dict[bug_id] = False
+        else:
+            simple_result_dict[bug_id] = rank_dict[bug_id] < BIG_NUMBER
+    with open(f'../results/simple_result_{dname}{args.postfix}.csv', 'w') as f:
+        json.dump(simple_result_dict, f, indent=2)
+
     # 6. select bugs to present and rank within them (only confident ones)
     rank_feature_df_selected = select_confident_bugs(rank_feature_df, threshold=SELECTION_THRESHOLD)
     rank_df_selected = rank_tests_using_clusters(rank_feature_df_selected, test_clusters)
