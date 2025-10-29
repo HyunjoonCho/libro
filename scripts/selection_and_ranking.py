@@ -327,6 +327,7 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--result_file', default=None, help='Path to the execution result file (e.g., `../results/example2_n50.json`)')
     parser.add_argument('-g', '--gen_test_path', default=None, help='Directory that contains raw generated tests (e.g., `../data/Defects4J/gen_tests/`)')
     parser.add_argument('-p', '--postfix', default='')
+    parser.add_argument('--projects', nargs='*')
     parser.add_argument('--random', action='store_true', help='Produce random baseline results')
     args = parser.parse_args()
 
@@ -349,7 +350,7 @@ if __name__ == "__main__":
         print(f'Use the custom generated test path {args.gen_test_path}...')
         gen_test_path = args.gen_test_path
         
-    result_dict = process_result(result_path, gen_test_path)
+    result_dict = process_result(result_path, gen_test_path, args.projects)
 
     # 1. converts test results into dataframe
     rows = []
@@ -428,7 +429,7 @@ if __name__ == "__main__":
             simple_result_dict[bug_id] = False
         else:
             simple_result_dict[bug_id] = rank_dict[bug_id] < BIG_NUMBER
-    with open(f'../results/simple_result_{dname}{args.postfix}.csv', 'w') as f:
+    with open(f'../results/simple_result_{dname}{args.postfix}.json', 'w') as f:
         json.dump(simple_result_dict, f, indent=2)
 
     # 6. select bugs to present and rank within them (only confident ones)

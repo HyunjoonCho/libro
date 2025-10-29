@@ -441,7 +441,7 @@ def find_between(s, first, last):
         return ""
 
 
-def process_result(result_json_path, gen_test_path):
+def process_result(result_json_path, gen_test_path, projects=[]):
     """
     Load execution result & return result dictionary (attaching parse error information)
     """
@@ -455,6 +455,8 @@ def process_result(result_json_path, gen_test_path):
     result_processed = defaultdict(dict)
     for bug_id, test_results in result.items():
         if bug_id in invalid_bugs:
+            continue
+        if projects and not any([bug_id.startswith(p) for p in projects]):
             continue
         for filename, test_result in test_results.items():
             if not filename.endswith('.txt'):
