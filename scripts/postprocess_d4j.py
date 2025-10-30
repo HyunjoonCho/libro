@@ -245,7 +245,7 @@ if __name__ == '__main__':
         else:
             exec_results = {}
 
-        for bug_key, tests in tqdm(bug2tests.items()):
+        for bug_key, tests in tqdm(sorted(bug2tests.items())):
             if bug_key in exec_results:
                 continue
             project, bug_id = bug_key.split('_')
