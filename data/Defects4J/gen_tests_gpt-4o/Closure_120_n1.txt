@@ -1,0 +1,36 @@
+public void testOverzealousOptimizationBug() {
+    String originalCode = "var uid;\n" +
+            "function reset() {\n" +
+            "  uid = Math.random();\n" +
+            "}\n" +
+            "function doStuff() {\n" +
+            "  reset();\n" +
+            "  var _uid = uid;\n" +
+            "  if (uid < 0.5) {\n" +
+            "    doStuff();\n" +
+            "  }\n" +
+            "  if (_uid !== uid) {\n" +
+            "    throw 'reset() was called';\n" +
+            "  }\n" +
+            "}\n" +
+            "doStuff();";
+
+    String optimizedCode = "var a;function b(){a=Math.random();0.5>a&&b();if(a!==a)throw\"reset() was called\";}b();";
+
+    // Simulate a JavaScript execution environment
+    Context cx = Context.enter();
+    try {
+        Scriptable scope = cx.initStandardObjects();
+        cx.evaluateString(scope, originalCode, "testOriginalCode", 1, null);
+
+        // This should throw an exception since _uid !== uid after the loop
+        try {
+            cx.evaluateString(scope, optimizedCode, "testOptimizedCode", 1, null);
+            fail("Expected an exception due to uid change was not thrown");
+        } catch (JavaScriptException e) {
+            assertEquals("reset() was called", e.getValue());
+        }
+    } finally {
+        Context.exit();
+    }
+}

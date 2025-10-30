@@ -1,0 +1,45 @@
+public void testInvalidPropertyInForLoopPrototypeFunction() {
+    // Mock externs and js source as strings to simulate the issue described
+    String externsSource = "/** @constructor */ var ns = {};\n" +
+                           "/** @constructor */ ns.Thing = function() {};\n" +
+                           "/** @type {number} */ ns.Thing.prototype.prop;";
+
+    String jsSource = "/**\n" +
+                      " * @param {ns.Thing} thing\n" +
+                      " * @constructor\n" +
+                      " */\n" +
+                      "ns.MyClass = function(thing) {\n" +
+                      "    /** @type {ns.Thing} */ this.thing_ = thing;\n" +
+                      "};\n\n" +
+                      "ns.MyClass.prototype.doIt = function() {\n" +
+                      "    var subthing = this.thing_.subthing;\n" +
+                      "    \n" +
+                      "    // NO ERROR:\n" +
+                      "    for (var i = 0; i < subthing.noprop; i++) {\n" +
+                      "        window.console.log(i);\n" +
+                      "    }\n" +
+                      "};\n\n" +
+                      "var thing = /** @type {ns.Thing} */ ({subthing: {prop: 3}});\n\n" +
+                      "var c = new ns.MyClass(thing);\n" +
+                      "c.doIt();";
+    
+    // Instantiate the compiler and compile the code with the provided options
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    
+    options.setPrettyPrint(true);
+    options.setCheckTypes(true);
+    options.setExternsValidation(true);
+    options.setCompilationLevel(CompilationLevel.SIMPLE_OPTIMIZATIONS);
+
+    // Compile the code
+    Result result = compiler.compile(
+        SourceFile.fromCode("externs.js", externsSource),
+        SourceFile.fromCode("inloop.js", jsSource),
+        options
+    );
+    
+    // Assert there should be an error due to the invalid property access in the for loop
+    assertFalse(result.success);
+    assertTrue(result.errors.stream().anyMatch(e -> e.description.contains("Property noprop not defined")));
+}

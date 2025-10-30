@@ -1,0 +1,28 @@
+public void testPrototypesDeclaredWithQuotesWarning() {
+    String externs = ""
+        + "/** @interface */"
+        + "function MyParent() {}"
+        + "/** @param {*} a */"
+        + "MyParent.prototype.MyMethod = function(a) {}";
+
+    String code = ""
+        + "/** @constructor */"
+        + "function MyClass() {}"
+        + "MyClass.prototype['MyMethod'] = function(a) {"
+        + "  this.a = a;"
+        + "};"
+        + "window['MyClass'] = MyClass;";
+
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setWarningLevel(DiagnosticGroups.GLOBAL_THIS, CheckLevel.VERBOSE);
+    
+    List<JSSourceFile> externFiles = ImmutableList.of(JSSourceFile.fromCode("externs.js", externs));
+    List<JSSourceFile> inputFiles = ImmutableList.of(JSSourceFile.fromCode("input.js", code));
+
+    Result result = compiler.compile(externFiles, inputFiles, options);
+    assertTrue("Expected warnings not found", result.warnings.length > 0);
+    boolean foundGlobalThisWarning = Arrays.stream(result.warnings)
+        .anyMatch(warning -> warning.getType().equals(DiagnosticGroups.GLOBAL_THIS));
+    assertTrue("Did not find expected global 'this' warning", foundGlobalThisWarning);
+}

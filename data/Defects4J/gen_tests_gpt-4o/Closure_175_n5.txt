@@ -1,0 +1,30 @@
+public void testErroneousOptimization() throws IOException, InterruptedException {
+    String inputJs = "window['anchor'] = function(obj, modifiesProp) {" +
+                     "  return (function(saved) {" +
+                     "    return modifiesProp(obj) + saved;" +
+                     "  })(obj['prop']);" +
+                     "};";
+                     
+    Path inputFile = Files.createTempFile("input", ".js");
+    Path externFile = Files.createTempFile("extern", ".js");
+    Path outputFile = Files.createTempFile("output", ".js");
+    
+    Files.write(inputFile, inputJs.getBytes(StandardCharsets.UTF_8));
+    
+    ProcessBuilder processBuilder = new ProcessBuilder("java",
+                                                 "-jar",
+                                                 "path/to/compiler.jar",
+                                                 "--compilation_level", "ADVANCED_OPTIMIZATIONS",
+                                                 "--warning_level", "VERBOSE",
+                                                 "--externs", externFile.toString(),
+                                                 "--js", inputFile.toString(),
+                                                 "--js_output_file", outputFile.toString());
+    
+    processBuilder.redirectErrorStream(true);
+    Process process = processBuilder.start();
+    process.waitFor();
+    
+    String outputJs = new String(Files.readAllBytes(outputFile), StandardCharsets.UTF_8);
+    
+    assertTrue(outputJs.contains("var HOLD=a.prop;return b(a)+HOLD"));
+}

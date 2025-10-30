@@ -1,0 +1,37 @@
+public void testIncompleteHandlingOfUndefinedNamespaces() {
+    String xml = "<ElementA A:myAttr=\"Mytype\" xmlns:A=\"http://example.com/A\" xmlns:B=\"http://example.com/B\">"
+               + "<B:ElementB>MY VALUE</B:ElementB>"
+               + "</ElementA>";
+    
+    // Simulated XML parsing and namespace registration
+    try {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+        DocumentBuilder builder = factory.newDocumentBuilder();
+        Document document = builder.parse(new ByteArrayInputStream(xml.getBytes()));
+
+        XPathFactory xPathFactory = XPathFactory.newInstance();
+        XPath xPath = xPathFactory.newXPath();
+        xPath.setNamespaceContext(new NamespaceContext() {
+            public String getNamespaceURI(String prefix) {
+                if ("A".equals(prefix)) {
+                    return "http://example.com/A";
+                } else if ("B".equals(prefix)) {
+                    return "http://example.com/B";
+                }
+                return XMLConstants.NULL_NS_URI;
+            }
+            public String getPrefix(String uri) { return null; }
+            public Iterator getPrefixes(String uri) { return null; }
+        });
+
+        // Try to query the attribute with the namespace, should throw an exception due to unresolved attribute namespace
+        String expression = "/ElementA/@A:myAttr";
+        xPath.compile(expression).evaluate(document);
+        fail("Exception should have been thrown due to unresolved attribute namespace");
+    } catch (XPathExpressionException | ParserConfigurationException | SAXException | IOException e) {
+        if (e.getCause() != null && !e.getCause().getMessage().contains("unknown namespace prefix: A")) {
+            fail("Unexpected exception: " + e.getMessage());
+        }
+    }
+}

@@ -1,0 +1,35 @@
+public void testMapKeyDeserializerModifiers() {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.addDeserializerModifier(new BeanDeserializerModifier() {
+        @Override
+        public JsonDeserializer<Enum> modifyEnumDeserializer(DeserializationConfig config, final JavaType type, BeanDescription beanDesc, final JsonDeserializer<?> deserializer) {
+            return new JsonDeserializer<Enum>() {
+                @Override
+                public Enum deserialize(JsonParser jp, DeserializationContext ctxt) throws IOException {
+                    Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                    return Enum.valueOf(rawClass, jp.getValueAsString().toUpperCase());
+                }
+            };
+        }
+
+        @Override
+        public KeyDeserializer modifyKeyDeserializer(DeserializationConfig config, JavaType type, KeyDeserializer deserializer) {
+            if (!type.isEnumType()) {
+                return super.modifyKeyDeserializer(config, type, deserializer);
+            }
+            return new KeyDeserializer() {
+                @Override
+                @SuppressWarnings("unchecked")
+                public Object deserializeKey(String key, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+                    Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                    return Enum.valueOf(rawClass, key.toUpperCase());
+                }
+            };
+        }
+    });
+    mapper.registerModule(module);
+    String json = "{\"key\":\"ENUM_VALUE\"}";
+    JsonNode node = mapper.readTree(json);
+    assertEquals(Enum.valueOf(MyEnum.class, "ENUM_VALUE".toUpperCase()), node.get("key").asText());
+}

@@ -1,0 +1,47 @@
+public void testArDeletion() throws IOException {
+    File archiveFile = new File("/tmp/dir26673/bla.ar");
+    ArArchiveOutputStream arOut = new ArArchiveOutputStream(new FileOutputStream(archiveFile));
+    
+    // Add files to the archive
+    arOut.putArchiveEntry(new ArArchiveEntry("test1.xml", 100));
+    arOut.closeArchiveEntry();
+    arOut.putArchiveEntry(new ArArchiveEntry("test2.xml", 100));
+    arOut.closeArchiveEntry();
+    arOut.finish();
+    arOut.close();
+    
+    // Attempt to delete "test2.xml" from archive
+    ArArchiveInputStream arIn = new ArArchiveInputStream(new FileInputStream(archiveFile));
+    File tempFile = new File("/tmp/dir26673/temp_ar.ar");
+    ArArchiveOutputStream tempArOut = new ArArchiveOutputStream(new FileOutputStream(tempFile));
+    
+    ArArchiveEntry entry;
+    while ((entry = arIn.getNextArEntry()) != null) {
+        if (!"test2.xml".equals(entry.getName())) {
+            tempArOut.putArchiveEntry(new ArArchiveEntry(entry.getName(), entry.getLength()));
+            IOUtils.copy(arIn, tempArOut);
+            tempArOut.closeArchiveEntry();
+        }
+    }
+
+    tempArOut.finish();
+    tempArOut.close();
+    arIn.close();
+    
+    // Replace original file with temp file
+    archiveFile.delete();
+    tempFile.renameTo(archiveFile);
+
+    // Recheck contents of the archive
+    ProcessBuilder processBuilder = new ProcessBuilder("ar", "-t", "/tmp/dir26673/bla.ar");
+    Process process = processBuilder.start();
+    BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+    String result = "";
+    String line;
+    while ((line = reader.readLine()) != null) {
+        result += line + "\n";
+    }
+    process.waitFor();
+    
+    assertEquals("test1.xml\n", result);
+}

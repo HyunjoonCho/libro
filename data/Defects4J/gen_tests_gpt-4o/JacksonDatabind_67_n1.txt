@@ -1,0 +1,36 @@
+public void testMapKeyDeserializerModifiersIgnored() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+
+    SimpleModule module = new SimpleModule();
+    module.setKeyDeserializerModifier(new BeanDeserializerModifier() {
+        @Override
+        public KeyDeserializer modifyKeyDeserializer(
+                DeserializationConfig config,
+                JavaType type,
+                KeyDeserializer deserializer) {
+            if (!type.isEnumType()) {
+                return deserializer;
+            }
+            return new KeyDeserializer() {
+                @Override
+                @SuppressWarnings("unchecked")
+                public Object deserializeKey(String key, DeserializationContext ctxt) throws IOException {
+                    Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                    return Enum.valueOf(rawClass, key.toUpperCase());
+                }
+            };
+        }
+    });
+
+    mapper.registerModule(module);
+
+    String json = "{\"mykey\": \"value\"}";
+    Map<ColorEnum, String> result = mapper.readValue(json, new TypeReference<Map<ColorEnum, String>>() {});
+    
+    assertTrue(result.containsKey(ColorEnum.MYKEY));
+}
+
+// Enum sample used for testing
+public enum ColorEnum {
+    MYKEY
+}

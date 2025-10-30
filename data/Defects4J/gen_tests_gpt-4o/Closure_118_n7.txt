@@ -1,0 +1,38 @@
+public void testPrototypeMethodNotRemoved() {
+    // Setting up a mock ClosureCompiler environment
+    CompilerOptions options = new CompilerOptions();
+    CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+    options.setPrettyPrint(true);
+    
+    // Input JavaScript
+    String jsCode = "/** @const */\n" +
+                    "var foo = {};\n" +
+                    "foo.bar = {\n" +
+                    " 'bar1': function() { console.log('bar1'); }\n" +
+                    "}\n" +
+                    "/** @constructor */\n" +
+                    "function foobar() {}\n" +
+                    "foobar.prototype = foo.bar;\n" +
+                    "foo.foobar = new foobar;\n" +
+                    "console.log(foo.foobar['bar1']);";
+
+    // Compile the JS code
+    Compiler compiler = new Compiler();
+    compiler.compile(SourceFile.fromCode("externs.js", ""), 
+                   SourceFile.fromCode("input.js", jsCode), options);
+
+    // Get the compiled code
+    String compiledCode = compiler.toSource();
+
+    // Execute and validate the compiled code
+    Context ctx = Context.enter();
+    try {
+        Scriptable scope = ctx.initSafeStandardObjects();
+        ctx.evaluateString(scope, compiledCode, "<cmd>", 1, null);
+        
+        Function bar1Function = (Function) ScriptableObject.getProperty(scope, "bar1");
+        assertNotNull("Method 'bar1' should still exist", bar1Function);
+    } finally {
+        Context.exit();
+    }
+}

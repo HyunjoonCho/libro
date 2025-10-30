@@ -1,0 +1,48 @@
+public void testArArchiveDeletion() throws Exception {
+    // Prepare the test
+    File archive = new File("/tmp/bla.ar");
+    try (ArOutputStream arOut = new ArOutputStream(new FileOutputStream(archive))) {
+        arOut.putNextEntry(new ArArchiveEntry("test1.xml", 100));
+        arOut.write(new byte[100]);
+        arOut.putNextEntry(new ArArchiveEntry("test2.xml", 100));
+        arOut.write(new byte[100]);
+    }
+
+    // Attempt to delete test2.xml using ArArchiveInputStream
+    File tempArchive = new File("/tmp/bla_modified.ar");
+    try (ArArchiveInputStream arIn = new ArArchiveInputStream(new FileInputStream(archive));
+         ArOutputStream arOut = new ArOutputStream(new FileOutputStream(tempArchive))) {
+        ArArchiveEntry entry;
+        while ((entry = (ArArchiveEntry) arIn.getNextEntry()) != null) {
+            if (!"test2.xml".equals(entry.getName())) {
+                arOut.putNextEntry(new ArArchiveEntry(entry.getName(), entry.getLength()));
+                IOUtils.copy(arIn, arOut);
+            }
+        }
+    }
+    
+    // Check the contents of the modified archive
+    List<String> entries = new ArrayList<>();
+    try (ArArchiveInputStream arIn = new ArArchiveInputStream(new FileInputStream(tempArchive))) {
+        ArArchiveEntry entry;
+        while ((entry = (ArArchiveEntry) arIn.getNextEntry()) != null) {
+            entries.add(entry.getName());
+        }
+    }
+
+    assertTrue(entries.contains("test1.xml"));
+    assertFalse(entries.contains("test2.xml"));
+
+    // Verify the archive using command-line ar tool
+    ProcessBuilder pb = new ProcessBuilder("ar", "-t", tempArchive.getAbsolutePath());
+    Process process = pb.start();
+    List<String> output = new BufferedReader(new InputStreamReader(process.getInputStream()))
+                          .lines().collect(Collectors.toList());
+    
+    assertTrue(output.contains("test1.xml"));
+    assertFalse(output.contains("test2.xml"));
+
+    // Cleanup
+    archive.delete();
+    tempArchive.delete();
+}

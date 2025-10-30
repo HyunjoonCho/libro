@@ -1,0 +1,31 @@
+public void testZipLocalHeaderVersionMismatch() throws IOException {
+    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+    ZipArchiveOutputStream zipOutputStream = new ZipArchiveOutputStream(new BufferedOutputStream(byteArrayOutputStream));
+
+    String entryName = "test.txt";
+    ZipArchiveEntry entry = new ZipArchiveEntry(entryName);
+    entry.setMethod(ZipMethod.DEFLATED.getCode());
+    entry.setSize(4);
+    zipOutputStream.putArchiveEntry(entry);
+    zipOutputStream.write(new byte[] { 't', 'e', 's', 't' });
+    zipOutputStream.closeArchiveEntry();
+    zipOutputStream.close();
+
+    byte[] zipBytes = byteArrayOutputStream.toByteArray();
+    ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(zipBytes);
+
+    // Assuming local header version needed to extract is at offset 4 in a simple zip file
+    byte[] localHeader = new byte[30];
+    byteArrayInputStream.read(localHeader, 0, localHeader.length);
+    int localVersionNeededToExtract = localHeader[4] + ((int) localHeader[5] << 8);
+
+    byteArrayInputStream.reset();
+    // Bypass the local entries to reach the Central Directory
+    while (byteArrayInputStream.read() != 0x50 || byteArrayInputStream.read() != 0x4b || byteArrayInputStream.read() != 0x01 || byteArrayInputStream.read() != 0x02) {
+        // Skip until we find Central Directory header (0x02014b50)
+    }
+    byteArrayInputStream.read(localHeader, 0, localHeader.length); 
+    int centralVersionNeededToExtract = localHeader[6] + ((int) localHeader[7] << 8);
+
+    assertEquals("Local and Central Directory 'version needed to extract' mismatch", localVersionNeededToExtract, centralVersionNeededToExtract);
+}

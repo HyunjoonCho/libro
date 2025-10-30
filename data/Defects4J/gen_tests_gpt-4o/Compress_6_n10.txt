@@ -1,0 +1,29 @@
+public void testZipFileCreationWithManyEntries() throws IOException {
+    FileOutputStream fos = new FileOutputStream("test-many-entries.zip");
+    ZipArchiveOutputStream zos = new ZipArchiveOutputStream(fos);
+
+    // Create a large number of similar named entries to trigger hash collision
+    for (int i = 0; i < 10000; i++) {
+        String fileName = "file" + (i % 100) + ".txt"; // To increase chance of hash collision
+        ZipArchiveEntry entry = new ZipArchiveEntry(fileName);
+        zos.putArchiveEntry(entry);
+        zos.write(("content for " + fileName).getBytes());
+        zos.closeArchiveEntry();
+    }
+
+    zos.finish();
+    zos.close();
+
+    // Verify the zip integrity after creation by attempting to extract it
+    try (ZipFile zipFile = new ZipFile("test-many-entries.zip")) {
+        Enumeration<ZipArchiveEntry> entries = zipFile.getEntries();
+        while (entries.hasMoreElements()) {
+            ZipArchiveEntry entry = entries.nextElement();
+            InputStream is = zipFile.getInputStream(entry);
+            assertNotNull(is); // Ensure no entry is corrupted
+            is.close();
+        }
+    } catch (ZipException e) {
+        fail("Zip file corrupted due to hash collision");
+    }
+}

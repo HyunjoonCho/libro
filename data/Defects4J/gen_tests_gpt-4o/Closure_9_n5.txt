@@ -1,0 +1,52 @@
+public void testCompilerFailsToFindAmdModule() {
+    // Setup: Create a virtual file system or mock setup
+    File fooModule = new File("lib/Foo.js");
+    File barModule = new File("Bar.js");
+    
+    // Assuming content for Foo.js and Bar.js are provided within the test
+    // Example content
+    String fooContent = "define('lib/Foo', [], function() { return {}; });";
+    String barContent = "define('Bar', ['lib/Foo'], function(Foo) { return {}; });";
+
+    // Write content to virtual file system or mocks
+    writeToFile(fooModule, fooContent);
+    writeToFile(barModule, barContent);
+
+    // Execute compiler command
+    String[] command = {
+        "java", 
+        "-jar", 
+        "compiler.jar", 
+        "--transform_amd_modules", 
+        "--process_common_js_modules", 
+        "--common_js_entry_module=Bar.js", 
+        "--compilation_level=ADVANCED_OPTIMIZATIONS", 
+        "--js_output_file=out.js", 
+        "--js=Bar.js", 
+        "--js=lib/Foo.js"
+    };
+    
+    ProcessBuilder processBuilder = new ProcessBuilder(command);
+    try {
+        Process process = processBuilder.start();
+        int exitCode = process.waitFor();
+
+        // Check the output for the error
+        String errorOutput = new BufferedReader(new InputStreamReader(process.getErrorStream()))
+                             .lines()
+                             .collect(Collectors.joining("\n"));
+
+        assertTrue(errorOutput.contains("required entry point \"module$lib$Foo\" never provided"));
+        assertEquals(1, exitCode);
+    } catch (IOException | InterruptedException e) {
+        fail("Exception during test execution: " + e.getMessage());
+    }
+}
+
+private void writeToFile(File file, String content) {
+    try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+        writer.write(content);
+    } catch (IOException e) {
+        fail("Unable to write to test file: " + e.getMessage());
+    }
+}

@@ -1,0 +1,46 @@
+public void testErroneousOptimizationAdvancedMode() throws IOException, InterruptedException {
+    // Create the JavaScript file to be compiled
+    String jsCode = "window['anchor'] = function (obj, modifiesProp) { "
+                  + "return (function (saved) { "
+                  + "return modifiesProp(obj) + saved; })(obj['prop']); };";
+
+    Path inputJsFile = Files.createTempFile("input", ".js");
+    Files.write(inputJsFile, jsCode.getBytes());
+
+    // External window.js file content
+    String externsContent = "var window = {};";
+    Path externsFile = Files.createTempFile("window", ".js");
+    Files.write(externsFile, externsContent.getBytes());
+
+    // Path to the Closure Compiler jar
+    String closureCompilerJar = "/path/to/closure-compiler.jar";
+
+    // Prepare the command
+    ProcessBuilder processBuilder = new ProcessBuilder(
+            "java", "-jar", closureCompilerJar,
+            "--compilation_level", "ADVANCED_OPTIMIZATIONS",
+            "--warning_level", "VERBOSE",
+            "--externs", externsFile.toString(),
+            "--js", inputJsFile.toString(),
+            "--js_output_file", "output.js"
+    );
+
+    // Execute the command
+    Process process = processBuilder.start();
+    process.waitFor();
+
+    // Read the output file
+    Path outputJsFile = Paths.get("output.js");
+    String compiledJsCode = new String(Files.readAllBytes(outputJsFile));
+
+    // Expected output in compiled form
+    String expectedOutput = "window.foo=function(a,b){var HOLD=a.prop;return b(a)+HOLD};";
+
+    // Assert the compiled output is as expected
+    assertEquals(expectedOutput, compiledJsCode);
+
+    // Cleanup
+    Files.deleteIfExists(inputJsFile);
+    Files.deleteIfExists(externsFile);
+    Files.deleteIfExists(outputJsFile);
+}

@@ -1,0 +1,27 @@
+public void testMinusNegativeNumberCompilation() throws IOException, InterruptedException {
+    String jsCode = "var g = 5; g--0.0;";  // This is intentionally incorrect to replicate the bug as it is stated that it fails to parse correctly.
+    File inputFile = new File("bulletfail.js");
+    File outputFile = new File("cc.js");
+
+    try (BufferedWriter writer = new BufferedWriter(new FileWriter(inputFile))) {
+        writer.write(jsCode);
+    }
+
+    ProcessBuilder builder = new ProcessBuilder("java", "-jar", "build/compiler.jar", 
+                                                "--compilation_level", "ADVANCED_OPTIMIZATIONS", 
+                                                "--js", inputFile.getAbsolutePath(), 
+                                                "--js_output_file", outputFile.getAbsolutePath());
+    Process process = builder.start();
+    process.waitFor();
+
+    assertTrue(outputFile.exists());
+
+    try (BufferedReader reader = new BufferedReader(new FileReader(outputFile))) {
+        String compiledCode = reader.lines().collect(Collectors.joining(System.lineSeparator()));
+        assertFalse(compiledCode.contains("g--0.0"));
+        assertTrue(compiledCode.contains("g- -0.0"));
+    } finally {
+        inputFile.delete();
+        outputFile.delete();
+    }
+}

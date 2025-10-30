@@ -1,0 +1,36 @@
+public void testWarningForGlobalThis() {
+    String code = 
+        "var NS = {\n" +
+        "    read: function() {\n" +
+        "        return this.foo;\n" +
+        "    },\n" +
+        "    write: function() {\n" +
+        "        this.foo = 123;\n" +
+        "    }\n" +
+        "};\n" +
+        "NS.write2 = function() {\n" +
+        "    this.foo = 123;\n" +
+        "};";
+
+    CompilerOptions options = new CompilerOptions();
+    CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+    options.setWarningLevel(DiagnosticGroups.GLOBAL_THIS, CheckLevel.WARNING);
+
+    Compiler compiler = new Compiler();
+    compiler.initOptions(options);
+
+    SourceFile input = SourceFile.fromCode("test.js", code);
+    compiler.compile(SourceFile.fromCode("externs.js", ""), input, options);
+
+    List<JSError> warnings = compiler.getWarnings();
+    assertEquals(2, warnings.size());
+
+    boolean foundWriteWarning = false;
+    for (JSError warning : warnings) {
+        if (warning.getDescription().contains("JSC_USED_GLOBAL_THIS") && warning.sourceName.equals("test.js")) {
+            foundWriteWarning = true;
+            break;
+        }
+    }
+    assertTrue(foundWriteWarning);
+}

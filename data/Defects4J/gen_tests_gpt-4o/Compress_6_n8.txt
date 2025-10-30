@@ -1,0 +1,29 @@
+public void testZipFileWithManyEntriesCorruption() throws IOException {
+    File zipFile = File.createTempFile("test", ".zip");
+    ZipArchiveOutputStream zipOutputStream = new ZipArchiveOutputStream(zipFile);
+
+    try {
+        int numEntries = 10000;
+        for (int i = 0; i < numEntries; i++) {
+            // Simulate hash collisions by using similar names
+            String entryName = "entry" + (i % 100) + ".txt";
+            ZipArchiveEntry entry = new ZipArchiveEntry(entryName);
+
+            // According to the bug report, manually set the name sometimes causes issues
+            entry.setName(entryName);
+
+            zipOutputStream.putArchiveEntry(entry);
+            zipOutputStream.write(("Content of entry " + i).getBytes());
+            zipOutputStream.closeArchiveEntry();
+        }
+    } finally {
+        zipOutputStream.close();
+    }
+
+    // Check the zip file with a standard library to ensure it can open
+    try (ZipFile createdZipFile = new ZipFile(zipFile)) {
+        assertEquals(10000, createdZipFile.size());
+    } catch (ZipException e) {
+        fail("The zip file is corrupted and cannot be opened: " + e.getMessage());
+    }
+}

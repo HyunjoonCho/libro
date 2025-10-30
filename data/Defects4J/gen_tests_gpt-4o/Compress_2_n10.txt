@@ -1,0 +1,60 @@
+public void testArDeleteIssue() throws Exception {
+    // Create an Ar archive with test1.xml and test2.xml
+    File archiveFile = new File("target/test-archive.ar");
+    try (FileOutputStream fos = new FileOutputStream(archiveFile);
+         ArArchiveOutputStream aos = new ArArchiveOutputStream(fos)) {
+        
+        ArArchiveEntry entry = new ArArchiveEntry("test1.xml", 100);
+        aos.putArchiveEntry(entry);
+        aos.write(new byte[100]);
+        aos.closeArchiveEntry();
+        
+        entry = new ArArchiveEntry("test2.xml", 100);
+        aos.putArchiveEntry(entry);
+        aos.write(new byte[100]);
+        aos.closeArchiveEntry();
+    }
+
+    // Simulate deletion of test2.xml from the archive
+    ArArchiveEntry entryToRemove = new ArArchiveEntry("test2.xml", 100);
+    byte[] arData = Files.readAllBytes(archiveFile.toPath());
+    try (FileOutputStream fos = new FileOutputStream(archiveFile);
+         ArArchiveOutputStream aos = new ArArchiveOutputStream(fos)) {
+        
+        try (ByteArrayInputStream bais = new ByteArrayInputStream(arData);
+             ArArchiveInputStream ais = new ArArchiveInputStream(bais)) {
+            ArArchiveEntry entry;
+            while ((entry = ais.getNextArEntry()) != null) {
+                if (!entry.getName().equals(entryToRemove.getName())) {
+                    aos.putArchiveEntry(entry);
+                    IOUtils.copy(ais, aos);
+                    aos.closeArchiveEntry();
+                }
+            }
+        }
+    }
+
+    // Validate that test2.xml is truly removed
+    List<String> entries = new ArrayList<>();
+    try (ArArchiveInputStream ais = new ArArchiveInputStream(new FileInputStream(archiveFile))) {
+        ArArchiveEntry entry;
+        while ((entry = ais.getNextArEntry()) != null) {
+            entries.add(entry.getName());
+        }
+    }
+    assertFalse(entries.contains("test2.xml"));
+    
+    // Confirm using command line that the file structure breaks after manipulation
+    ProcessBuilder pb = new ProcessBuilder("ar", "-t", archiveFile.getAbsolutePath());
+    Process process = pb.start();
+    BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+    String line;
+    List<String> commandLineEntries = new ArrayList<>();
+    while ((line = reader.readLine()) != null) {
+        commandLineEntries.add(line.trim());
+    }
+    process.waitFor();
+    assertFalse(commandLineEntries.contains("test2.xml"));
+    assertEquals(1, commandLineEntries.size());
+    assertEquals("test1.xml", commandLineEntries.get(0));
+}

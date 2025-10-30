@@ -1,0 +1,58 @@
+public void testInvalidPropertyNotReportedWithThisAnnotation() {
+    String jsCode = 
+        "var makeClass = function(protoMethods) {\n" +
+        "  var clazz = function() {\n" +
+        "    this.initialize.apply(this, arguments);\n" +
+        "  };\n" +
+        "  for (var i in protoMethods) {\n" +
+        "    clazz.prototype[i] = protoMethods[i];\n" +
+        "  }\n" +
+        "  return clazz;\n" +
+        "};\n" +
+        "\n" +
+        "/**\n" +
+        " * @constructor\n" +
+        " * @param {{name: string, height: number}} options\n" +
+        " */\n" +
+        "var Person = function(options){};\n" +
+        "Person = makeClass(/** @lends Person.prototype */ {\n" +
+        "  /**\n" +
+        "   * @this {Person}\n" +
+        "   * @param {{name: string, height: number}} options\n" +
+        "   */\n" +
+        "  initialize: function(options) {\n" +
+        "    /** @type {string} */ this.name_ = options.thisPropDoesNotExist;\n" +
+        "  },\n" +
+        "  /**\n" +
+        "   * @param {string} message\n" +
+        "   * @this {Person}\n" +
+        "   */\n" +
+        "  say: function(message) {\n" +
+        "    window.console.log(this.name_ + ' says: ' + message);\n" +
+        "  }\n" +
+        "});\n" +
+        "var joe = new Person({name: 'joe', height: 300});\n" +
+        "joe.say('hi');";
+
+    // Configure a JavaScript Compiler instance and run the test
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+    options.setPrettyPrint(true);
+    options.setWarningLevel(DiagnosticGroups.CHECK_TYPES, CheckLevel.ERROR);
+    options.setWarningLevel(DiagnosticGroups.EXTERNS_VALIDATION, CheckLevel.ERROR);
+
+    // Compile the JavaScript code
+    Result result = compiler.compile(externs, SourceFile.fromCode("repro.js", jsCode), options);
+
+    // Assert that there was a compilation error
+    assertTrue("Expected type error not reported", result.errors.length > 0);
+    boolean typeErrorFound = false;
+    for (JSError error : result.errors) {
+        if (error.getDescription().contains("options.thisPropDoesNotExist")) {
+            typeErrorFound = true;
+            break;
+        }
+    }
+    assertTrue("Expected type error for non-existent property was not reported", typeErrorFound);
+}

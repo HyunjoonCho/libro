@@ -1,0 +1,29 @@
+public void testJacksonFailOnInvalidSubtype() throws IOException {
+    ObjectMapper objectMapper = new ObjectMapper()
+            .disable(DeserializationFeature.FAIL_ON_INVALID_SUBTYPE,
+                     DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,
+                     DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES);
+
+    // Case 1: Can't read item2 - which is valid
+    String json1 = "{\"version\":0.0,\"application\":\"123\",\"item\":{\"type\":\"xevent\",\"location\":\"location1\"},\"item2\":{\"type\":\"event\",\"location\":\"location1\"}}";
+    CallRecord result1 = objectMapper.readValue(json1, CallRecord.class);
+    assertEquals("123", result1.application);
+    assertNull(result1.item); // xevent type is not recognized, so item is null
+    assertNotNull(result1.item2); // item2 should be deserialized as it is a recognized type
+    assertEquals("event", ((Event) result1.item2).TYPE);
+    assertEquals("location1", ((Event) result1.item2).location);
+
+    // Case 2: Item causes deserialization to stop
+    String json2 = "{\"version\":0.0,\"application\":\"123\"},{\"item\":{\"type\":\"xevent\",\"location\":\"location1\"}}";
+    CallRecord result2 = objectMapper.readValue(json2, CallRecord.class);
+    assertNull(result2.item); // xevent type is not recognized, so item is null
+    assertEquals(0.0f, result2.version, 0.0);
+    assertEquals("123", result2.application); // application is still recognized and should be present
+
+    // Case 3: Order matters, moves item to the front; application property not read
+    String json3 = "{\"item\":{\"type\":\"xevent\",\"location\":\"location1\"}, \"version\":0.0,\"application\":\"123\"}";
+    CallRecord result3 = objectMapper.readValue(json3, CallRecord.class);
+    assertNull(result3.item); // xevent type is not recognized, so item is null
+    assertEquals(0.0f, result3.version, 0.0);
+    assertNull(result3.application); // application is missing due to the unrecognized type in item stopping parsing
+}

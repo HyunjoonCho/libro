@@ -1,0 +1,36 @@
+public void testMapKeyDeserializerModifiersIgnored() throws IOException {
+    SimpleModule module = new SimpleModule();
+    module.setDeserializerModifier(new BeanDeserializerModifier() {
+        @Override
+        public KeyDeserializer modifyKeyDeserializer(
+                DeserializationConfig config,
+                JavaType type,
+                KeyDeserializer deserializer) {
+            if (!type.isEnumType()) {
+                return super.modifyKeyDeserializer(config, type, deserializer);
+            }
+            return new KeyDeserializer() {
+                @Override
+                @SuppressWarnings("unchecked")
+                public Object deserializeKey(String key, DeserializationContext ctxt)
+                        throws IOException {
+                    Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                    return Enum.valueOf(rawClass, key.toUpperCase());
+                }
+            };
+        }
+    });
+
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(module);
+
+    String json = "{\"one\":\"first_value\"}";
+    
+    Map<TestEnum, String> result = mapper.readValue(json, new TypeReference<Map<TestEnum, String>>() {});
+    
+    assertEquals("first_value", result.get(TestEnum.ONE));
+}
+
+private enum TestEnum {
+    ONE, TWO;
+}

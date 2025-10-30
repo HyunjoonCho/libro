@@ -1,0 +1,59 @@
+public void testConvenientSpyingOnAbstractClasses() {
+    // Example 1: Fake with trivial logic
+    AbstractFakeUserAccount userAccount = Mockito.spy(AbstractFakeUserAccount.class);
+    userAccount.addEmail("test@example.com");
+    assertEquals(Collections.singletonList("test@example.com"), userAccount.getEmails());
+
+    // Example 2: Callback-style API
+    AbstractMockAccountService accountService = Mockito.mock(AbstractMockAccountService.class);
+    AsyncCallback<UserAccount> callback = Mockito.mock(AsyncCallback.class);
+    UserAccount account = Mockito.mock(UserAccount.class);
+
+    Mockito.doAnswer(invocation -> {
+        AsyncCallback<UserAccount> cb = invocation.getArgument(1);
+        cb.onSuccess(account);
+        return null;
+    }).when(accountService).getAccount(Mockito.eq("test-id"), Mockito.any(AsyncCallback.class));
+
+    accountService.getAccount("test-id", callback);
+    Mockito.verify(callback).onSuccess(account);
+
+    // Example 3: Uninteresting parameters
+    AbstractMockAccountRpcService rpcService = Mockito.mock(AbstractMockAccountRpcService.class);
+    Future<Account> futureAccount = Mockito.mock(Future.class);
+    RpcContext context = Mockito.mock(RpcContext.class);
+
+    Mockito.when(rpcService.getAccount(Mockito.eq("test-id"))).thenReturn(futureAccount);
+
+    assertEquals(futureAccount, rpcService.getAccount(context, "test-id"));
+}
+
+// Abstract classes used in the examples
+abstract class AbstractFakeUserAccount implements UserAccount {
+    private final List<String> emails = new ArrayList<>();
+
+    @Override public void addEmail(String email) {
+        emails.add(email);
+    }
+
+    @Override public List<String> getEmails() {
+        return ImmutableList.copyOf(emails);
+    }
+}
+
+abstract class AbstractMockAccountService implements AccountService {
+    @Override public void getAccount(String id, AsyncCallback<UserAccount> callback) {
+        callback.onSuccess(getAccount(id));
+    }
+
+    abstract UserAccount getAccount(String id);
+}
+
+abstract class AbstractMockAccountRpcService implements AccountRpcService {
+    @Override public Future<Account> getAccount(RpcContext context, String id) {
+        checkNotNull(context);
+        return getAccount(id);
+    }
+
+    abstract Future<Account> getAccount(String id);
+}

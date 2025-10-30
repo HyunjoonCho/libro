@@ -1,0 +1,26 @@
+public void testUTF8StreamJsonParserColumnCalculation() {
+    byte[] inputBuffer = "{\"key\": \"value\"}".getBytes();
+    InputStream input = new ByteArrayInputStream(inputBuffer);
+    IOContext ctxt = new IOContext(new BufferRecycler(), input, false);
+    UTF8StreamJsonParser parser = new UTF8StreamJsonParser(ctxt, 0, input, null, 
+            BytesToNameCanonicalizer.createRoot(), inputBuffer, 5, inputBuffer.length, false);
+    
+    try {
+        parser.nextToken();
+        parser.nextToken();
+        parser.nextToken(); // Move to the value token
+        assertEquals("value", parser.getText());
+
+        // Force an error by moving past the available content
+        parser.nextToken();
+        fail("Expected an exception due to reading past the input");
+    } catch (JsonParseException e) {
+        JsonLocation location = e.getLocation();
+        assertNotNull(location);
+        assertEquals(1, location.getLineNr());
+        // Check for correct column number
+        assertEquals(parser._inputPtr - 5 + 1, location.getColumnNr());
+    } finally {
+        parser.close();
+    }
+}

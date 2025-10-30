@@ -1,0 +1,45 @@
+public void testDangerousUseOfGlobalThisWarning() {
+    StringBuilder compiledCode = new StringBuilder();
+    Compiler compiler = new Compiler();
+
+    CompilerOptions options = new CompilerOptions();
+    CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+    SourceFile input = SourceFile.fromCode("test.js", ""
+        + "/** @constructor */\n"
+        + "function Foo() {\n"
+        + "  this._bar = null;\n"
+        + "};\n"
+        + "\n"
+        + "/** @this {Foo} */\n"
+        + "function writeMethodWithAnnotation() {\n"
+        + "  this._bar = 123;\n"
+        + "}\n"
+        + "\n"
+        + "/** @this {Foo} */\n"
+        + "function readMethodWithAnnotation() {\n"
+        + "  return this._bar;\n"
+        + "}\n"
+        + "\n"
+        + "function writeMethodWithoutAnnotation() {\n"
+        + "  this._bar = 123;\n"
+        + "}\n"
+        + "\n"
+        + "function readMethodWithoutAnnotation() {\n"
+        + "  return this._bar;\n"
+        + "}\n"
+    );
+
+    Result result = compiler.compile(SourceFile.fromCode("externs.js", ""), input, options);
+
+    assertFalse("Should have warnings", result.warnings.isEmpty());
+    boolean foundReadMethodWarning = false;
+    for (JSError warning : result.warnings) {
+        if (warning.description.contains("readMethodWithoutAnnotation")) {
+            foundReadMethodWarning = true;
+            break;
+        }
+    }
+    assertTrue("Expected warning for readMethodWithoutAnnotation", foundReadMethodWarning);
+    assertEquals("There should only be one warning", 1, result.warnings.size());
+}

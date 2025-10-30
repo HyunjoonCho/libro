@@ -1,0 +1,33 @@
+public void testIllegalArgumentExceptionWhenExtractingTgzFile() {
+    String fileName = "corrupted.tgz"; // Make sure this file is a crafted or known problematic .tgz file to reproduce the issue.
+    String tempDirPath = "/path/to/temp/directory/"; // Use an appropriate directory path for testing.
+    
+    try (TarArchiveInputStream tarIn = new TarArchiveInputStream(
+            new GZIPInputStream(
+                    new BufferedInputStream(
+                            new FileInputStream(
+                                    tempDirPath + fileName))))) {
+        
+        TarArchiveEntry entry = tarIn.getNextTarEntry();
+
+        while (entry != null) {
+            File path = new File(tempDirPath, entry.getName());
+            if (entry.isDirectory()) {
+                path.mkdirs();
+            } else {
+                path.createNewFile();
+                byte[] read = new byte[2048];
+                try (BufferedOutputStream bout = new BufferedOutputStream(new FileOutputStream(path))) {
+                    int len;
+                    while ((len = tarIn.read(read)) != -1) {
+                        bout.write(read, 0, len);
+                    }
+                }
+            }
+            entry = tarIn.getNextTarEntry();
+        }
+        
+    } catch (IOException e) {
+        assertTrue(e.getMessage().contains("Invalid byte")); // Expected error message to assert the exception scenario.
+    }
+}

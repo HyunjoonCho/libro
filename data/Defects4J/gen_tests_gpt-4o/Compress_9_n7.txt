@@ -1,0 +1,36 @@
+public void testTarArchiveOutputStreamGetBytesWritten() throws Exception {
+    File tempFile = File.createTempFile("temp", ".tar");
+    tempFile.deleteOnExit();
+    
+    File sourceFile = File.createTempFile("source", ".txt");
+    sourceFile.deleteOnExit();
+    try (FileOutputStream fos = new FileOutputStream(sourceFile)) {
+        byte[] data = new byte[1024];
+        fos.write(data); // write 1 KB of data
+    }
+    
+    try (FileOutputStream fos = new FileOutputStream(tempFile);
+         ArchiveOutputStream tarOut = new ArchiveStreamFactory().createArchiveOutputStream(ArchiveStreamFactory.TAR, fos)) {
+        
+        TarArchiveEntry entry = new TarArchiveEntry(sourceFile);
+        entry.setSize(sourceFile.length());
+        tarOut.putArchiveEntry(entry);
+        
+        try (FileInputStream fis = new FileInputStream(sourceFile)) {
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            
+            while ((bytesRead = fis.read(buffer)) > 0) {
+                tarOut.write(buffer, 0, bytesRead);
+            }
+        }
+        
+        assertTrue("Bytes written should be greater than zero before closing the entry.", tarOut.getBytesWritten() > 0);
+        
+        tarOut.closeArchiveEntry();
+    }
+
+    try (FileInputStream fis = new FileInputStream(tempFile)) {
+        assertTrue("Temp file size should be greater than entry size.", fis.available() > sourceFile.length());
+    }
+}

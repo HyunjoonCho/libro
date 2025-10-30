@@ -1,0 +1,39 @@
+public void testMapKeyDeserializerModifiersIgnored() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.setDeserializerModifier(new BeanDeserializerModifier() {
+        @Override
+        public KeyDeserializer modifyKeyDeserializer(
+                DeserializationConfig config,
+                JavaType type,
+                KeyDeserializer deserializer) {
+            if (!type.isEnumType()) {
+                return super.modifyKeyDeserializer(config, type, deserializer);
+            }
+            return new KeyDeserializer() {
+                @Override
+                @SuppressWarnings("unchecked")
+                public Object deserializeKey(String key, DeserializationContext ctxt)
+                        throws IOException, JsonProcessingException {
+                    Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                    return Enum.valueOf(rawClass, key.toUpperCase());
+                }
+            };
+        }
+    });
+    mapper.registerModule(module);
+
+    String jsonInput = "{\"keyOne\": \"value1\"}";
+    
+    JavaType mapType = mapper.getTypeFactory().constructMapType(ImmutableMap.class, SampleEnum.class, String.class);
+    
+    // Expecting FIELD_ONE to be deserialized from "keyOne"
+    ImmutableMap<SampleEnum, String> map = mapper.readValue(jsonInput, mapType);
+    
+    assertEquals("value1", map.get(SampleEnum.FIELD_ONE));
+}
+
+private enum SampleEnum {
+    FIELD_ONE,
+    FIELD_TWO
+}

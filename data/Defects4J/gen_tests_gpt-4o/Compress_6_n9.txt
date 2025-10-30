@@ -1,0 +1,29 @@
+public void testZipFileCorruptionWithHashCollisions() {
+    try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+         ZipArchiveOutputStream zipOutputStream = new ZipArchiveOutputStream(byteArrayOutputStream)) {
+
+        // Create multiple files with similar names to force hash collisions
+        for (int i = 0; i < 1000; i++) {
+            String filename = "file" + i + ".txt";
+            ZipArchiveEntry entry = new ZipArchiveEntry(filename);
+            entry.setName(filename); // Ensures name is set correctly for collision testing
+            zipOutputStream.putArchiveEntry(entry);
+            zipOutputStream.write(("content of " + filename).getBytes());
+            zipOutputStream.closeArchiveEntry();
+        }
+        zipOutputStream.finish();
+
+        try (InputStream is = new ByteArrayInputStream(byteArrayOutputStream.toByteArray());
+             ZipArchiveInputStream zipInputStream = new ZipArchiveInputStream(is)) {
+            ZipArchiveEntry entry;
+            int count = 0;
+            while ((entry = zipInputStream.getNextZipEntry()) != null) {
+                count++;
+                assertNotNull("The entry name should not be null", entry.getName());
+            }
+            assertEquals("All entries should be read successfully", 1000, count);
+        }
+    } catch (IOException e) {
+        fail("An IOException occurred: " + e.getMessage());
+    }
+}

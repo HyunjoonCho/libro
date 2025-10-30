@@ -1,0 +1,75 @@
+public void testDeserializeMapWithCustomLogic() {
+    String json = "{ \"something\": [{ \"id\": \"123e4567-e89b-12d3-a456-426614174000\", \"property\": \"value\" }] }";
+
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.addDeserializer(MyHashMap.class, new MyHashMapDeserializer());
+    mapper.registerModule(module);
+
+    try {
+        TestClass result = mapper.readValue(json, TestClass.class);
+        Map<UUID, Foo> map = result.getSomething();
+        assertEquals(1, map.size());
+        UUID expectedId = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
+        assertTrue(map.containsKey(expectedId));
+        assertEquals("value", map.get(expectedId).getProperty());
+    } catch (IOException e) {
+        fail("Deserialization failed with exception: " + e.getMessage());
+    }
+}
+
+private static class TestClass {
+    @JsonDeserialize(as = MyHashMap.class)
+    private Map<UUID, Foo> something;
+
+    public Map<UUID, Foo> getSomething() {
+        return something;
+    }
+
+    public void setSomething(Map<UUID, Foo> something) {
+        this.something = something;
+    }
+}
+
+private static class MyHashMap extends HashMap<UUID, Foo> implements MyCustomIdInterface {}
+
+private static class Foo implements MyCustomIdInterface {
+    private UUID id;
+    private String property;
+
+    public UUID getId() {
+        return id;
+    }
+
+    public void setId(UUID id) {
+        this.id = id;
+    }
+
+    public String getProperty() {
+        return property;
+    }
+
+    public void setProperty(String property) {
+        this.property = property;
+    }
+}
+
+private interface MyCustomIdInterface {
+    UUID getId();
+}
+
+private static class MyHashMapDeserializer extends JsonDeserializer<MyHashMap> {
+    @Override
+    public MyHashMap deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+        JsonNode node = p.getCodec().readTree(p);
+        MyHashMap map = new MyHashMap();
+        for (JsonNode item : node) {
+            UUID id = UUID.fromString(item.get("id").asText());
+            Foo foo = new Foo();
+            foo.setId(id);
+            foo.setProperty(item.get("property").asText());
+            map.put(id, foo);
+        }
+        return map;
+    }
+}

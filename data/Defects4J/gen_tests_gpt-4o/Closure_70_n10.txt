@@ -1,0 +1,43 @@
+public void testUnexpectedTypedCoverage() throws Exception {
+    // Setup the JavaScript content
+    String jsContent = "function Example(element) { "
+                     + "this.appendElement = function appendElement(ns, name) { "
+                     + "var e = element.ownerDocument.createElementNS(ns, name); "
+                     + "element.appendChild(e); }; } "
+                     + "window['Example'] = Example;";
+
+    // Write the JavaScript to a temporary file
+    File jsFile = File.createTempFile("test", ".js");
+    try (BufferedWriter writer = new BufferedWriter(new FileWriter(jsFile))) {
+        writer.write(jsContent);
+    }
+
+    // Run the Closure Compiler
+    ProcessBuilder processBuilder = new ProcessBuilder(
+            "java", "-jar", "compiler.jar",
+            "--jscomp_error", "checkTypes",
+            "--summary_detail_level", "3",
+            "--js", jsFile.getAbsolutePath(),
+            "--js_output_file", "compiled.js"
+    );
+    processBuilder.redirectErrorStream(true);
+
+    Process process = processBuilder.start();
+    try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+        String line;
+        boolean unexpectedTypingCoverage = false;
+        while ((line = reader.readLine()) != null) {
+            if (line.contains("73.7% typed")) {
+                unexpectedTypingCoverage = true;
+            }
+        }
+
+        // Verify the output for typing coverage
+        assertTrue("Expected 100% typed coverage, but found less.", unexpectedTypingCoverage);
+    } finally {
+        // Clean up the temporary JavaScript file
+        if (jsFile.exists()) {
+            jsFile.delete();
+        }
+    }
+}

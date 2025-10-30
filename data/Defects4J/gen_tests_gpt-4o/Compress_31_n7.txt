@@ -1,0 +1,36 @@
+public void testIllegalArgumentExceptionWhenExtractingTgz() {
+    String tempDirPath = "path/to/temp/dir/";
+    String fileName = "corruptedFile.tgz";
+    
+    try {
+        TarArchiveInputStream tarIn = new TarArchiveInputStream(
+                new GZIPInputStream(
+                        new BufferedInputStream(
+                                new FileInputStream(tempDirPath + fileName))));
+
+        TarArchiveEntry entry = tarIn.getNextTarEntry();
+
+        while (entry != null) {
+            File path = new File(tempDirPath, entry.getName());
+            if (entry.isDirectory()) {
+                path.mkdirs();
+            } else {
+                path.createNewFile();
+                byte[] read = new byte[2048];
+                BufferedOutputStream bout = new BufferedOutputStream(new FileOutputStream(path));
+                int len;
+                while ((len = tarIn.read(read)) != -1) {
+                    bout.write(read, 0, len);
+                }
+                bout.close();
+                read = null;
+            }
+            entry = tarIn.getNextTarEntry();
+        }
+        tarIn.close();
+        fail("Expected IllegalArgumentException not thrown");
+    } catch (IOException e) {
+        assertTrue(e.getCause() instanceof IllegalArgumentException);
+        assertEquals("java.lang.IllegalArgumentException: Invalid byte 0 at offset 5", e.getCause().getMessage());
+    }
+}

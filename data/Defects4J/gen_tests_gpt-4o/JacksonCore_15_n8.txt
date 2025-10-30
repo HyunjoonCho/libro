@@ -1,0 +1,34 @@
+public void testAllowMultipleMatches() {
+    final String jsonInput = "{\"items\":[{\"type\":\"A\"},{\"type\":\"B\"},{\"type\":\"A\"}]}";
+    JsonParser parser = new JsonFactory().createParser(jsonInput);
+    
+    TokenFilter filter = new TokenFilter() {
+        @Override
+        public TokenFilter includeProperty(String name) {
+            return "items".equals(name) ? this : null;
+        }
+        @Override
+        public TokenFilter includeElement(int index) {
+            return TokenFilter.INCLUDE_ALL;
+        }
+        @Override
+        public boolean includeObjectEntries() {
+            return true;
+        }
+    };
+    
+    FilteringParserDelegate delegate = new FilteringParserDelegate(parser, filter, true, true);
+    
+    List<JsonNode> matchedItems = new ArrayList<>();
+    ObjectMapper mapper = new ObjectMapper();
+    while (delegate.nextToken() != null) {
+        if (delegate.getCurrentToken() == JsonToken.START_OBJECT) {
+            JsonNode node = mapper.readTree(delegate);
+            matchedItems.add(node);
+        }
+    }
+    
+    assertEquals(2, matchedItems.size());
+    assertEquals("A", matchedItems.get(0).get("type").asText());
+    assertEquals("A", matchedItems.get(1).get("type").asText());
+}

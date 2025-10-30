@@ -1,0 +1,45 @@
+public void testErroneousOptimizationInAdvancedMode() throws IOException, InterruptedException {
+    // Create an input.js file with the provided test case
+    String inputJS = "window[\"anchor\"] = function (obj, modifiesProp) {\n" +
+                     "    return (function (saved) {\n" +
+                     "        return modifiesProp(obj) + saved;\n" +
+                     "    })(obj[\"prop\"]);\n" +
+                     "};";
+
+    // Save to a temporary file
+    Path inputFile = Files.createTempFile("input", ".js");
+    Files.write(inputFile, inputJS.getBytes());
+
+    // External file to define window object (empty for simplicity)
+    Path externsFile = Files.createTempFile("externs", ".js");
+    Files.write(externsFile, "".getBytes());
+
+    // Path for the output
+    Path outputFile = Files.createTempFile("output", ".js");
+
+    // Prepare the command line for the closure compiler
+    String command = "java -jar path/to/compiler.jar " +
+                     "--compilation_level ADVANCED_OPTIMIZATIONS " +
+                     "--warning_level VERBOSE " +
+                     "--externs " + externsFile.toString() + " " +
+                     "--js " + inputFile.toString() + " " +
+                     "--js_output_file " + outputFile.toString();
+
+    // Execute the command
+    Process process = Runtime.getRuntime().exec(command);
+    process.waitFor();
+
+    // Read the output file
+    List<String> outputFileContent = Files.readAllLines(outputFile);
+
+    // Expected and actual assertions
+    String expectedOutput = "window.foo=function(a,b){var HOLD=a.prop;return b(a)+HOLD};";
+    String actualOutput = String.join("", outputFileContent).replaceAll("\\s+", "");
+
+    assertEquals(expectedOutput, actualOutput);
+
+    // Cleanup
+    Files.deleteIfExists(inputFile);
+    Files.deleteIfExists(externsFile);
+    Files.deleteIfExists(outputFile);
+}

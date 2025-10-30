@@ -1,0 +1,19 @@
+public void testTarArchiveInputStreamBigUserId() throws Exception {
+    byte[] tarBytes = {
+        // Header block for a tar entry with a big user-id, stored in a format expected to cause error
+        'f', 'i', 'l', 'e', 'n', 'a', 'm', 'e', // Filename
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // Padding
+        '0', '0', '0', '0', '0', '0', '1', '0', '0', // File mode
+        '0', '0', '0', '0', '0', '0', '0', '0', // UID (will not cause issue)
+        '6', '2', '4', '1', '0', '5', '5', '4', // GID (causes issue due to being large but not the largest possible)
+        '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', // File size
+        // Additional 376 bytes to complete 512-byte tar header
+    };
+    
+    try (TarArchiveInputStream tarInput = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes))) {
+        while ((tarInput.getNextTarEntry()) != null) {}
+        fail("Expected IllegalArgumentException due to incorrect GID value parsing");
+    } catch (IllegalArgumentException e) {
+        assertTrue(e.getMessage().contains("Invalid byte"));
+    }
+}

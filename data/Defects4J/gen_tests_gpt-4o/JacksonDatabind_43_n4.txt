@@ -1,0 +1,39 @@
+public void testObjectIdHandlingWithNullToken() throws IOException {
+    String json = "{\"id\":null,\"name\":\"John Doe\"}";
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    
+    // Custom deserializer that might assume non-null tokens for "id"
+    module.addDeserializer(MyClass.class, new MyClassDeserializer());
+    mapper.registerModule(module);
+    
+    try {
+        mapper.readValue(json, MyClass.class);
+        fail("Expected a JsonMappingException due to null being used for id");
+    } catch (JsonMappingException e) {
+        // Expected exception due to null "id"
+    }
+}
+
+static class MyClass {
+    public String id;
+    public String name;
+}
+
+static class MyClassDeserializer extends StdDeserializer<MyClass> {
+    public MyClassDeserializer() {
+        super(MyClass.class);
+    }
+
+    @Override
+    public MyClass deserialize(JsonParser jp, DeserializationContext ctxt) throws IOException {
+        ObjectCodec codec = jp.getCodec();
+        JsonNode node = codec.readTree(jp);
+        String id = node.get("id").asText(); // This will cause an exception if id is null
+        String name = node.get("name").asText();
+        MyClass myObject = new MyClass();
+        myObject.id = id;
+        myObject.name = name;
+        return myObject;
+    }
+}

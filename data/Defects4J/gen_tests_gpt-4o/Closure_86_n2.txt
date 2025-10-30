@@ -1,0 +1,29 @@
+public void testSideEffectsAnalysis() {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+    String code = "/** @constructor */\n" +
+                  "function Foo() {\n" +
+                  " var self = this;\n" +
+                  " window.setTimeout(function() {\n" +
+                  " window.location = self.location;\n" +
+                  " }, 0);\n" +
+                  "}\n" +
+                  "\n" +
+                  "Foo.prototype.setLocation = function(loc) {\n" +
+                  " this.location = loc;\n" +
+                  "};\n" +
+                  "\n" +
+                  "(new Foo()).setLocation('http://www.google.com/');";
+
+    Result result = compiler.compile(SourceFile.fromCode("externs.js", ""), SourceFile.fromCode("input.js", code), options);
+    
+    // There should not be any errors or warnings
+    assertEquals(0, result.errors.length);
+    assertEquals(0, result.warnings.length);
+    
+    String compiledCode = compiler.toSource();
+    // Ensure the setLocation call has not been removed in the compiled output
+    assertTrue(compiledCode.contains(".setLocation("));
+}

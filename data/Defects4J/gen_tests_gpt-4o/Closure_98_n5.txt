@@ -1,0 +1,40 @@
+public void testBadVariableInliningInClosure() {
+    // Capture the console output
+    ByteArrayOutputStream consoleOutput = new ByteArrayOutputStream();
+    PrintStream originalOut = System.out;
+    System.setOut(new PrintStream(consoleOutput));
+
+    // Execute the JavaScript function
+    Context context = Context.enter();
+    try {
+        Scriptable scope = context.initStandardObjects();
+        String script = 
+            "function foo() {\n" +
+            "  var arr = [1, 2, 3, 4, 5];\n" +
+            "  for (var i = 0, l = arr.length; i < l; i++) {\n" +
+            "    var j = arr[i];\n" +
+            "    (function() {\n" +
+            "      var k = j;\n" +
+            "      setTimeout(function() { console.log(k); }, 0);\n" +
+            "    })();\n" +
+            "  }\n" +
+            "}\n" +
+            "foo();";
+        context.evaluateString(scope, script, "<cmd>", 1, null);
+
+        // Execute pending tasks to trigger console.log within setTimeout
+        Thread.sleep(100);
+
+    } catch (InterruptedException e) {
+        fail("Test interrupted: " + e.getMessage());
+    } finally {
+        Context.exit();
+        // Restore the original System.out
+        System.setOut(originalOut);
+    }
+
+    // Collect and check the console output
+    String output = consoleOutput.toString().trim();
+    String[] outputs = output.split("\\s+");
+    assertArrayEquals(new String[]{"1", "2", "3", "4", "5"}, outputs);
+}

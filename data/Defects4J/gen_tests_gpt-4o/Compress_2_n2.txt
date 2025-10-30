@@ -1,0 +1,57 @@
+public void testArDeletionIssue() throws IOException {
+    // Create a temporary Ar archive
+    File tempArFile = File.createTempFile("test", ".ar");
+    try (OutputStream os = new FileOutputStream(tempArFile);
+         ArArchiveOutputStream arOs = new ArArchiveOutputStream(os)) {
+        ArArchiveEntry entry1 = new ArArchiveEntry("test1.xml", 100);
+        arOs.putArchiveEntry(entry1);
+        arOs.write(new byte[100]);
+        arOs.closeArchiveEntry();
+
+        ArArchiveEntry entry2 = new ArArchiveEntry("test2.xml", 100);
+        arOs.putArchiveEntry(entry2);
+        arOs.write(new byte[100]);
+        arOs.closeArchiveEntry();
+
+        arOs.finish();
+    }
+
+    // Delete test2.xml
+    try (ArArchiveInputStream arIs = new ArArchiveInputStream(new FileInputStream(tempArFile));
+         ArArchiveOutputStream arOs = new ArArchiveOutputStream(new FileOutputStream(tempArFile))) {
+        ArArchiveEntry entry;
+        while ((entry = arIs.getNextEntry()) != null) {
+            if (!entry.getName().equals("test2.xml")) {
+                arOs.putArchiveEntry(new ArArchiveEntry(entry.getName(), entry.getLength()));
+                IOUtils.copy(arIs, arOs);
+                arOs.closeArchiveEntry();
+            }
+        }
+        arOs.finish();
+    }
+
+    // Verify the content of the archive using ArArchiveInputStream
+    List<String> entries = new ArrayList<>();
+    try (ArArchiveInputStream arIs = new ArArchiveInputStream(new FileInputStream(tempArFile))) {
+        ArArchiveEntry entry;
+        while ((entry = arIs.getNextEntry()) != null) {
+            entries.add(entry.getName());
+        }
+    }
+    assertEquals(Collections.singletonList("test1.xml"), entries);
+
+    // Verify the content of the file using command line
+    ProcessBuilder processBuilder = new ProcessBuilder("ar", "-t", tempArFile.getAbsolutePath());
+    Process process = processBuilder.start();
+    try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+        List<String> commandLineEntries = new ArrayList<>();
+        String line;
+        while ((line = reader.readLine()) != null) {
+            commandLineEntries.add(line.trim());
+        }
+        assertEquals(Collections.singletonList("test1.xml"), commandLineEntries);
+    } finally {
+        process.destroy();
+        tempArFile.delete();
+    }
+}

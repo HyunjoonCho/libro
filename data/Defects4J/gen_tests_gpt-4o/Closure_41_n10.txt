@@ -1,0 +1,69 @@
+public void testCompilerWarningForOverriddenMethodsWithDifferentSignatures() {
+    CompilerOptions options = new CompilerOptions();
+    CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+    options.setWarningLevel(DiagnosticGroups.CHECK_TYPES, CheckLevel.WARNING);
+
+    String jsCode = ""
+        + "goog.provide('Foo');\n"
+        + "goog.provide('Bar');\n"
+        + "/** @constructor */\n"
+        + "Foo = function() {};\n"
+        + "/**\n"
+        + " * @param {number} a\n"
+        + " * @param {number} b\n"
+        + " * @return {number}\n"
+        + " */\n"
+        + "Foo.prototype.add = function(a, b) {\n"
+        + " return a + b;\n"
+        + "};\n"
+        + "/**\n"
+        + " * @param {number} a\n"
+        + " * @param {number} b\n"
+        + " * @return {number}\n"
+        + " */\n"
+        + "Foo.prototype.sub = goog.abstractMethod;\n"
+        + "/**\n"
+        + " * @constructor\n"
+        + " * @extends {Foo}\n"
+        + " */\n"
+        + "Bar = function() {\n"
+        + " goog.base(this);\n"
+        + "};\n"
+        + "goog.inherits(Bar, Foo);\n"
+        + "/** @inheritDoc */\n"
+        + "Bar.prototype.add = function(one) {\n"
+        + " return one;\n"
+        + "};\n"
+        + "/** @inheritDoc */\n"
+        + "Bar.prototype.sub = function(one) {\n"
+        + " return one;\n"
+        + "};\n"
+        + "var foo = /** @type {Foo} */ (new Bar());\n"
+        + "alert(foo.add(3, 4));\n"
+        + "var bar = new Bar();\n"
+        + "alert(bar.add(3, 4));";
+        
+    Compiler compiler = new Compiler();
+    Result result = compiler.compile(Collections.emptyList(), 
+                                     Collections.singletonList(SourceFile.fromCode("test.js", jsCode)), 
+                                     options);
+    
+    // Verify that there are warnings for method signature mismatches
+    assertFalse("Expected warnings", result.warnings.isEmpty());
+    
+    boolean foundAddWarning = false;
+    boolean foundSubWarning = false;
+
+    for (JSError warning : result.warnings) {
+        if (warning.description.contains("overridden method with different signature")) {
+            if (warning.sourceName.contains("add")) {
+                foundAddWarning = true;
+            } else if (warning.sourceName.contains("sub")) {
+                foundSubWarning = true;
+            }
+        }
+    }
+
+    assertTrue("Expected warning for Bar.prototype.add method", foundAddWarning);
+    assertTrue("Expected warning for Bar.prototype.sub method", foundSubWarning);
+}

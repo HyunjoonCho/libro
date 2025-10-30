@@ -1,0 +1,53 @@
+public void testCompilerFailsToFindAmdModuleInSubdirectory() {
+    // Setup a temporary directory to simulate the file structure
+    File tempDir = Files.createTempDirectory("amdTest").toFile();
+    try {
+        // Create directory structure and files
+        File libDir = new File(tempDir, "lib");
+        libDir.mkdir();
+        
+        File fooJs = new File(libDir, "Foo.js");
+        File barJs = new File(tempDir, "Bar.js");
+        
+        // Write simple AMD module content to files
+        Files.write(fooJs.toPath(), Collections.singletonList(
+            "define([], function() { console.log('Foo module'); });"
+        ));
+        Files.write(barJs.toPath(), Collections.singletonList(
+            "define(['lib/Foo'], function(Foo) { console.log('Bar module'); });"
+        ));
+        
+        // Simulate the compiler call and capture the output
+        ProcessBuilder processBuilder = new ProcessBuilder("java", "-jar", "compiler.jar", 
+                "--transform_amd_modules", "--process_common_js_modules", 
+                "--common_js_entry_module=Bar.js", 
+                "--compilation_level=ADVANCED_OPTIMIZATIONS", 
+                "--js_output_file=out.js", 
+                "--js=Bar.js", 
+                "--js=lib/Foo.js");
+        
+        processBuilder.directory(tempDir);
+        Process process = processBuilder.start();
+        process.waitFor();
+        
+        // Read error output
+        String errorOutput = new String(process.getErrorStream().readAllBytes());
+        
+        // Assert that the known error message is produced
+        assertTrue(errorOutput.contains("ERROR - required entry point \"module$lib$Foo\" never provided"));
+    } catch (Exception e) {
+        fail("Test setup failed: " + e.getMessage());
+    } finally {
+        // Clean up the temporary directory
+        deleteDirectoryRecursively(tempDir);
+    }
+}
+
+private void deleteDirectoryRecursively(File file) {
+    if (file.isDirectory()) {
+        for (File child : file.listFiles()) {
+            deleteDirectoryRecursively(child);
+        }
+    }
+    file.delete();
+}

@@ -1,0 +1,37 @@
+public void testZipLocalVsCentralDirectoryVersionNeededToExtract() throws IOException {
+    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+    BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(byteArrayOutputStream);
+    ZipArchiveOutputStream zipArchiveOutputStream = new ZipArchiveOutputStream(bufferedOutputStream);
+    
+    ZipArchiveEntry entry = new ZipArchiveEntry("test.txt");
+    entry.setMethod(ZipArchiveEntry.DEFLATED);
+    entry.setSize(4);
+    entry.setCompressedSize(4);
+    entry.setCrc(0xfc3ff0c8L);
+
+    zipArchiveOutputStream.putArchiveEntry(entry);
+    zipArchiveOutputStream.write(new byte[] { 'T', 'E', 'S', 'T' });
+    zipArchiveOutputStream.closeArchiveEntry();
+    zipArchiveOutputStream.finish();
+    zipArchiveOutputStream.close();
+
+    byte[] zipContent = byteArrayOutputStream.toByteArray();
+    // Check local file header version
+    int localFileHeaderVersion = getVersionNeededToExtractFromLocalHeader(zipContent);
+    // Check central directory version
+    int centralDirectoryVersion = getVersionNeededToExtractFromCentralDirectory(zipContent);
+
+    assertEquals("Local and central directory versions mismatch", centralDirectoryVersion, localFileHeaderVersion);
+}
+
+private int getVersionNeededToExtractFromLocalHeader(byte[] zipContent) {
+    // Local File Header Signature (4 bytes) + Version Needed to Extract (2 bytes)
+    return ((zipContent[4] & 0xFF) | ((zipContent[5] & 0xFF) << 8));
+}
+
+private int getVersionNeededToExtractFromCentralDirectory(byte[] zipContent) {
+    // Central Directory starts after the local file data, need to find the offset.
+    // This is a simplified approach assuming single file entry for demonstration.
+    int offset = zipContent.length - 46; // Central directory header length is 46 bytes
+    return ((zipContent[offset + 6] & 0xFF) | ((zipContent[offset + 7] & 0xFF) << 8));
+}

@@ -1,0 +1,29 @@
+public void testErroneousOptimization() throws Exception {
+    Path externsPath = Paths.get("window.js");  // Path to window.js
+    Path inputPath = Paths.get("input.js");
+    Path outputPath = Paths.get("output.js");
+
+    // Write the script to input.js
+    Files.write(inputPath, ("window['anchor'] = function (obj, modifiesProp) {\n" +
+                            " return (function (saved) {\n" +
+                            " return modifiesProp(obj) + saved;\n" +
+                            " })(obj['prop']);\n" +
+                            " }").getBytes());
+
+    ProcessBuilder builder = new ProcessBuilder(
+        "java", "-jar", "path/to/compiler.jar",
+        "--compilation_level", "ADVANCED_OPTIMIZATIONS",
+        "--warning_level", "VERBOSE",
+        "--externs", externsPath.toString(),
+        "--js", inputPath.toString(),
+        "--js_output_file", outputPath.toString()
+    );
+
+    Process process = builder.start();
+    process.waitFor();
+
+    String output = new String(Files.readAllBytes(outputPath));
+    String expectedOutput = "window.foo=function(a,b){var HOLD=a.prop;return b(a)+HOLD};";
+
+    assertTrue("Optimized output does not match expected output", output.contains(expectedOutput));
+}

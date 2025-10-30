@@ -1,0 +1,71 @@
+public void testAdvancedModeOverrideSignatureWarning() {
+    // Setup mock Compiler and CompilerOptions
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+    // Add inputs
+    String code = ""
+        + "goog.provide('Foo');"
+        + "goog.provide('Bar');"
+
+        + "/** @constructor */"
+        + "Foo = function() {};"
+        + "/**"
+        + " * @param {number} a"
+        + " * @param {number} b"
+        + " * @return {number}"
+        + " */"
+        + "Foo.prototype.add = function(a, b) {"
+        + "  return a + b;"
+        + "};"
+        + "/**"
+        + " * @param {number} a"
+        + " * @param {number} b"
+        + " * @return {number}"
+        + " */"
+        + "Foo.prototype.sub = goog.abstractMethod;"
+
+        + "/**"
+        + " * @constructor"
+        + " * @extends {Foo}"
+        + " */"
+        + "Bar = function() {"
+        + "  goog.base(this);"
+        + "};"
+        + "goog.inherits(Bar, Foo);"
+
+        + "/** @inheritDoc */"
+        + "Bar.prototype.add = function(one) {"
+        + "  return one;"
+        + "};"
+        + "/** @inheritDoc */"
+        + "Bar.prototype.sub = function(one) {"
+        + "  return one;"
+        + "};"
+
+        + "var foo = /** @type {Foo} */ (new Bar());"
+        + "alert(foo.add(3, 4));"
+        + "var bar = new Bar();"
+        + "alert(bar.add(3, 4));";
+        
+    compiler.initOptions(options);
+    
+    // Compile
+    Result result = compiler.compile(
+        ExternsSupplier.DEFAULT, 
+        SourceFile.fromCode("test.js", code),
+        options
+    );
+    
+    // JSC_WRONG_ARGUMENT_COUNT should trigger, ensure it's detected
+    assertTrue("Expected compiler error due to argument count mismatch", result.errors.length > 0);
+    boolean foundExpectedError = false;
+    for (JSError error : result.errors) {
+        if (error.getType().equals(DiagnosticGroups.WRONG_ARGUMENT_COUNT)) {
+            foundExpectedError = true;
+            break;
+        }
+    }
+    assertTrue("Expected JSC_WRONG_ARGUMENT_COUNT error was not found", foundExpectedError);
+}

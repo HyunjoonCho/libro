@@ -1,0 +1,27 @@
+public void testResolveTypesCastException() {
+    // Create a mock JavaScript input that forces the UnionType and ObjectType scenario
+    String jsCode = "function exampleFunc() { /** @type {Object|Array} */ var u; return u.prop; }";
+
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+    WarningLevel.VERBOSE.setOptionsForWarningLevel(options);
+
+    // Enable specific warnings and errors based on bug report settings
+    options.setWarningLevel(DiagnosticGroups.MISSING_PROPERTIES, CheckLevel.WARNING);
+    options.setWarningLevel(DiagnosticGroups.UNDEFINED_VARIABLES, CheckLevel.WARNING);
+    options.setWarningLevel(DiagnosticGroups.CHECK_TYPES, CheckLevel.WARNING);
+    options.setWarningLevel(DiagnosticGroups.STRICT_MODULE_DEP_CHECK, CheckLevel.ERROR);
+    options.setWarningLevel(DiagnosticGroups.INVALID_CASTS, CheckLevel.ERROR);
+
+    try {
+        // Compile the JS code to trigger the bug
+        Result result = compiler.compile(SourceFile.fromCode("externs", ""), SourceFile.fromCode("test", jsCode), options);
+
+        // The test passes if the compile triggers the expected exception or fails as expected
+        assertFalse(result.success);
+    } catch (RuntimeException e) {
+        assertTrue(e.getCause() instanceof ClassCastException);
+        assertEquals("com.google.javascript.rhino.jstype.UnionType cannot be cast to com.google.javascript.rhino.jstype.ObjectType", e.getCause().getMessage());
+    }
+}

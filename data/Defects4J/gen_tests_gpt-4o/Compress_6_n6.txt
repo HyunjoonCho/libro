@@ -1,0 +1,33 @@
+public void testZipFileWithHashCollisions() throws IOException {
+    int numEntries = 10000; // Large number of entries to cause hash collisions
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    try (ZipArchiveOutputStream zos = new ZipArchiveOutputStream(baos)) {
+        for (int i = 0; i < numEntries; i++) {
+            // Creating filenames that are likely to cause hash collisions
+            String entryName = "file" + (i % 5) + ".txt";
+            ZipArchiveEntry entry = new ZipArchiveEntry(entryName);
+            zos.putArchiveEntry(entry);
+            zos.write(("Content for file " + i).getBytes());
+            zos.closeArchiveEntry();
+        }
+    }
+    // Write the byte array to a zip file to check for corruption
+    File zipFile = File.createTempFile("testZipFileWithCollisions", ".zip");
+    try (FileOutputStream fos = new FileOutputStream(zipFile)) {
+        baos.writeTo(fos);
+    }
+
+    // Attempt to unzip the file with commons-compress
+    try (ZipFile zf = new ZipFile(zipFile)) {
+        Enumeration<ZipArchiveEntry> entries = zf.getEntries();
+        int countEntries = 0;
+        while (entries.hasMoreElements()) {
+            ZipArchiveEntry entry = entries.nextElement();
+            assertNotNull("Entry content should be non-null", zf.getInputStream(entry));
+            countEntries++;
+        }
+        assertEquals("All entries should be readable without corruption", numEntries, countEntries);
+    } finally {
+        zipFile.delete(); // Clean up temporary file
+    }
+}

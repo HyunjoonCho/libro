@@ -1,0 +1,37 @@
+public void testZipVersionNeededMismatch() throws IOException {
+    File tempFile = File.createTempFile("test", ".zip");
+    try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(tempFile));
+         ZipArchiveOutputStream zos = new ZipArchiveOutputStream(bos)) {
+        
+        ZipArchiveEntry entry = new ZipArchiveEntry("test.txt");
+        entry.setMethod(ZipEntry.DEFLATED);
+        zos.putArchiveEntry(entry);
+        zos.write("test content".getBytes());
+        zos.closeArchiveEntry();
+    }
+
+    try (ZipFile zipFile = new ZipFile(tempFile)) {
+        Enumeration<? extends ZipEntry> entries = zipFile.entries();
+        while (entries.hasMoreElements()) {
+            ZipEntry entry = entries.nextElement();
+
+            // Validate the version needed to extract in local file header vs central directory
+            int localFileHeaderVersion = getLocalFileHeaderVersion(tempFile, entry);
+            int centralDirectoryVersion = entry.getVersion();
+
+            assertEquals("Version needed to extract mismatch between local header and central directory",
+                         centralDirectoryVersion, localFileHeaderVersion);
+        }
+    }
+    tempFile.delete();
+}
+
+private int getLocalFileHeaderVersion(File zipFile, ZipEntry entry) throws IOException {
+    try (FileInputStream fis = new FileInputStream(zipFile);
+         BufferedInputStream bis = new BufferedInputStream(fis)) {
+        byte[] buffer = new byte[4];
+        bis.skip(entry.getDataOffset());
+        bis.read(buffer, 0, 4);
+        return buffer[2] | (buffer[3] << 8);
+    }
+}

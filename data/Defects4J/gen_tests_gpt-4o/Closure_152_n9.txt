@@ -1,0 +1,29 @@
+public void testResolveTypesUnionTypeCastFailure() {
+    List<SourceFile> externs = new ArrayList<>();
+    List<SourceFile> inputs = new ArrayList<>();
+
+    // Populate 'inputs' with representative JS code that potentially triggers the UnionType casting issue
+    inputs.add(SourceFile.fromCode("input.js", ""
+        + "/** @constructor */ function A() {}"
+        + "/** @return {A|!Object} */ function f() { return new A(); }"
+        + "var result = f();"
+        + "result.toString();")); // Accessing a method that could be shared by Object or A
+
+    CompilerOptions options = new CompilerOptions();
+    CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+    options.setCheckTypes(true);
+    options.setWarningLevel(DiagnosticGroups.MISSING_PROPERTIES, CheckLevel.WARNING);
+    options.setWarningLevel(DiagnosticGroups.UNDEFINED_VARIABLES, CheckLevel.WARNING);
+    options.setWarningLevel(DiagnosticGroups.STRICT_MODULE_DEP_CHECK, CheckLevel.ERROR);
+    options.setWarningLevel(DiagnosticGroups.INVALID_CASTS, CheckLevel.ERROR);
+
+    Compiler compiler = new Compiler();
+    try {
+        compiler.compile(externs, inputs, options);
+        fail("Expected ClassCastException: jstype.UnionType cannot be cast to jstype.ObjectType");
+    } catch (RuntimeException e) {
+        assertTrue(e.getCause() instanceof ClassCastException);
+        assertEquals("com.google.javascript.rhino.jstype.UnionType cannot be cast to com.google.javascript.rhino.jstype.ObjectType",
+                     e.getCause().getMessage());
+    }
+}

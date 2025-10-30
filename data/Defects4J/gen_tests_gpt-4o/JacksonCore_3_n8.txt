@@ -1,0 +1,28 @@
+public void testUtf8StreamJsonParserColumnCalculation() {
+    // Create mock input stream
+    InputStream inputStream = new ByteArrayInputStream("{\"key\": \"value\"}".getBytes(StandardCharsets.UTF_8));
+    
+    // Create a mock IOContext
+    IOContext context = new IOContext(new BufferRecycler(), inputStream, false);
+
+    // Initialize necessary components for UTF8StreamJsonParser
+    ObjectCodec codec = null; // Assuming no codec is necessary for this test
+    BytesToNameCanonicalizer sym = BytesToNameCanonicalizer.createRoot();
+
+    // Create a byte buffer
+    byte[] inputBuffer = new byte[10];
+    System.arraycopy("{\"key\": \"value\"}".getBytes(StandardCharsets.UTF_8), 0, inputBuffer, 0, 10);
+
+    // Initialize the UTF8StreamJsonParser with a start position
+    int start = 3; // non-zero start position to reproduce the issue
+    UTF8StreamJsonParser parser = new UTF8StreamJsonParser(context, 0, inputStream, codec, sym, inputBuffer, start, inputBuffer.length, false);
+
+    // Force an exception to occur, which will trigger the current location calculation
+    try {
+        parser.nextToken();
+    } catch (JsonParseException e) {
+        JsonLocation location = parser.getCurrentLocation();
+        int expectedColumn = start - parser._currInputRowStart + 1;
+        assertEquals("Column position is incorrect due to uninitialized _currInputRowStart", expectedColumn, location.getColumnNr());
+    }
+}

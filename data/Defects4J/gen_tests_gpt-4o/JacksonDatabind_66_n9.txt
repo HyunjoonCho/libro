@@ -1,0 +1,24 @@
+public void testFailureWithCustomEnumKeyDeserializer() throws IOException {
+    String json = "{\"someMap\": {\"FOO\": \"bar\"}}";
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule simpleModule = new SimpleModule();
+    simpleModule.addKeyDeserializer(SuperTypeEnum.class, new KeyDeserializer() {
+        @Override
+        public Object deserializeKey(String key, DeserializationContext ctxt) throws IOException {
+            JsonParser parser = ctxt.getParser();
+            if (parser != null && parser.getCurrentToken() != JsonToken.END_OBJECT) {
+                // Simulate failure related to wrong JsonParser token position
+                throw new IOException("Unexpected JsonParser state");
+            }
+            return SuperTypeEnum.valueOf(key);
+        }
+    });
+    mapper.registerModule(simpleModule);
+    
+    try {
+        mapper.readValue(json, SuperType.class);
+        fail("Expected IOException due to JsonParser token being at wrong position");
+    } catch (IOException e) {
+        assertTrue(e.getMessage().contains("Unexpected JsonParser state"));
+    }
+}

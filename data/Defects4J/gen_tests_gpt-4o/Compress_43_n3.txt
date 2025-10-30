@@ -1,0 +1,38 @@
+public void testZipVersionMismatch() throws Exception {
+    // Setup: Create a small zip entry with deflate compression
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    BufferedOutputStream bos = new BufferedOutputStream(baos);
+    ZipArchiveOutputStream zipOut = new ZipArchiveOutputStream(bos);
+    
+    ZipArchiveEntry entry = new ZipArchiveEntry("test.txt");
+    entry.setMethod(ZipArchiveOutputStream.DEFLATED);
+    zipOut.putArchiveEntry(entry);
+    zipOut.write("dummyContent".getBytes());
+    zipOut.closeArchiveEntry();
+    zipOut.close();
+
+    byte[] zipData = baos.toByteArray();
+
+    // Read back the local file header and central directory to check the versions
+    ByteArrayInputStream bais = new ByteArrayInputStream(zipData);
+    ZipArchiveInputStream zipIn = new ZipArchiveInputStream(bais);
+
+    ZipArchiveEntry localEntry = zipIn.getNextZipEntry();
+    assertNotNull(localEntry);
+
+    // Extract version needed to extract from local file header
+    int localVersionNeeded = (zipData[4] & 0xff) | ((zipData[5] & 0xff) << 8);
+
+    // Since the zip data is short, expect central directory start offset after header and data
+    ByteArrayInputStream centralIn = new ByteArrayInputStream(zipData);
+    centralIn.skip(zipData.length - 46); // assuming minimal central directory length
+    byte[] centralDir = new byte[46];
+    centralIn.read(centralDir);
+
+    // Extract version needed to extract from central directory
+    int centralVersionNeeded = (centralDir[6] & 0xff) | ((centralDir[7] & 0xff) << 8);
+
+    // Assert versions are equal
+    assertEquals("Local version needed to extract does not match Central Directory",
+            localVersionNeeded, centralVersionNeeded);
+}

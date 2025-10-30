@@ -1,0 +1,54 @@
+public void testDangerousUseOfGlobalThisWarning() {
+    // Prepare a script to test
+    String script = "/** @constructor */\n" +
+                    "function Foo() {\n" +
+                    "  this._bar = null;\n" +
+                    "};\n" +
+                    "\n" +
+                    "/** @this {Foo} */\n" +
+                    "function writeMethodWithAnnotation() {\n" +
+                    "  this._bar = 123; // no warning. ok\n" +
+                    "}\n" +
+                    "\n" +
+                    "/** @this {Foo} */\n" +
+                    "function readMethodWithAnnotation() {\n" +
+                    "  return this._bar; // no warning. ok\n" +
+                    "}\n" +
+                    "\n" +
+                    "// Without annotation\n" +
+                    "function writeMethodWithoutAnnotation() {\n" +
+                    "  this._bar = 123; // expected warning\n" +
+                    "}\n" +
+                    "\n" +
+                    "function readMethodWithoutAnnotation() {\n" +
+                    "  return this._bar; // <- Expected warning but none shown\n" +
+                    "}";
+
+    // Create a compiler
+    Compiler compiler = new Compiler();
+
+    // Set the compilation options
+    CompilerOptions options = new CompilerOptions();
+    CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+    // Compile the script
+    SourceFile input = SourceFile.fromCode("test_code", script);
+    compiler.compile(Collections.emptyList(), Collections.singletonList(input), options);
+
+    // Check warnings
+    JSError[] warnings = compiler.getWarnings();
+    assertTrue("Expected warnings for dangerous use of global this, but got none.", warnings.length > 1);
+
+    // Check if the expected warning for readMethodWithoutAnnotation is present
+    boolean foundWarning = false;
+    for (JSError warning : warnings) {
+        if (warning.description.contains("dangerous use of the global this object") &&
+            warning.sourceName.equals("test_code") &&
+            warning.lineNumber == 19) {
+            foundWarning = true;
+            break;
+        }
+    }
+
+    assertTrue("Expected 'dangerous use of the global this object' warning for readMethodWithoutAnnotation.", foundWarning);
+}

@@ -1,0 +1,48 @@
+public void testLocalVersionNeededToExtractDoesNotMatchCentralDirectory() throws IOException {
+    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+    BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(byteArrayOutputStream);
+    ZipArchiveOutputStream zipOutputStream = new ZipArchiveOutputStream(bufferedOutputStream);
+
+    ZipArchiveEntry entry = new ZipArchiveEntry("test.txt");
+    entry.setMethod(ZipEntry.DEFLATED);
+    zipOutputStream.putArchiveEntry(entry);
+    zipOutputStream.write("test content".getBytes());
+    zipOutputStream.closeArchiveEntry();
+    zipOutputStream.finish();
+    zipOutputStream.close();
+
+    byte[] zipFileData = byteArrayOutputStream.toByteArray();
+
+    try (ZipArchiveInputStream zipInputStream = new ZipArchiveInputStream(new ByteArrayInputStream(zipFileData))) {
+        ZipArchiveEntry readEntry;
+        boolean foundMismatch = false;
+        while ((readEntry = zipInputStream.getNextZipEntry()) != null) {
+            if ("test.txt".equals(readEntry.getName())) {
+                int localVersion = readLocalVersionNeededToExtract(zipFileData);
+                int centralVersion = readEntry.getVersionNeededToExtract();
+                // Check if versions mismatch
+                assertEquals("Mismatch in version needed to extract between local and central directory", centralVersion, localVersion);
+                foundMismatch = true;
+                break;
+            }
+        }
+        assertTrue("Entry was not found or could not determine mismatch", foundMismatch);
+    }
+}
+
+private int readLocalVersionNeededToExtract(byte[] zipFileData) throws IOException {
+    try (ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(zipFileData);
+         ZipArchiveInputStream zipInputStream = new ZipArchiveInputStream(byteArrayInputStream)) {
+        ZipArchiveEntry entry;
+        while ((entry = zipInputStream.getNextZipEntry()) != null) {
+            if ("test.txt".equals(entry.getName())) {
+                // local file header is at start of zipFileData
+                // and version needed to extract is at offset 4-5
+                // based on the ZIP file format specification.
+                int version = byteArrayInputStream.read();
+                return (version & 0xFF) | (byteArrayInputStream.read() << 8);
+            }
+        }
+    }
+    return -1; // Indicative of failure to find the version
+}

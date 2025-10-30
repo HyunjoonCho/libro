@@ -1,0 +1,40 @@
+public void testMapKeyDeserializerModifiersIgnored() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    
+    module.setDeserializerModifier(new BeanDeserializerModifier() {
+        @Override
+        public KeyDeserializer modifyKeyDeserializer(
+                DeserializationConfig config,
+                JavaType type,
+                KeyDeserializer deserializer) {
+            if (!type.isEnumType()) {
+                return super.modifyKeyDeserializer(config, type, deserializer);
+            }
+            return new KeyDeserializer() {
+                @Override
+                public Object deserializeKey(String key, DeserializationContext ctxt)
+                        throws IOException, JsonProcessingException {
+                    Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                    return Enum.valueOf(rawClass, key.toUpperCase());
+                }
+            };
+        }
+    });
+    
+    mapper.registerModule(module);
+    
+    String json = "{\"someEnum\":\"value_one\"}";
+    JavaType mapType = mapper.getTypeFactory().constructMapType(ImmutableMap.class, SomeEnum.class, String.class);
+    
+    try {
+        mapper.readValue(json, mapType);
+        fail("Expected JsonMappingException due to incorrect key deserialization");
+    } catch (JsonMappingException e) {
+        // Exception is expected
+    }
+}
+
+public enum SomeEnum {
+    VALUE_ONE, VALUE_TWO;
+}

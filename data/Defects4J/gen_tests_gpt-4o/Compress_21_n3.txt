@@ -1,0 +1,58 @@
+public void testSevenEmptyFilesArchive() throws IOException {
+    File tempDir = Files.createTempDirectory("sevenEmptyFilesTest").toFile();
+    try {
+        for (int i = 0; i < 7; i++) {
+            Files.createFile(new File(tempDir, "emptyFile" + i + ".txt").toPath());
+        }
+        File archive = new File(tempDir.getParent(), "testArchive.7z");
+        create7zArchive(tempDir, archive);
+        
+        // Verify archive content, expecting a single folder entry with the archive's name
+        SevenZFile sevenZFile = new SevenZFile(archive);
+        SevenZArchiveEntry entry = sevenZFile.getNextEntry();
+        assertNotNull(entry);
+        assertTrue(entry.isDirectory());
+        assertEquals("testArchive", entry.getName());
+        sevenZFile.close();
+    } finally {
+        for (File file : tempDir.listFiles()) {
+            file.delete();
+        }
+        tempDir.delete();
+    }
+}
+
+public void testEightEmptyFilesArchive() throws IOException {
+    File tempDir = Files.createTempDirectory("eightEmptyFilesTest").toFile();
+    try {
+        for (int i = 0; i < 8; i++) {
+            Files.createFile(new File(tempDir, "emptyFile" + i + ".txt").toPath());
+        }
+        File archive = new File(tempDir.getParent(), "testArchive.7z");
+        create7zArchive(tempDir, archive);
+
+        // Attempt to open the archive, expecting it to be corrupt or inaccessible
+        try {
+            SevenZFile sevenZFile = new SevenZFile(archive);
+            fail("Expected an exception when opening a corrupt archive");
+        } catch (IOException e) {
+            assertTrue(e.getMessage().contains("Cannot open file") ||
+                       e.getMessage().contains("as archive"));
+        }
+    } finally {
+        for (File file : tempDir.listFiles()) {
+            file.delete();
+        }
+        tempDir.delete();
+    }
+}
+
+private void create7zArchive(File inputDir, File outputArchive) throws IOException {
+    SevenZOutputFile sevenZOutput = new SevenZOutputFile(outputArchive);
+    for (File file : inputDir.listFiles()) {
+        SevenZArchiveEntry entry = sevenZOutput.createArchiveEntry(file, file.getName());
+        sevenZOutput.putArchiveEntry(entry);
+        sevenZOutput.closeArchiveEntry();
+    }
+    sevenZOutput.close();
+}

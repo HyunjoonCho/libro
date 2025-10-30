@@ -1,0 +1,35 @@
+public void testMissingAnnotationsWithFunctionScopes() {
+    // Simulate the JavaScript environment described in the bug report by compiling and checking the code
+    String modulePatternCode = 
+        "var ns = {};\n" +
+        "(function() {\n" +
+        "    /** @param {string=} b */\n" +
+        "    ns.a = function(b) {}\n" +
+        "})();\n" +
+        "function d() {\n" +
+        "    ns.a();\n" + // Expect no warning for this call
+        "    ns.a(123);\n" + // Expect a warning for this call
+        "}\n";
+
+    // Mock the function that runs the type checker and assert on its output
+    List<String> warnings = runTypeCheckerOnJavaScriptCode(modulePatternCode);
+
+    // Validate that a warning is present for the type mismatch but not for the optional parameter omission
+    assertTrue(warnings.contains("Type error: expected string but found number at line 7") && 
+               !warnings.contains("Function ns.a called with 0 arguments, expected at least 1."));
+    
+    String codeWithoutFunctionWrap = 
+        "var ns = {};\n" +
+        "(function() {\n" +
+        "    /** @param {string=} b */\n" +
+        "    ns.a = function(b) {}\n" +
+        "})();\n" +
+        "ns.a();\n" + // Should not produce any warnings
+        "ns.a(123);\n"; // Expect a warning for this call
+
+    // Run the type checker again and verify results
+    warnings = runTypeCheckerOnJavaScriptCode(codeWithoutFunctionWrap);
+
+    // Validate against expected behavior when the function call is outside
+    assertTrue(warnings.contains("Type error: expected string but found number at the last line"));
+}

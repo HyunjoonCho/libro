@@ -1,0 +1,36 @@
+public void testMapKeyDeserializerModifiersIgnored() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.setDeserializerModifier(new BeanDeserializerModifier() {
+        @Override
+        public KeyDeserializer modifyKeyDeserializer(
+                DeserializationConfig config,
+                JavaType type,
+                KeyDeserializer deserializer) {
+            if (!type.isEnumType()) {
+                return super.modifyKeyDeserializer(config, type, deserializer);
+            }
+            return new KeyDeserializer() {
+                @Override
+                @SuppressWarnings("unchecked")
+                public Object deserializeKey(String key, DeserializationContext ctxt)
+                        throws IOException, JsonProcessingException {
+                    Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                    return Enum.valueOf(rawClass, key.toUpperCase());
+                }
+            };
+        }
+    });
+    mapper.registerModule(module);
+
+    String json = "{\"lowercasekey\":\"value\"}";
+    TypeReference<Map<SampleEnum, String>> typeRef = new TypeReference<Map<SampleEnum, String>>() {};
+    Map<SampleEnum, String> result = mapper.readValue(json, typeRef);
+
+    assertTrue(result.containsKey(SampleEnum.LOWERCASEKEY));
+    assertEquals("value", result.get(SampleEnum.LOWERCASEKEY));
+}
+
+public enum SampleEnum {
+    LOWERCASEKEY
+}

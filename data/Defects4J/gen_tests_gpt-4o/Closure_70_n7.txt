@@ -1,0 +1,59 @@
+public void testUnexpectedTypedCoverage() throws IOException, InterruptedException {
+    // Step 1. Create JavaScript file content
+    String jsContent = "/*global window*/\n"
+                     + "/*jslint sub: true*/\n"
+                     + "/**\n"
+                     + " * @constructor\n"
+                     + " * @param {!Element} element\n"
+                     + " */\n"
+                     + "function Example(element) {\n"
+                     + "  /**\n"
+                     + "   * @param {!string} ns\n"
+                     + "   * @param {!string} name\n"
+                     + "   * @return {undefined}\n"
+                     + "   */\n"
+                     + "  this.appendElement = function appendElement(ns, name) {\n"
+                     + "    var e = element.ownerDocument.createElementNS(ns, name);\n"
+                     + "    element.appendChild(e);\n"
+                     + "  };\n"
+                     + "}\n"
+                     + "window[\"Example\"] = Example;";
+
+    // Write JS content to a temporary file
+    File jsFile = File.createTempFile("testjs", ".js");
+    Files.write(jsFile.toPath(), jsContent.getBytes(StandardCharsets.UTF_8));
+    
+    // Command to invoke closure compiler
+    ProcessBuilder processBuilder = new ProcessBuilder(
+        "java", 
+        "-jar", 
+        "compiler.jar", 
+        "--jscomp_error", 
+        "checkTypes", 
+        "--summary_detail_level", 
+        "3", 
+        "--js", 
+        jsFile.getAbsolutePath(), 
+        "--js_output_file", 
+        "compiled.js"
+    );
+    
+    // Run the process and capture output
+    Process process = processBuilder.start();
+    int exitCode = process.waitFor();
+    
+    // Ensure process executed without error
+    assertEquals(0, exitCode);
+    
+    // Read output
+    BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+    StringBuilder output = new StringBuilder();
+    String line;
+    while ((line = reader.readLine()) != null) {
+        output.append(line);
+    }
+
+    // Check for expected output
+    assertTrue(output.toString().contains("typed"));
+    assertTrue(output.toString().contains("0 error(s), 0 warning(s), 73.7% typed"));
+}

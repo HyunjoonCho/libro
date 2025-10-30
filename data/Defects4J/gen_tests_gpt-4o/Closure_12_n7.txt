@@ -1,0 +1,46 @@
+public void testTryCatchCompilation() {
+    String uncompiled = executeUncompiledCode();
+    String compiled = executeCompiledCode();
+    assertEquals("1212", uncompiled);
+    assertEquals("undefinedundefined", compiled);
+}
+
+private String executeUncompiledCode() {
+    StringBuilder output = new StringBuilder();
+    String eval = "function a() { var x = '1'; try { x += somefunction(); } catch(e) { } x += '2'; try { x += somefunction(); } catch(e) { } return x; }";
+    Context ctx = Context.enter();
+    try {
+        Scriptable scope = ctx.initSafeStandardObjects();
+        ctx.evaluateString(scope, eval, "script", 1, null);
+        Function a = (Function) scope.get("a", scope);
+        output.append(a.call(ctx, scope, scope, new Object[]{}));
+        output.append(a.call(ctx, scope, scope, new Object[]{}));
+    } finally {
+        Context.exit();
+    }
+    return output.toString();
+}
+
+private String executeCompiledCode() {
+    StringBuilder output = new StringBuilder();
+    // Simulate compiled execution
+    ClosureCompiler compiler = new ClosureCompiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.initOptions(options);
+    String eval = "function b() { var a; try { a = '1' + somefunction(); } catch(c) { } try { a = a + '2' + somefunction(); } catch(d) { } return a; }";
+    Node root = compiler.parse(SourceFile.fromCode("input.js", eval));
+    compiler.compile(EXTERNS, root, options);
+    String compiledEval = compiler.toSource();
+    
+    Context ctx = Context.enter();
+    try {
+        Scriptable scope = ctx.initSafeStandardObjects();
+        ctx.evaluateString(scope, compiledEval, "compiledScript", 1, null);
+        Function b = (Function) scope.get("b", scope);
+        output.append(b.call(ctx, scope, scope, new Object[]{}));
+        output.append(b.call(ctx, scope, scope, new Object[]{}));
+    } finally {
+        Context.exit();
+    }
+    return output.toString();
+}

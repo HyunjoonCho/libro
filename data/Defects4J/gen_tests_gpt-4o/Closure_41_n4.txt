@@ -1,0 +1,57 @@
+public void testAdvancedModeCompilerWarning() {
+    Compiler compiler = new Compiler();
+    
+    CompilerOptions options = new CompilerOptions();
+    CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+    WarningLevel.VERBOSE.setOptionsForWarningLevel(options);
+
+    String code = ""
+        + "goog.provide('Foo');"
+        + "goog.provide('Bar');"
+        + "/** @constructor */"
+        + "Foo = function() {};"
+        + "/**"
+        + " * @param {number} a"
+        + " * @param {number} b"
+        + " * @return {number}"
+        + " */"
+        + "Foo.prototype.add = function(a, b) { return a + b; };"
+        + "/**"
+        + " * @param {number} a"
+        + " * @param {number} b"
+        + " * @return {number}"
+        + " */"
+        + "Foo.prototype.sub = goog.abstractMethod;"
+        + "/**"
+        + " * @constructor"
+        + " * @extends {Foo}"
+        + " */"
+        + "Bar = function() { goog.base(this); };"
+        + "goog.inherits(Bar, Foo);"
+        + "/** @inheritDoc */"
+        + "Bar.prototype.add = function(one) { return one; };"
+        + "/** @inheritDoc */"
+        + "Bar.prototype.sub = function(one) { return one; };"
+        + "var foo = /** @type {Foo} */ (new Bar());"
+        + "alert(foo.add(3, 4));"
+        + "var bar = new Bar();"
+        + "alert(bar.add(3, 4));";
+
+    Result result = compiler.compile(ImmutableList.of(), ImmutableList.of(SourceFile.fromCode("test.js", code)), options);
+
+    assertTrue("Expected warnings, but found none.", result.warnings.length > 0);
+
+    boolean addWarningFound = false;
+    boolean subWarningFound = false;
+    for (JSError warning : result.warnings) {
+        if (warning.description.contains("Foo.prototype.add")) {
+            addWarningFound = true;
+        }
+        if (warning.description.contains("Foo.prototype.sub")) {
+            subWarningFound = true;
+        }
+    }
+
+    assertTrue("Expected warning for Bar.prototype.add overriding Foo.prototype.add with different signature.", addWarningFound);
+    assertTrue("Expected warning for Bar.prototype.sub overriding Foo.prototype.sub with different signature.", subWarningFound);
+}

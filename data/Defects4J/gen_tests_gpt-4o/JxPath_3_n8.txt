@@ -1,0 +1,35 @@
+public void testStackOverflowErrorOnCreatePath() {
+    Map<String, Object> map = new HashMap<>();
+    map.put("a", null);
+
+    JXPathContext pathContext = JXPathContext.newContext(map);
+    pathContext.setFactory(new AbstractFactory() {
+        public boolean createObject(JXPathContext context, Pointer pointer, Object parent, String name, int index) {
+            if (pointer instanceof NodePointer) {
+                index = ((NodePointer) pointer).getIndex();
+            }
+
+            Map<String, Object> parentMap = (Map<String, Object>) parent;
+            if (index > -1) {
+                List<Object> list = (List<Object>) parentMap.get(name);
+                if (list == null) {
+                    list = new ArrayList<>();
+                }
+                int size = list.size();
+                for (int i = size; i <= index; i++) {
+                    list.add(i, null);
+                }
+                parentMap.put(name, list);
+            } else {
+                parentMap.put(name, new HashMap<>());
+            }
+            return true;
+        }
+    });
+
+    // This call should succeed
+    pathContext.createPath("a/b[1]/c");
+
+    // This call should reproduce the StackOverflowError
+    pathContext.createPath("a/b[2]/c");
+}

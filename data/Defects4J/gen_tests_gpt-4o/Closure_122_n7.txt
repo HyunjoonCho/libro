@@ -1,0 +1,36 @@
+public void testInconsistentNonJSDocHandling() throws IOException {
+    // Create a temporary JavaScript file to simulate the input script
+    File tempFile = File.createTempFile("test", ".js");
+    try (BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile))) {
+        writer.write("/* @preserve Foo License */\n");
+        writer.write("alert('foo');\n");
+    }
+
+    // Use the command line for the Closure Compiler
+    CommandLineRunner runner = new CommandLineRunner(
+        new String[]{
+            "--js", tempFile.getAbsolutePath(),
+            "--warning_level", "VERBOSE",
+            "--js_output_file", "output.js"
+        });
+    
+    // Capture the output
+    ByteArrayOutputStream outContent = new ByteArrayOutputStream();
+    PrintStream originalOut = System.out;
+    System.setOut(new PrintStream(outContent));
+
+    try {
+        runner.run();
+        String output = outContent.toString();
+        assertTrue("Expected warning about non-JSDoc comment not found", 
+                   output.contains("WARNING - Parse error. Non-JSDoc comment has annotations. " +
+                                   "Did you mean to start it with '/**'?"));
+    } finally {
+        // Restore original System.out
+        System.setOut(originalOut);
+        // Clean up temporary file
+        if (tempFile.exists()) {
+            tempFile.delete();
+        }
+    }
+}

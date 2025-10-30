@@ -1,0 +1,40 @@
+public void testInvalidPropertyInForLoopPrototypeFunction() {
+    String externs = "/** @param {ns.Thing} thing\n"
+                   + " * @constructor */\n"
+                   + "ns.MyClass = function(thing) {\n"
+                   + "    /** @type {ns.Thing} */ this.thing_ = thing;\n"
+                   + "};";
+
+    String jsCode = "ns.MyClass.prototype.doIt = function() {\n"
+                  + "    var subthing = this.thing_.subthing;\n"
+                  + "    // NO ERROR:\n"
+                  + "    for (var i = 0; i < subthing.noprop; i++) {\n"
+                  + "        window.console.log(i);\n"
+                  + "    }\n"
+                  + "};\n"
+                  + "var thing = /** @type {ns.Thing} */({subthing: {prop: 3}});\n"
+                  + "var c = new ns.MyClass(thing);\n"
+                  + "c.doIt();";
+
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+    options.setErrorHandler(new BasicErrorManager() {
+        @Override
+        public void report(CheckLevel level, JSError error) {
+            assertTrue("Expected error not triggered: " + error.description, false);
+        }
+        @Override
+        protected void printSummary() {}
+    });
+    options.setWarningLevel(DiagnosticGroups.CHECK_TYPES, CheckLevel.ERROR);
+    options.setWarningLevel(DiagnosticGroups.EXTERNS_VALIDATION, CheckLevel.ERROR);
+
+    Result result = compiler.compile(
+        SourceFile.fromCode("externs.js", externs),
+        SourceFile.fromCode("inloop.js", jsCode),
+        options
+    );
+
+    assertFalse("Expected compilation errors but got none.", result.success);
+}

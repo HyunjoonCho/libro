@@ -1,0 +1,24 @@
+public void testFailureWithCustomEnumKeyDeserializer() throws IOException {
+    String json = "{\"someMap\": {\"FOO\": \"bar\"}}";
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule simpleModule = new SimpleModule();
+    simpleModule.addKeyDeserializer(SuperTypeEnum.class, new KeyDeserializer() {
+        @Override
+        public Object deserializeKey(String key, DeserializationContext ctxt) throws IOException {
+            // Use the DeserializationContext to mimic the missing parser information scenario
+            JsonParser parser = ctxt.getParser();
+            if (parser != null && parser.hasCurrentToken()) {
+                return SuperTypeEnum.valueOf(key);
+            }
+            throw new IOException("Parser context not available");
+        }
+    });
+    mapper.registerModule(simpleModule);
+
+    try {
+        SuperType superType = mapper.readValue(json, SuperType.class);
+        assertEquals("Deserialized someMap.FOO should equal bar", "bar", superType.getSomeMap().get(SuperTypeEnum.FOO));
+    } catch (IOException e) {
+        fail("Deserialization should pass without IOException related to parser context being null or invalid.");
+    }
+}

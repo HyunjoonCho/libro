@@ -1,0 +1,48 @@
+public void testCompilerFailsToFindAmdModule() {
+    // Create an in-memory file system to simulate the folder structure
+    // Using a library such as Jimfs for this purpose
+    FileSystem fs = Jimfs.newFileSystem(Configuration.unix());
+
+    try {
+        // Create the directory structure and files
+        Path libDir = fs.getPath("/lib");
+        Path fooModule = libDir.resolve("Foo.js");
+        Files.createDirectories(libDir);
+        Files.write(fooModule, "define([], function() { return 'Foo'; });".getBytes());
+
+        Path barModule = fs.getPath("/Bar.js");
+        Files.write(barModule, ("define(['lib/Foo'], function(Foo) { console.log(Foo); });").getBytes());
+
+        // Initialize a compiler instance
+        Compiler compiler = new Compiler();
+
+        // Compiler options
+        CompilerOptions options = new CompilerOptions();
+        options.setCompilationLevel(CompilationLevel.ADVANCED_OPTIMIZATIONS);
+        options.setModuleResolutionMode(ModuleLoader.ResolutionMode.BROWSER);
+        options.setTransformAMDToCJSModules(true);
+        options.setProcessCommonJSModules(true);
+        options.setEntryPoints(Collections.singletonList("module$Bar"));
+
+        // Input files
+        SourceFile barInput = SourceFile.fromPath(barModule, Charset.defaultCharset());
+        SourceFile fooInput = SourceFile.fromPath(fooModule, Charset.defaultCharset());
+
+        // Compile
+        Result result = compiler.compile(
+                ImmutableList.of(SourceFile.fromCode("externs.js", "")),
+                ImmutableList.of(barInput, fooInput),
+                options);
+
+        // Check results
+        assertTrue("Compiler should complete without errors", result.success);
+    } catch (IOException e) {
+        fail("Unexpected IOException during test: " + e.getMessage());
+    } finally {
+        try {
+            fs.close();
+        } catch (IOException e) {
+            // Log error if needed during cleanup
+        }
+    }
+}

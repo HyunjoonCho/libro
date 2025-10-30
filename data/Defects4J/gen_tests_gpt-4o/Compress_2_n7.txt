@@ -1,0 +1,51 @@
+public void testArDeletion() throws IOException {
+    // Setting up initial archive with two entries
+    File archiveFile = new File("/tmp/dir26673/bla.ar");
+    FileOutputStream fos = new FileOutputStream(archiveFile);
+    ArArchiveOutputStream arOut = new ArArchiveOutputStream(fos);
+
+    arOut.putArchiveEntry(new ArArchiveEntry("test1.xml", 10));
+    arOut.write(new byte[10]);
+    arOut.closeArchiveEntry();
+
+    arOut.putArchiveEntry(new ArArchiveEntry("test2.xml", 10));
+    arOut.write(new byte[10]);
+    arOut.closeArchiveEntry();
+    arOut.finish();
+    fos.close();
+
+    // Deleting test2.xml from archive
+    ByteArrayOutputStream byteOut = new ByteArrayOutputStream();
+    ArArchiveInputStream arIn = new ArArchiveInputStream(new FileInputStream(archiveFile));
+
+    arOut = new ArArchiveOutputStream(byteOut);
+    ArArchiveEntry entry;
+    while ((entry = arIn.getNextEntry()) != null) {
+        if (!entry.getName().equals("test2.xml")) {
+            arOut.putArchiveEntry(new ArArchiveEntry(entry.getName(), entry.getLength()));
+            IOUtils.copy(arIn, arOut);
+            arOut.closeArchiveEntry();
+        }
+    }
+    arIn.close();
+    arOut.finish();
+    arOut.close();
+
+    // Write the modified archive
+    try (FileOutputStream finalOut = new FileOutputStream(archiveFile)) {
+        byteOut.writeTo(finalOut);
+    }
+
+    // Checking contents of the archive after deletion
+    ArArchiveInputStream checkInput = new ArArchiveInputStream(new FileInputStream(archiveFile));
+    List<String> contents = new ArrayList<>();
+
+    while ((entry = checkInput.getNextEntry()) != null) {
+        contents.add(entry.getName());
+    }
+    checkInput.close();
+
+    // Verify that test2.xml is not in the archive
+    assertFalse(contents.contains("test2.xml"));
+    assertTrue(contents.contains("test1.xml"));
+}

@@ -1,0 +1,17 @@
+public void testInterfaceConversionCausesStackOverflow() {
+    JSSourceFile externs = JSSourceFile.fromCode("externs.js", "/** @interface */ var OtherType = function() {}; /** @constructor @implements {MyType} */ var MyType = function() {}; /** @type {MyType} */ var x = /** @type {!OtherType} */ (new Object());");
+    CompilerOptions options = new CompilerOptions();
+    options.setPropertyRenaming(VariableRenamingPolicy.OFF);
+    options.setVariableRenaming(VariableRenamingPolicy.OFF);
+    options.setWarningLevel(DiagnosticGroups.CHECK_TYPES, CheckLevel.WARNING);
+    
+    Compiler compiler = new Compiler();
+    compiler.compile(externs, JSSourceFile.fromCode("t.js", ""), options);
+    
+    List<JSError> warnings = compiler.getWarnings();
+    boolean foundStackOverflow = warnings.stream().anyMatch(
+        error -> error.getDescription().contains("PrototypeObjectType.isSubtype")
+    );
+    
+    assertTrue("Expected stack overflow warning due to type conversion issue", foundStackOverflow);
+}

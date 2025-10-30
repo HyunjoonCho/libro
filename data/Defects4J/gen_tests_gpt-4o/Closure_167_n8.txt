@@ -1,0 +1,52 @@
+public void testInvalidPropertyInForLoop() {
+    // Assume we are using a JavaScript engine here, like Rhino or Nashorn,
+    // to run and test the JavaScript code mentioned in the bug report.
+    Context cx = Context.enter();
+    try {
+        Scriptable scope = cx.initStandardObjects();
+
+        // Define the namespace object
+        String initScript = "var ns = {};";
+        cx.evaluateString(scope, initScript, "<init>", 1, null);
+
+        // Define the externs and the class prototype function
+        String externsDefinition = ""
+                + "/**\n"
+                + " * @typedef {Object} ns.Thing\n"
+                + " * @property {Object} subthing\n"
+                + " */\n"
+                + "\n"
+                + "/**\n"
+                + " * @param {ns.Thing} thing\n"
+                + " * @constructor\n"
+                + " */\n"
+                + "ns.MyClass = function(thing) {\n"
+                + " this.thing_ = thing;\n"
+                + "};\n"
+                + "\n"
+                + "ns.MyClass.prototype.doIt = function() {\n"
+                + " var subthing = this.thing_.subthing;\n"
+                + " for (var i = 0; i < subthing.noprop; i++) {\n"
+                + " window.console.log(i);\n"
+                + " }\n"
+                + "};\n"
+                + "\n"
+                + "var thing = /** @type {ns.Thing} */ ({subthing: {prop: 3}});\n"
+                + "var c = new ns.MyClass(thing);\n";
+
+        cx.evaluateString(scope, externsDefinition, "<externs>", 1, null);
+
+        // Run the function and check if an error regarding `noprop` is thrown
+        boolean errorThrown = false;
+        try {
+            cx.evaluateString(scope, "c.doIt();", "<testScript>", 1, null);
+        } catch (JavaScriptException e) {
+            errorThrown = true;
+        }
+
+        assertTrue("Expected an error due to invalid property access on `noprop` in the for loop.", errorThrown);
+
+    } finally {
+        Context.exit();
+    }
+}

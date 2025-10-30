@@ -1,0 +1,44 @@
+public void testSerializerEmbeddingIssue() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+
+    class X<T> {
+        String s;
+        List<T> items;
+    }
+
+    class ListAttribute {
+        private String itemJsonKey;
+        private List<?> items;
+
+        public ListAttribute(String itemJsonKey, List<?> items) {
+            this.itemJsonKey = itemJsonKey;
+            this.items = items;
+        }
+
+        public String getItemJsonKey() {
+            return itemJsonKey;
+        }
+
+        public List<?> getItems() {
+            return items;
+        }
+    }
+
+    X<String> obj = new X<>();
+    obj.s = "test";
+    obj.items = Arrays.asList("a", "b", "c");
+
+    ListAttribute listAttribute = new ListAttribute("exampleItemKey", obj.items);
+
+    SimpleModule module = new SimpleModule();
+    module.addSerializer(ListAttribute.class, new ListAttributeSerializer());
+    mapper.registerModule(module);
+
+    // Attempting to serialize X class to JsonNode tree
+    JsonNode tree = mapper.valueToTree(listAttribute);
+
+    // Checking if tree contains unwanted embedded POJOs
+    JsonNode itemsNode = tree.get("items");
+    assertTrue(itemsNode.isArray());
+    assertFalse(itemsNode.isPojoNode());
+}

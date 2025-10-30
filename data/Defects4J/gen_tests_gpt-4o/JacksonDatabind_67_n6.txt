@@ -1,0 +1,46 @@
+public void testMapKeyDeserializerModifiersIgnored() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.setDeserializerModifier(new BeanDeserializerModifier() {
+        @Override
+        public KeyDeserializer modifyKeyDeserializer(
+                DeserializationConfig config,
+                JavaType type,
+                KeyDeserializer deserializer) {
+            if (!type.isEnumType()) {
+                return super.modifyKeyDeserializer(config, type, deserializer);
+            }
+            return new KeyDeserializer() {
+                @Override
+                @SuppressWarnings("unchecked")
+                public Object deserializeKey(String key, DeserializationContext ctxt)
+                        throws IOException, JsonProcessingException {
+                    Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                    return Enum.valueOf(rawClass, key.toUpperCase());
+                }
+            };
+        }
+    });
+    mapper.registerModule(module);
+
+    String json = "{\"my_map\":{\"ONE\":\"value1\",\"TWO\":\"value2\"}}";
+
+    JavaType mapType = mapper.getTypeFactory().constructMapType(
+            ImmutableMap.class, TestEnum.class, String.class);
+    JavaType type = mapper.getTypeFactory().constructParametricType(MyContainer.class, mapType);
+
+    MyContainer<ImmutableMap<TestEnum, String>> result = mapper.readValue(json, type);
+    
+    assertNotNull(result);
+    assertNotNull(result.my_map);
+    assertTrue(result.my_map.containsKey(TestEnum.ONE));
+    assertTrue(result.my_map.containsKey(TestEnum.TWO));
+}
+
+public static class MyContainer<T> {
+    public T my_map;
+}
+
+public enum TestEnum {
+    ONE, TWO
+}

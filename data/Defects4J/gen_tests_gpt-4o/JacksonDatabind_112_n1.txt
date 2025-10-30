@@ -1,0 +1,52 @@
+public void testCustomStringCollectionDeserialization() throws Exception {
+    ObjectMapper objectMapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+
+    // Register custom deserializer for the custom string collection
+    module.addDeserializer(CustomStringCollection.class, new CustomStringCollectionDeserializer());
+    objectMapper.registerModule(module);
+
+    String json = "{\"strings\":[\"one\", \"two\", \"three\"]}";
+    
+    try {
+        Container container = objectMapper.readValue(json, Container.class);
+        fail("Expected JsonMappingException due to CustomStringCollection deserialization failure.");
+    } catch (JsonMappingException e) {
+        assertTrue(e.getMessage().contains("Cannot construct instance"));
+    }
+}
+
+static class Container {
+    public CustomStringCollection strings;
+}
+
+static class CustomStringCollection extends AbstractCollection<String> {
+    private final List<String> internalList;
+
+    public CustomStringCollection(List<String> strings) {
+        this.internalList = Collections.unmodifiableList(strings);
+    }
+
+    @Override
+    public Iterator<String> iterator() {
+        return internalList.iterator();
+    }
+
+    @Override
+    public int size() {
+        return internalList.size();
+    }
+}
+
+public class CustomStringCollectionDeserializer extends StdDeserializer<CustomStringCollection> {
+
+    public CustomStringCollectionDeserializer() {
+        super(CustomStringCollection.class);
+    }
+
+    @Override
+    public CustomStringCollection deserialize(JsonParser parser, DeserializationContext ctxt) throws IOException {
+        List<String> strings = ctxt.readValue(parser, new TypeReference<List<String>>() {});
+        return new CustomStringCollection(strings);
+    }
+}

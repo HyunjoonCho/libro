@@ -1,0 +1,65 @@
+public void testArDeletion() throws Exception {
+    // Setup - create a sample ar archive with two entries
+    File archive = new File("test.bla.ar");
+    ArArchiveOutputStream outputStream = new ArArchiveOutputStream(new FileOutputStream(archive));
+    ArArchiveEntry entry1 = new ArArchiveEntry("test1.xml", 100);
+    ArArchiveEntry entry2 = new ArArchiveEntry("test2.xml", 100);
+    
+    outputStream.putArchiveEntry(entry1);
+    outputStream.write(new byte[100]);
+    outputStream.closeArchiveEntry();
+    
+    outputStream.putArchiveEntry(entry2);
+    outputStream.write(new byte[100]);
+    outputStream.closeArchiveEntry();
+    
+    outputStream.close();
+    
+    // Perform deletion of test2.xml from the archive
+    ArArchiveInputStream inputStream = new ArArchiveInputStream(new FileInputStream(archive));
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    ArArchiveOutputStream tempOutputStream = new ArArchiveOutputStream(baos);
+    ArArchiveEntry entry;
+    
+    while ((entry = inputStream.getNextEntry()) != null) {
+        if (!entry.getName().equals("test2.xml")) {
+            tempOutputStream.putArchiveEntry(entry);
+            IOUtils.copy(inputStream, tempOutputStream, (int) entry.getLength());
+            tempOutputStream.closeArchiveEntry();
+        }
+    }
+    
+    inputStream.close();
+    tempOutputStream.close();
+    
+    // Write the updated archive back to file
+    FileOutputStream fileOutputStream = new FileOutputStream(archive);
+    baos.writeTo(fileOutputStream);
+    fileOutputStream.close();
+    
+    // Reopen the archive and verify contents
+    ArArchiveInputStream newInputStream = new ArArchiveInputStream(new FileInputStream(archive));
+    List<String> entries = new ArrayList<>();
+    while ((entry = newInputStream.getNextEntry()) != null) {
+        entries.add(entry.getName());
+    }
+    newInputStream.close();
+    
+    assertEquals(1, entries.size());
+    assertEquals("test1.xml", entries.get(0));
+    
+    // Attempt to add a new file and verify the error condition
+    ArArchiveOutputStream addOutputStream = new ArArchiveOutputStream(new FileOutputStream(archive, true));
+    ArArchiveEntry newEntry = new ArArchiveEntry("test.txt", 100);
+    
+    try {
+        addOutputStream.putArchiveEntry(newEntry);
+        addOutputStream.write(new byte[100]);
+        addOutputStream.closeArchiveEntry();
+    } catch (Exception ex) {
+        assertTrue(ex instanceof IOException);
+        assertEquals("Inappropriate file type or format", ex.getMessage());
+    } finally {
+        addOutputStream.close();
+    }
+}

@@ -1,0 +1,39 @@
+public void testInvalidPropertyErrorInForLoopPrototypeFunction() {
+    CompilerOptions options = new CompilerOptions();
+    options.setPrettyPrint(true);
+    options.setCheckTypes(true);
+    options.setExternsValidation(true);
+    options.setChecksOnly(false);
+    options.setCompilationLevel(CompilationLevel.SIMPLE_OPTIMIZATIONS);
+
+    String externs = "/** @const */ var ns = {};\n"
+                    + "/** @typedef {{subthing: {prop: number}}} */\n"
+                    + "ns.Thing;\n"
+                    + "var window = {console: {log: function(msg) {}}};";
+
+    String code = "/**\n"
+                + " * @param {ns.Thing} thing\n"
+                + " * @constructor\n" 
+                + " */\n"
+                + "ns.MyClass = function(thing) {\n"
+                + "  /** @type {ns.Thing} */ this.thing_ = thing;\n"
+                + "};\n\n"
+                + "ns.MyClass.prototype.doIt = function() {\n"
+                + "  var subthing = this.thing_.subthing;\n"
+                + "  // window.console.log(subthing.noprop);  // This line errors properly\n"
+                + "  for (var i = 0; i < subthing.noprop; i++) {  // This line does not error\n"
+                + "    window.console.log(i);\n"
+                + "  }\n"
+                + "};\n\n"
+                + "var thing = /** @type {ns.Thing} */ ({subthing: {prop: 3}});\n"
+                + "var c = new ns.MyClass(thing);\n"
+                + "c.doIt();";
+
+    List<JSSourceFile> externFiles = ImmutableList.of(JSSourceFile.fromCode("externs.js", externs));
+    List<JSSourceFile> inputFiles = ImmutableList.of(JSSourceFile.fromCode("input.js", code));
+
+    Compiler compiler = new Compiler();
+    compiler.compile(externFiles, inputFiles, options);
+
+    assertTrue("Expected errors in the compiled result", compiler.getErrorCount() > 0);
+}

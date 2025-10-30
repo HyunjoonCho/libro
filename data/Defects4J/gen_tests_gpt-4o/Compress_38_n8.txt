@@ -1,0 +1,40 @@
+public void testPaxHeaderEntryWithTrailingSlash() throws IOException {
+    ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(createTarWithPaxEntryEndingSlash());
+    TarArchiveInputStream tarInput = new TarArchiveInputStream(byteArrayInputStream);
+    
+    TarArchiveEntry entry;
+    boolean foundPaxHeaderIssue = false;
+    
+    while ((entry = (TarArchiveEntry) tarInput.getNextEntry()) != null) {
+        if (entry.isPaxHeader()) {
+            if (entry.getName().endsWith("/")) {
+                foundPaxHeaderIssue = true;
+                break;
+            }
+        }
+    }
+    
+    assertFalse("PAX header entry with trailing slash was incorrectly interpreted as a directory.", foundPaxHeaderIssue);
+}
+
+private byte[] createTarWithPaxEntryEndingSlash() throws IOException {
+    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+    TarArchiveOutputStream tarOutput = new TarArchiveOutputStream(byteArrayOutputStream);
+    
+    TarArchiveEntry paxEntry = new TarArchiveEntry("paxheader/");
+    paxEntry.setSize(0);
+    paxEntry.setModTime(System.currentTimeMillis());
+    tarOutput.putArchiveEntry(paxEntry);
+    tarOutput.closeArchiveEntry();
+    
+    TarArchiveEntry fileEntry = new TarArchiveEntry("file.txt");
+    byte[] fileContent = "test content".getBytes();
+    fileEntry.setSize(fileContent.length);
+    fileEntry.setModTime(System.currentTimeMillis());
+    tarOutput.putArchiveEntry(fileEntry);
+    tarOutput.write(fileContent);
+    tarOutput.closeArchiveEntry();
+    
+    tarOutput.finish();
+    return byteArrayOutputStream.toByteArray();
+}

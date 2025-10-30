@@ -1,0 +1,33 @@
+public void testPaxHeaderWithTrailingSlash() throws Exception {
+    // Test Data: A byte array representing a minimal TAR with a PAX header entry and regular file entry
+    byte[] tarBytes = { 
+        0x70, 0x61, 0x78, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72, 0x2f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // PAX Header name ending with /
+        // ... more header byte data ...
+        0x78, 0x00, 0x00, 0x00, // Link flag 'x'
+        // Fill the rest of the header to 512 bytes
+        // TAR entry for "test.txt" with content "Hello"
+        0x74, 0x65, 0x73, 0x74, 0x2e, 0x74, 0x78, 0x74, 0x00, 0x00, 0x00, // Name: test.txt
+        // ... more header byte data ...
+        0x30, 0x30, 0x30, 0x30, 0x00, 0x00, 0x00, // Regular file flag '0'
+        'H', 'e', 'l', 'l', 'o', // Content of test.txt
+        0x00, 0x00, 0x00, 0x00, 0x00  // Padding to complete a 512 byte block
+    };
+    
+    try (InputStream is = new ByteArrayInputStream(tarBytes);
+         TarArchiveInputStream tarInput = new TarArchiveInputStream(is)) {
+
+        TarArchiveEntry entry = tarInput.getNextTarEntry();
+        // First entry should be the PAX header and should not be considered a directory despite ending with '/'
+        assertTrue(entry.isPaxHeader());
+        assertFalse(entry.isDirectory());
+
+        // Next entry should be the regular file
+        entry = tarInput.getNextTarEntry();
+        assertNotNull(entry);
+        assertEquals("test.txt", entry.getName());
+
+        byte[] content = new byte[(int) entry.getSize()];
+        tarInput.read(content);
+        assertArrayEquals("Hello".getBytes(), content);
+    }
+}

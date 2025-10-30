@@ -1,0 +1,34 @@
+public void testTypeCheckingErrorReplacingFunction() {
+    // Initializing the JavaScript environment for testing
+    Context cx = Context.enter();
+    Scriptable scope = cx.initStandardObjects();
+
+    // Define the JavaScript class and methods as strings
+    String jsCode =
+        "/** @constructor */\n" +
+        "var myclass = function() {\n" +
+        "};\n" +
+        "/** @param {boolean} success */\n" +
+        "myclass.prototype.fn = function(success) {\n" +
+        "};\n" +
+        "myclass.prototype.test = function() {\n" +
+        "  this.fn();\n" + // Should report an error
+        "  this.fn = function() {};\n" + // Causes masking of the first error
+        "};\n" +
+        "var obj = new myclass();\n" +
+        "obj.test();\n";
+
+    // Load and execute the JavaScript code
+    cx.evaluateString(scope, jsCode, "<cmd>", 1, null);
+
+    // Ensure the type checking error is caught
+    try {
+        cx.evaluateString(scope, "obj.test();", "<cmd>", 1, null);
+        fail("Expected a type checking error for the first invocation of fn()");
+    } catch (JavaScriptException e) {
+        // Check for specific error related to type checking
+        assertTrue(e.getMessage().contains("Function argument mismatch"));
+    } finally {
+        Context.exit();
+    }
+}

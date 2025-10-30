@@ -1,0 +1,47 @@
+public void testDeleteFromArArchive() throws Exception {
+    File archiveFile = new File("/tmp/testDeleteFromArArchive.ar");
+    ArArchiveOutputStream arOut = new ArArchiveOutputStream(new FileOutputStream(archiveFile));
+
+    // Add test1.xml to the archive
+    ArArchiveEntry entry1 = new ArArchiveEntry("test1.xml", 100);
+    arOut.putArchiveEntry(entry1);
+    arOut.write(new byte[100]);
+    arOut.closeArchiveEntry();
+
+    // Add test2.xml to the archive
+    ArArchiveEntry entry2 = new ArArchiveEntry("test2.xml", 100);
+    arOut.putArchiveEntry(entry2);
+    arOut.write(new byte[100]);
+    arOut.closeArchiveEntry();
+
+    arOut.close();
+
+    // Open the archive to delete test2.xml
+    ArArchiveInputStream arIn = new ArArchiveInputStream(new FileInputStream(archiveFile));
+    ArArchiveOutputStream arOutDelete = new ArArchiveOutputStream(new FileOutputStream("/tmp/deletedArchive.ar"));
+
+    ArArchiveEntry entry;
+    while ((entry = arIn.getNextEntry()) != null) {
+        if (!entry.getName().equals("test2.xml")) {
+            arOutDelete.putArchiveEntry(new ArArchiveEntry(entry.getName(), entry.getLength()));
+            IOUtils.copy(arIn, arOutDelete, (int) entry.getLength());
+            arOutDelete.closeArchiveEntry();
+        }
+    }
+
+    arIn.close();
+    arOutDelete.close();
+
+    // Verify the archive using command line tool
+    Process process = Runtime.getRuntime().exec("ar -t /tmp/deletedArchive.ar");
+    BufferedReader stdInput = new BufferedReader(new InputStreamReader(process.getInputStream()));
+
+    List<String> remainingFiles = new ArrayList<>();
+    String output;
+    while ((output = stdInput.readLine()) != null) {
+        remainingFiles.add(output.trim());
+    }
+
+    assertEquals(1, remainingFiles.size());
+    assertEquals("test1.xml", remainingFiles.get(0));
+}

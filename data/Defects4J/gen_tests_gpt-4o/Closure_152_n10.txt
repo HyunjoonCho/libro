@@ -1,0 +1,34 @@
+public void testResolveTypesUnionTypeCast() {
+    // Mocking the inputs and options as per the bug report
+    CompilerOptions options = new CompilerOptions();
+    options.setCreateNameMapFiles(true);
+    options.setWarningLevel(DiagnosticGroups.MISSING_PROPERTIES, CheckLevel.WARNING);
+    options.setWarningLevel(DiagnosticGroups.UNDEFINED_VARS, CheckLevel.WARNING);
+    options.setWarningLevel(DiagnosticGroups.CHECK_TYPES, CheckLevel.WARNING);
+    options.setWarningLevel(DiagnosticGroups.STRICT_MODULE_DEP_CHECK, CheckLevel.ERROR);
+    options.setWarningLevel(DiagnosticGroups.INVALID_CASTS, CheckLevel.ERROR);
+    options.setWarningLevel(DiagnosticGroups.ALL_CHECKS, CheckLevel.VERBOSE);
+    options.setSummaryDetailLevel(3);
+    options.setProcessClosurePrimitives(true);
+    options.setCompilationLevel(CompilationLevel.ADVANCED_OPTIMIZATIONS);
+
+    Compiler compiler = new Compiler();
+    
+    // Mocking JavaScript input that should trigger the bug
+    List<SourceFile> input = ImmutableList.of(
+        SourceFile.fromCode("test.js", ""
+            + "/** @constructor */ function A() {}"
+            + "/** @constructor */ function B() {}"
+            + "/** @return {A|B} */"
+            + "function foo() { return null; }"
+            + "var c = foo();"
+            + "c.prop = 1;")); // this will create a UnionType where the problem was stated
+
+    try {
+        compiler.compile(Collections.emptyList(), input, options);
+        fail("Expected ClassCastException to be thrown");
+    } catch (RuntimeException e) {
+        assertTrue(e.getCause() instanceof ClassCastException);
+        assertTrue(e.getCause().getMessage().contains("UnionType cannot be cast to ObjectType"));
+    }
+}

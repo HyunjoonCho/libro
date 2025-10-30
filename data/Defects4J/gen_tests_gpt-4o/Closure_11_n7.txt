@@ -1,0 +1,62 @@
+public void testInvalidPropertyWithThisAnnotation() {
+    // Mock console log to capture output
+    StringBuilder consoleOutput = new StringBuilder();
+    PrintStream originalOut = System.out;
+    System.setOut(new PrintStream(new OutputStream() {
+        @Override
+        public void write(int b) {
+            consoleOutput.append((char) b);
+        }
+    }));
+
+    // JavaScript environment setup
+    Context cx = Context.enter();
+    Scriptable scope = cx.initStandardObjects();
+
+    // Simulate the JavaScript code
+    String script = 
+        "var makeClass = function(protoMethods) { " +
+        "var clazz = function() { " +
+        "this.initialize.apply(this, arguments); " +
+        "} " +
+        "for (var i in protoMethods) { " +
+        "clazz.prototype[i] = protoMethods[i]; " +
+        "} " +
+        "return clazz; " +
+        "}; " +
+
+        "/** " +
+        " * @constructor " +
+        " * @param {{name: string, height: number}} options " +
+        " */ " +
+        "var Person = function(options){}; " +
+        "Person = makeClass(/** @lends Person.prototype */ { " +
+        "/** " +
+        "* @this {Person} " +
+        "* @param {{name: string, height: number}} options " +
+        "*/ " +
+        "initialize: function(options) { " +
+        "/** @type {string} */ this.name_ = options.thisPropDoesNotExist; " +
+        "}, " +
+
+        "/** " +
+        "* @param {string} message " +
+        "* @this {Person} " +
+        "*/ " +
+        "say: function(message) { " +
+        "window.console.log(this.name_ + ' says: ' + message); " +
+        "} " +
+        "}); " +
+
+        "var joe = new Person({name: 'joe', height: 300}); " +
+        "joe.say('hi'); ";
+
+    cx.evaluateString(scope, script, "testScript", 1, null);
+    Context.exit();
+
+    // Restore original output stream
+    System.setOut(originalOut);
+
+    // Expecting an error due to invalid property access
+    assertTrue(consoleOutput.toString().contains("TypeError: Cannot read"));
+}

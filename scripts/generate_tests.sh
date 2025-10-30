@@ -13,5 +13,5 @@ MODELS=(
 )
 
 for MODEL in "${MODELS[@]}"; do
-    python3.9 llm_repeat_query.py --model "$MODEL" -b "$BUG_REPORT_PATH" -o "$OUTPUT_PREFIX" -p Chart Lang Time Math
+    python3.9 llm_repeat_query.py --model "$MODEL" -b "$BUG_REPORT_PATH" -o "$OUTPUT_PREFIX"
 done

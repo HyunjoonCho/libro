@@ -1,0 +1,57 @@
+public void testArDeleteFunction() throws Exception {
+    File archiveFile = new File("/tmp/test_bla.ar");
+    try (FileOutputStream fos = new FileOutputStream(archiveFile)) {
+        ArchiveOutputStream aos = new ArArchiveOutputStream(fos);
+        ArchiveEntry entry1 = new ArArchiveEntry("test1.xml", 50);
+        ArchiveEntry entry2 = new ArArchiveEntry("test2.xml", 50);
+        
+        aos.putArchiveEntry(entry1);
+        aos.write(new byte[50]);
+        aos.closeArchiveEntry();
+
+        aos.putArchiveEntry(entry2);
+        aos.write(new byte[50]);
+        aos.closeArchiveEntry();
+        aos.finish();
+    }
+
+    // Delete test2.xml from the archive file
+    try (FileInputStream fis = new FileInputStream(archiveFile);
+         ArchiveInputStream ais = new ArArchiveInputStream(fis)) {
+        ArArchiveEntry entry;
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ArchiveOutputStream aos = new ArArchiveOutputStream(baos);
+
+        while ((entry = (ArArchiveEntry) ais.getNextEntry()) != null) {
+            if (!"test2.xml".equals(entry.getName())) {
+                aos.putArchiveEntry(new ArArchiveEntry(entry.getName(), entry.getLength()));
+                IOUtils.copy(ais, aos);
+                aos.closeArchiveEntry();
+            }
+        }
+        aos.finish();
+    }
+
+    // Check the content of the archive after deletion
+    try (FileInputStream fis = new FileInputStream(archiveFile);
+         ArchiveInputStream ais = new ArArchiveInputStream(fis)) {
+
+        ArArchiveEntry entry = (ArArchiveEntry) ais.getNextEntry();
+        assertNotNull(entry);
+        assertEquals("test1.xml", entry.getName());
+        
+        assertNull(ais.getNextEntry());  // should be at the end
+    }
+
+    // Assert the archive doesn't contain "test2.xml" using command line
+    Process process = Runtime.getRuntime().exec("ar -t " + archiveFile.getAbsolutePath());
+    BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+    Set<String> filenames = new HashSet<>();
+    String line;
+    while ((line = reader.readLine()) != null) {
+        filenames.add(line.trim());
+    }
+    assertEquals(1, filenames.size());
+    assertTrue(filenames.contains("test1.xml"));
+    assertFalse(filenames.contains("test2.xml"));
+}
