@@ -1,0 +1,25 @@
+public void testEnumPolymorphicDeserialization() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(new KotlinModule());
+
+    String json = "{ \"kind\": \"CONTACT\", \"to\": { \"name\": \"Foo\" } }";
+
+    ExternalTypeHandler<Invite> typeHandler = new ExternalTypeHandler<>(
+        mapper.getPolymorphicTypeValidator(),
+        mapper.getTypeFactory(),
+        mapper.constructType(Invite.class),
+        new BeanProperty(mapper.constructType(EnumKind.class), "kind"),
+        new BeanProperty(mapper.constructType(Invite.class), "to"),
+        new BeanProperty(mapper.constructType(GenericInviteTo.class), "to"),
+        null
+    );
+    typeHandler.setPolymorphicDeserializationConfig(mapper.getDeserializationConfig());
+    typeHandler.setSubtypeResolver(new SimpleSubtypeResolver(Invite.class, EnumKind.class));
+
+    mapper.configOverride(Invite.class)
+       .setHandler(typeHandler);
+
+    Invite invite = mapper.readValue(json, Invite.class);
+    assertEquals(InviteKind.CONTACT, invite.getKind());
+    assertEquals("Foo", invite.getTo().getName());
+}

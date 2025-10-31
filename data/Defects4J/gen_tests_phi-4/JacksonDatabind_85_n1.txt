@@ -1,0 +1,30 @@
+public void testDateTimeSerializerBaseIgnoredFormat() {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+    
+    // Custom format configuration
+    SimpleModule module = new SimpleModule();
+    module.addSerializer(DateTime.class, new CustomDateTimeSerializer());
+    mapper.registerModule(module);
+
+    // Annotated with JsonFormat to specify a custom pattern
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy/MM/dd")
+    class TestClass {
+        public DateTime dateTime = new DateTime();
+    }
+
+    TestClass testObject = new TestClass();
+    String serialized = mapper.writeValueAsString(testObject);
+
+    // Expecting ISO8601 format due to issue, not "yyyy/MM/dd"
+    assertEquals("\"" + DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ").print(testObject.dateTime) + "\"", serialized);
+}
+
+class CustomDateTimeSerializer extends StdDateFormat {
+    public CustomDateTimeSerializer() {
+        super(DateTimeFormat.forPattern("yyyy/MM/dd"));
+    }
+
+    @Override
+    public JsonSerializer<?> createContextual(SerializerProvider prov, BeanProperty property) throws JsonMappingException {
+        return this; // Should respect the format, but due to the bug

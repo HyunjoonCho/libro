@@ -1,0 +1,33 @@
+public void testCVE20177525() {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.setDeserializerModifier(new BeanDeserializerModifier() {
+        @Override
+        public JsonDeserializer<?> modifyDeserializer(DeserializationConfig config,
+                                                     BeanDescription beanDesc,
+                                                     JsonDeserializer<?> deserializer) {
+            if (deserializer instanceof BeanDeserializer) {
+                return new AbstractTypeAwareDeserializer(deserializer) {
+                    @Override
+                    protected Object _deserialize(Object value,
+                                                  DeserializationContext ctxt)
+                            throws IOException {
+                        throw new SecurityException("Deserialization attempt");
+                    }
+                };
+            }
+            return deserializer;
+        }
+    });
+    mapper.registerModule(module);
+
+    try {
+        String json = "{\"@type\":\"com.example.ClassToDeserialize\"}";
+        mapper.readValue(json, Object.class);
+        fail("Expected SecurityException");
+    } catch (SecurityException e) {
+        // Expected exception
+    } catch (Exception e) {
+        fail("Expected SecurityException, but got " + e.getClass().getName());
+    }
+}

@@ -1,0 +1,26 @@
+import com.google.javascript.jscomp.Context;
+import com.google.javascript.jscomp.JSError;
+import com.google.javascript.jscomp.NodeTraversal;
+import com.google.javascript.jscomp.SourceFile;
+import com.google.javascript.jscomp.testing.JsTestRunner;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.testing.RhinoAstTestRunner;
+
+public void testPrivateFunctionInGoogScope() {
+    Context context = JsTestRunner.newContext();
+    context.addSourceFile(
+      SourceFile.fromCode("test.js", 
+        "goog.scope(function() {\n" +
+        "  /**\n" +
+        "   * @private\n" +
+        "   */\n" +
+        "  function test() {}\n" +
+        "});\n"));
+
+    Node program = context.getProgramNode();
+    NodeTraversal.traverse(program, context.getCompiler(), new NodeTraversal.AbstractPostOrderCallback() {
+        @Override
+        public void visit(NodeTraversal t, Node n, Node parent) {
+            if (n.isFunction() && n.getJSDocInfo().isPrivate()) {
+                if (!n.isVar() &&!n.isAssign()) {
+                    context.addError(

@@ -1,0 +1,36 @@
+public void testLocaleDeserialization() throws IOException {
+    ObjectMapper objectMapper = new ObjectMapper();
+    objectMapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+    objectMapper.registerModule(new JavaTimeModule());
+    objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+    Locale root = Locale.ROOT;
+    String json = objectMapper.writeValueAsString(root);
+    System.out.printf("Root Locale: '%s'\n", json);
+
+    // Custom deserializer for Locale.ROOT
+    SimpleModule module = new SimpleModule();
+    module.addDeserializer(Locale.class, new JsonSerializer<Locale>() {
+        @Override
+        public void serialize(Locale value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+            if (value == Locale.ROOT) {
+                gen.writeString("");
+            } else {
+                gen.writeString(value.toString());
+            }
+        }
+
+        @Override
+        public Locale deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+            String value = p.getText();
+            if (value.isEmpty()) {
+                return Locale.ROOT;
+            } else {
+                return Locale.forLanguageTag(value);
+            }
+        }
+    });
+    objectMapper.registerModule(module);
+
+    Locale actual = objectMapper.readValue(json, Locale.class);
+    assertEquals(root

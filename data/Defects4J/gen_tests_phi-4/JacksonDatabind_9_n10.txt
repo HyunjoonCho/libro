@@ -1,0 +1,33 @@
+public void testDeserializingMapWithClassAsKey() throws Exception {
+    Map<Class<? extends Object>, String> map = new HashMap<>();
+    map.put(ArrayList.class, "ArrayList");
+    map.put(HashMap.class, "HashMap");
+
+    ObjectMapper mapper = new ObjectMapper()
+       .registerModule(new JavaTimeModule())
+       .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+
+    String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(map);
+    System.out.println(json);
+
+    // Custom deserialization logic
+    SimpleModule module = new SimpleModule();
+    module.addKeyDeserializer(Class.class, new KeyDeserializer() {
+        @Override
+        public Class<?> deserializeKey(DeserializationContext ctxt, String key) throws IOException {
+            try {
+                return Class.forName(key);
+            } catch (ClassNotFoundException e) {
+                throw new IOException("Class not found for key: " + key, e);
+            }
+        }
+    });
+
+    mapper.registerModule(module);
+
+    try {
+        mapper.readValue(json, new TypeReference<Map<Class<? extends Object>, String>>() {});
+    } catch (Exception e) {
+        throw new AssertionError("Deserialization failed", e);
+    }
+}

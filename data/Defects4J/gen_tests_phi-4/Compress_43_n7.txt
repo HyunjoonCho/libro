@@ -1,0 +1,29 @@
+public void testZipVersionNeededToExtractMismatch() {
+    try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+         ZipArchiveOutputStream zos = new ZipArchiveOutputStream(new BufferedOutputStream(baos))) {
+
+        ZipArchiveEntry entry = new ZipArchiveEntry("test.txt");
+        zos.putArchiveEntry(entry);
+
+        // Write some content to the entry
+        zos.write("Test content".getBytes());
+        zos.closeArchiveEntry();
+
+        // Finish writing the archive
+        zos.finish();
+
+        // Read the archive to check the local header and central directory versions
+        ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+        ZipInputStream zis = new ZipInputStream(bais);
+
+        byte[] localHeader = new byte[30];
+        zis.read(localHeader);
+        int localVersion = ((localHeader[6] & 0xFF) << 8) | (localHeader[7] & 0xFF);
+
+        zis.getNextEntry(); // Move to the central directory
+
+        byte[] centralDirSignature = new byte[4];
+        zis.read(centralDirSignature);
+        while (Arrays.equals(centralDirSignature, CENTRAL_DIR_SIGNATURE)) {
+            byte[] centralDir = new byte[46];
+            zis.read(

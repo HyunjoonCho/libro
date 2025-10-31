@@ -1,0 +1,25 @@
+public void testObjectReaderErrorRecovery() {
+    ObjectMapper mapper = new ObjectMapper();
+    String json = "{\"validField\": \"validValue\", \"invalidField\":}";
+
+    try (Reader reader = new StringReader(json)) {
+        JsonParser parser = mapper.getFactory().createParser(reader);
+        ObjectReader objectReader = mapper.readerFor(Map.class);
+
+        MappingIterator<Map<String, Object>> iterator = objectReader.readValues(parser);
+        Map<String, Object> firstObject = iterator.nextValue();
+        
+        // Validate that the first object is parsed correctly
+        assertEquals("validValue", firstObject.get("validField"));
+
+        // Expect a JsonProcessingException when encountering the invalid field
+        JsonProcessingException exception = assertThrows(JsonProcessingException.class, iterator::nextValue);
+
+        // Attempt to recover and parse the next object if possible
+        Map<String, Object> secondObject = iterator.nextValue();
+
+        // Validate that the second object is parsed as an empty map due to error recovery
+        assertNotNull(secondObject);
+        assertTrue(secondObject.isEmpty());
+    }
+}

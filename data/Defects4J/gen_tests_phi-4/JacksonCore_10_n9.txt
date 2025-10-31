@@ -1,0 +1,27 @@
+public void testArrayIndexOutOfBoundsException() throws Exception {
+    ObjectMapper objectMapper = new ObjectMapper();
+    
+    // Inject a reproducible seed to trigger the bug
+    Field byteSymbolCanonicalizerField = JsonFactory.class.getDeclaredField("_byteSymbolCanonicalizer");
+    byteSymbolCanonicalizerField.setAccessible(true);
+    
+    Method factoryMethod = ByteQuadsCanonicalizer.class.getDeclaredMethod("createRoot", int.class);
+    factoryMethod.setAccessible(true);
+    
+    int seed = -523743345;
+    byteSymbolCanonicalizerField.set(objectMapper.getFactory(), factoryMethod.invoke(null, seed));
+    
+    // Construct the JSON string that will trigger the bug
+    StringBuilder sb = new StringBuilder();
+    sb.append("{\n");
+    sb.append(" \"expectedGCperPosition\": null");
+    for (int i = 0; i < 60; ++i) {
+        sb.append(",\n \"").append(i + 1).append("\": null");
+    }
+    sb.append("\n}");
+    
+    // Attempt to parse the JSON string, expecting an ArrayIndexOutOfBoundsException
+    try {
+        objectMapper.readValue(sb.toString().getBytes(StandardCharsets.UTF_8), Map.class);
+        fail("Expected ArrayIndexOutOfBoundsException");
+    } catch (ArrayIndexOutOfBoundsException e)

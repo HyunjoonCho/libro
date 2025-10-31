@@ -1,0 +1,27 @@
+public void testArchiveOutputStreamFinishSafety() {
+    try (ArchiveStreamFactory factory = new ArchiveStreamFactory()) {
+        ArchiveOutputStream archiveOutputStream = factory.createArchiveOutputStream(ArchiveStreamFactory.ZIP);
+        
+        // Create some entries and write data
+        ArchiveEntry entry = archiveOutputStream.createArchiveEntry(new File("test.txt"), "test.txt");
+        archiveOutputStream.putArchiveEntry(entry);
+        archiveOutputStream.write("Test data".getBytes());
+        archiveOutputStream.closeArchiveEntry();
+
+        // Call finish() method externally, which should not be necessary or safe
+        archiveOutputStream.finish();
+
+        // Close the stream
+        archiveOutputStream.close();
+
+        // Assertions to check if the archive is corrupted or not
+        try (ZipFile zipFile = new ZipFile("test.zip")) {
+            Enumeration<? extends ZipEntry> entries = zipFile.entries();
+            assertTrue(entries.hasMoreElements()); // Ensure there is at least one entry
+            ZipEntry zipEntry = entries.nextElement();
+            assertEquals("test.txt", zipEntry.getName());
+            InputStream entryStream = zipFile.getInputStream(zipEntry);
+            byte[] buffer = new byte[10];
+            int bytesRead = entryStream.read(buffer);
+            assertEquals("Test data".length(), bytesRead);
+            assertEquals("Test data", new String(buffer,

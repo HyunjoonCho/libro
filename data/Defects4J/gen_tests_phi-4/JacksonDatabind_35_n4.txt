@@ -1,0 +1,35 @@
+public void testObjectAndTypeIdWrapperRegression() {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.enable(SerializationFeature.INDENT_OUTPUT);
+    mapper.enable(DeserializationFeature.USE_WRAPPER_NAME_AS_PROPERTY_NAME_PREFIX);
+
+    AnnotationIntrospector introspector = new JacksonAnnotationIntrospector() {
+        @Override
+        public boolean hasAsTypeAnnotation(Annotated ann, String propertyName, JavaType type) {
+            return propertyName.equals("object") && type.getRawClass() == Long.class;
+        }
+
+        @Override
+        public JsonProperty findPropertyForAsType(Annotated ann, JavaType type) {
+            return new SimpleBeanPropertyDefinition(ann, "object", type);
+        }
+    };
+
+    mapper.setAnnotationIntrospector(introspector);
+
+    String json = "{\"objectTypeId\":{\"type\":\"com.example.MyClass\"},\"object\":123}";
+
+    try {
+        mapper.readValue(json, MyWrapperClass.class);
+    } catch (JsonProcessingException e) {
+        assertEquals("Failed to deserialize JSON with object and typeId as wrapper objects", e.getMessage());
+    }
+}
+
+class MyWrapperClass {
+    public ObjectWrapper object;
+
+    static class ObjectWrapper {
+        public Long object;
+    }
+}

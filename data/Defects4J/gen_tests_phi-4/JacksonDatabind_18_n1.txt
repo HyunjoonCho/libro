@@ -1,0 +1,26 @@
+public void testObjectReaderErrorRecovery() {
+    ObjectMapper mapper = new ObjectMapper();
+    String faultyJson = "{\"validKey\": \"validValue\", \"faultyKey\": [1, 2, 3;] }"; // Intentional syntax error
+
+    try (Reader reader = new StringReader(faultyJson)) {
+        MappingIterator<JsonNode> it = mapper.readerFor(JsonNode.class).readValues(reader);
+
+        JsonNode firstValidNode = null;
+        while (it.hasNextValue()) {
+            try {
+                firstValidNode = it.nextValue();
+                break;
+            } catch (JsonProcessingException e) {
+                // Simulate error recovery by skipping to next valid object
+                while (it.hasNext() &&!it.nextValue().isObject()) {
+                    it.skipChildren();
+                }
+            }
+        }
+
+        assertNotNull(firstValidNode);
+        assertEquals("validValue", firstValidNode.get("validKey").asText());
+    } catch (IOException e) {
+        fail("IOException should not have been thrown: " + e.getMessage());
+    }
+}

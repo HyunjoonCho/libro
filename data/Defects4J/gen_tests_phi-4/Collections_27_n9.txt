@@ -1,0 +1,30 @@
+import org.junit.Test;
+import java.io.*;
+import java.lang.reflect.Method;
+import java.util.*;
+
+import static org.junit.Assert.fail;
+
+public void testInvokerTransformerRCE() {
+    try {
+        // Create a malicious serialized object
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        
+        // Create a HashSet with InvokerTransformer
+        HashSet<Object> maliciousSet = new HashSet<>();
+        maliciousSet.add(new InvokerTransformer(
+            new Class[] { String.class },
+            new Object[] { "Runtime.getRuntime().exec(\"calc.exe\")" },
+            new Method[] { Runtime.class.getMethod("exec", String.class) }
+        ));
+        
+        oos.writeObject(maliciousSet);
+        oos.close();
+        
+        // Simulate deserialization
+        ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+        ObjectInputStream ois = new ObjectInputStream(bais);
+        
+        // This should trigger the execution of the arbitrary code
+        HashSet<Object> deserializedSet = (
