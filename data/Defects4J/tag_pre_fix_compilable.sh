@@ -6,6 +6,12 @@ for bname in $(find . -mindepth 1 -maxdepth 1 -type d | sort -V); do
 	cd ${orgdir}/${bname}
 	bname=${bname#*/}
 
+    if git tag | grep -q "D4J_${bname}_PRE_FIX_COMPILABLE"; then
+        echo "${bname},already tagged"
+        cd ${orgdir}
+        continue
+    fi
+
 	# setup
 	git reset --hard HEAD > /dev/null 2>&1
         git clean -df > /dev/null 2>&1
@@ -41,12 +47,31 @@ for bname in $(find . -mindepth 1 -maxdepth 1 -type d | sort -V); do
 		cd JodaTime
 	fi
 
-	for fname in $(defects4j compile 2>&1 | grep -o "${bname}/.*\.java.*error" | grep -o "${bname}/.*\.java" | sort -u); do
-		git checkout D4J_${bname}_BUGGY_VERSION -- ${fname#*/}
-	done
-	
+	if [[ ${bname} == *"Lang"* ]]; then
+	    rm -r src/java/org/apache/commons/lang/enum	
+	    rm -r src/test/org/apache/commons/lang/enum	
+	fi
+
+    max_retries=5
+    retry_count=0
+
+    while [ $retry_count -lt $max_retries ]; do
+        for fname in $(defects4j compile 2>&1 | grep -o "${bname}/.*\.java.*error" | grep -o "${bname}/.*\.java" | sort -u); do
+            git checkout D4J_${bname}_BUGGY_VERSION -- ${fname#*/}
+        done
+        
+        compile_output=$(defects4j compile 2>&1)
+        
+        if echo "$compile_output" | grep -q "Running ant (compile).*OK" && \
+           echo "$compile_output" | grep -q "Running ant (compile.tests).*OK"; then
+            break
+        fi
+        
+        retry_count=$((retry_count + 1))
+    done
+
 	# report fix results
-	defects4j compile > /dev/null 2>&1
+    defects4j compile > /dev/null 2>&1
 	if [[ $? -eq 0 ]]; then
 		echo "${bname},ok"
 		git commit -m "D4J_${bname}_PRE_FIX_COMPILABLE"
