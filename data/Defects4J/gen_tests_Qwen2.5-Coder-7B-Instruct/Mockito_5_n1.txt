@@ -1,0 +1,25 @@
+public void testMockitoTimeoutVerificationWithoutJUnit() throws Exception {
+    ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+    try {
+        URLClassLoader classLoader = new URLClassLoader(new URL[]{}, contextClassLoader);
+        Thread.currentThread().setContextClassLoader(classLoader);
+
+        Class<?> timeoutClass = classLoader.loadClass("org.mockito.Mockito");
+        Object timeoutObject = timeoutClass.getMethod("timeout", long.class).invoke(null, 500L);
+
+        Class<?> verifyClass = classLoader.loadClass("org.mockito.internal.verification.VerificationOverTimeImpl");
+        Constructor<?> constructor = verifyClass.getDeclaredConstructor(timeoutClass);
+        Object verifyObject = constructor.newInstance(timeoutObject);
+
+        Field field = verifyClass.getDeclaredField("argumentsAreDifferent");
+        field.setAccessible(true);
+        field.set(verifyObject, new RuntimeException());
+
+        fail("Expected VerificationError or NoClassDefFoundError");
+    } catch (InvocationTargetException e) {
+        Throwable cause = e.getCause();
+        assertTrue(cause instanceof VerifyError || cause instanceof NoClassDefFoundError);
+    } finally {
+        Thread.currentThread().setContextClassLoader(contextClassLoader);
+    }
+}

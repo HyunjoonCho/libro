@@ -1,0 +1,21 @@
+public void testDifferentOutputFromRestApiAndCommandLineJar() throws Exception {
+    String input = "var foreignObject = gfx.parentNode.parentNode; var parentContainer = foreignObject.parentNode.parentNode;";
+    String expectedOutput = "if(b){if(a=b.parentNode.parentNode,b=a.parentNode.parentNode,null!==b)";
+    
+    // Run command line jar
+    ProcessBuilder pb = new ProcessBuilder("java", "-jar", "compiler.jar", "--js", input);
+    pb.redirectErrorStream(true);
+    Process process = pb.start();
+    String actualOutput = IOUtils.toString(process.getInputStream(), StandardCharsets.UTF_8);
+    int exitCode = process.waitFor();
+    assertEquals(0, exitCode);
+    assertNotEquals(expectedOutput, actualOutput);
+
+    // Run via REST API
+    URL url = new URL("http://closure-compiler.appspot.com/home");
+    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+    conn.setRequestMethod("POST");
+    conn.setDoOutput(true);
+    try (OutputStream os = conn.getOutputStream()) {
+        os.write(("input=" + URLEncoder.encode(input, StandardCharsets.UTF_8.name())).getBytes(StandardCharsets.UTF_8));
+        os.write(("compilation_level=SIMPLE_OPTIMIZATIONS").getBytes(StandardCharsets.UTF_8

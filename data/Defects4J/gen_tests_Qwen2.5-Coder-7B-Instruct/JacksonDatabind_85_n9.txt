@@ -1,0 +1,33 @@
+public void testBug159() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.addSerializer(Date.class, new JsonSerializer<Date>() {
+        @Override
+        public void serialize(Date value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+            gen.writeString(value.toString());
+        }
+    });
+    mapper.registerModule(module);
+
+    MyBean bean = new MyBean(new Date());
+
+    String json1 = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(bean);
+    DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.US);
+    df.setTimeZone(TimeZone.getTimeZone("UTC"));
+    String expectedJson = "{\"date\":\"" + df.format(bean.date) + "\"}";
+    assertEquals(expectedJson, json1);
+
+    SimpleModule module2 = new SimpleModule();
+    module2.addSerializer(Date.class, new DateTimeSerializerBase<>(
+            StdDateFormat.getInstance(), null, false, null, null) {
+        @Override
+        protected boolean _isTimestamp(Date value) {
+            return false;
+        }
+
+        @Override
+        protected String _format(Date value, Locale locale) {
+            return value.toString();
+        }
+    });
+    mapper.registerModule(module2);

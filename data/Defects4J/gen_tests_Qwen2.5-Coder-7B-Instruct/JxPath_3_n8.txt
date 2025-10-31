@@ -1,0 +1,32 @@
+public void testStackOverflowError() {
+    Map<String, Object> map = new HashMap<>();
+    map.put("a", null);
+
+    JXPathContext context = JXPathContext.newContext(map);
+    context.setFactory(new AbstractFactory() {
+        @Override
+        public boolean createObject(JXPathContext context, Pointer pointer, Object parent, String name, int index) {
+            System.out.println(parent + ":" + name + ":" + index);
+            Map<String, Object> parentMap = (Map<String, Object>) parent;
+            if (index > -1) {
+                List<Object> list = (List<Object>) parentMap.get(name);
+                if (list == null) {
+                    list = new ArrayList<>();
+                }
+                int size = list.size();
+                for (int i = size; i <= index; i++) {
+                    list.add(null); // This line causes the issue
+                }
+                parentMap.put(name, list);
+            } else {
+                parentMap.put(name, new HashMap<>());
+            }
+            return true;
+        }
+    });
+
+    try {
+        context.createPath("a/b[1]/c");
+        fail("Expected StackOverflowError");
+    } catch (StackOverflowError e) {
+        // Expected exception

@@ -1,0 +1,31 @@
+public void testMapKeyDeserializerModifiersIgnored() {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.setDeserializerModifier(new BeanDeserializerModifier() {
+        @Override
+        public KeyDeserializer modifyKeyDeserializer(DeserializationConfig config, JavaType type, KeyDeserializer deserializer) {
+            if (!type.isEnumType()) {
+                return super.modifyKeyDeserializer(config, type, deserializer);
+            }
+            return new KeyDeserializer() {
+                @Override
+                @SuppressWarnings("unchecked")
+                public Object deserializeKey(String key, DeserializationContext ctxt)
+                        throws IOException, JsonProcessingException {
+                    Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                    return Enum.valueOf(rawClass, key.toUpperCase());
+                }
+            };
+        }
+    });
+    mapper.registerModule(module);
+
+    String json = "{\"key1\":\"value1\", \"KEY2\":\"value2\"}";
+    MyMap result = mapper.readValue(json, MyMap.class);
+    assertEquals("value1", result.get("key1"));
+    assertEquals("value2", result.get("KEY2"));
+}
+
+class MyMap extends ImmutableMap<String, String> {
+    private static final long serialVersionUID = 1L;
+    protected MyMap(Map

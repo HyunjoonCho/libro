@@ -1,0 +1,34 @@
+public void testDeserializerModifiersIgnored() {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.setDeserializerModifier(new BeanDeserializerModifier() {
+        @Override
+        @SuppressWarnings("unchecked")
+        public KeyDeserializer modifyKeyDeserializer(
+                DeserializationConfig config,
+                JavaType type,
+                KeyDeserializer deserializer) {
+            if (!type.isEnumType()) {
+                return super.modifyKeyDeserializer(config, type, deserializer);
+            }
+            return new KeyDeserializer() {
+                @Override
+                @SuppressWarnings("unchecked")
+                public Object deserializeKey(String key, DeserializationContext ctxt)
+                        throws IOException, JsonProcessingException {
+                    Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                    return Enum.valueOf(rawClass, key.toUpperCase());
+                }
+            };
+        }
+    });
+    mapper.registerModule(module);
+
+    String json = "{\"key\":\"value\"}";
+    MyEnum result = mapper.readValue(json, new TypeReference<MyEnum>() {});
+    assertEquals(MyEnum.VALUE, result);
+}
+
+enum MyEnum {
+    VALUE;
+}

@@ -1,0 +1,24 @@
+public void testIllegalArgumentForTgzExtraction() throws IOException {
+    // Create a sample.tgz file with invalid header
+    File tempFile = File.createTempFile("test", ".tgz");
+    try (GZIPOutputStream gos = new GZIPOutputStream(new FileOutputStream(tempFile))) {
+        try (TarArchiveOutputStream taos = new TarArchiveOutputStream(gos)) {
+            TarArchiveEntry entry = new TarArchiveEntry("file.txt", 0);
+            entry.setModTime(System.currentTimeMillis());
+            taos.putArchiveEntry(entry);
+            // Write some invalid data to simulate the issue
+            gos.write("05412{NUL}\n".getBytes());
+            taos.closeArchiveEntry();
+        }
+    }
+
+    // Attempt to extract the file
+    try (TarArchiveInputStream tarIn = new TarArchiveInputStream(new FileInputStream(tempFile))) {
+        TarArchiveEntry entry = tarIn.getNextTarEntry();
+        fail("Expected IllegalArgumentException but got " + entry);
+    } catch (IllegalArgumentException e) {
+        assertTrue(e.getMessage().contains("Invalid byte 0 at offset 5"));
+    } finally {
+        tempFile.delete();
+    }
+}

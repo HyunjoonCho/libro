@@ -1,0 +1,36 @@
+public void testAllowMultipleMatches() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.addDeserializer(String.class, new JsonDeserializer<String>() {
+        @Override
+        public String deserialize(JsonParser p, DeserializationContext ctxt) 
+                throws IOException, JsonProcessingException {
+            return "test";
+        }
+    });
+    module.setMixInAnnotation(Object.class, new Mixin() {});
+    mapper.registerModule(module);
+    
+    String json = "{\"key\":[\"value1\",\"value2\"]}";
+    MyObject obj = mapper.readValue(json, MyObject.class);
+    assertEquals("test", obj.getKey());
+}
+
+class MyObject {
+    private String key;
+    public String getKey() { return key; }
+    public void setKey(String key) { this.key = key; }
+}
+
+interface Mixin {
+    @JsonDeserialize(using = ArrayDeserializer.class)
+    void setKey(String[] key);
+}
+
+class ArrayDeserializer extends JsonDeserializer<String> {
+    @Override
+    public String deserialize(JsonParser p, DeserializationContext ctxt) 
+            throws IOException, JsonProcessingException {
+        return ((ArrayNode)p.getCurrentNode()).get(0).asText();
+    }
+}

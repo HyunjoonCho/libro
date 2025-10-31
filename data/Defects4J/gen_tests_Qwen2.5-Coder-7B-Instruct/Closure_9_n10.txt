@@ -1,0 +1,30 @@
+public void testCompilerFailsToFindAmdModuleInSubdirectory() throws Exception {
+    File libDir = new File("lib");
+    File fooFile = new File(libDir, "Foo.js");
+    File barFile = new File("Bar.js");
+
+    // write Foo.js content
+    Files.write(fooFile.toPath(), ("define(function(){ return {}; });").getBytes());
+
+    // write Bar.js content
+    String barContent = String.format(
+            "require(['%s'], function(module){ console.log(module); });",
+            fooFile.getName().replace(".js", ""));
+    Files.write(barFile.toPath(), barContent.getBytes());
+
+    ProcessBuilder pb = new ProcessBuilder(
+            "java", "-jar", "compiler.jar",
+            "--transform_amd_modules", "--process_common_js_modules",
+            "--common_js_entry_module=Bar.js",
+            "--compilation_level=ADVANCED_OPTIMIZATIONS",
+            "--js_output_file=out.js",
+            "--js=" + barFile.getPath(),
+            "--js=" + fooFile.getPath()
+    );
+    Process process = pb.start();
+    int exitCode = process.waitFor();
+
+    assertTrue(exitCode!= 0);
+
+    BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+    String line;
