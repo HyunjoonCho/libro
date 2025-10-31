@@ -1,0 +1,25 @@
+public void testObjectReaderReadValuesErrorRecovery() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    JsonFactory factory = mapper.getFactory();
+    JsonParser jp = factory.createParser(new StringReader("{\"a\": {\"b\": {\"c\": \"value\"}}"));
+    MappingIterator<JsonNode> iterator = mapper.readerFor(JsonNode.class).with(CustomTypeModifier.class).readValues(jp);
+
+    // Introduce an error
+    iterator.next(); // Advance to the start of the "b" object
+    try {
+        jp.nextToken(); // Force a JsonParseException
+    } catch (JsonParseException e) {
+        // Check if the iterator is pointing to the correct position after error
+        jp.nextToken(); // Move to the next token (should be END_OBJECT)
+        jp.nextToken(); // Move to the next token (should be END_OBJECT)
+        assertEquals(JsonToken.END_OBJECT, jp.getCurrentToken());
+    }
+}
+
+public static class CustomTypeModifier extends SimpleTypeModifier {
+    @Override
+    public Object handleUnexpectedToken(JsonParser jp, JsonMappingException e, Class<?> type) throws JsonMappingException {
+        // Always return null to simulate error recovery
+        return null;
+    }
+}

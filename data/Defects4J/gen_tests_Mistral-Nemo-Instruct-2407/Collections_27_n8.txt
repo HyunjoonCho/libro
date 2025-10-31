@@ -1,0 +1,28 @@
+public void testInvokerTransformerSerializationVulnerability() {
+    List<String> list = new ArrayList<>();
+    InvokerTransformer<String> transformer = new InvokerTransformer<>(list, new InvokerTransformer.TransformerCallback<String>() {
+        @Override
+        public String invoke(Object obj, Method method, Object[] args) {
+            if ("get".equals(method.getName())) {
+                throw new RuntimeException("Arbitrary code execution");
+            }
+            return null;
+        }
+    });
+    try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+         ObjectOutputStream oos = new ObjectOutputStream(baos)) {
+        oos.writeObject(transformer);
+        oos.flush();
+        byte[] serialized = baos.toByteArray();
+
+        // Simulate deserialization and trigger code execution
+        try (ByteArrayInputStream bais = new ByteArrayInputStream(serialized);
+             ObjectInputStream ois = new ObjectInputStream(bais)) {
+            ois.readObject();
+        } catch (RuntimeException e) {
+            assertEquals("Arbitrary code execution", e.getMessage());
+        }
+    } catch (IOException ex) {
+        fail("Serialization failed");
+    }
+}

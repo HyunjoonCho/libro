@@ -1,0 +1,26 @@
+public void testMapKeyDeserializerModifiersIgnored() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.setDeserializationConfig(new MapperFeature(MapperFeature.ACCEPT_CASE_INSENSITIVE_ENUMS, true));
+    mapper.registerModule(new Module() {
+        @Override
+        public void setupModule(SetupContext context) {
+            context.addDeserializerModifier(new BeanDeserializerModifier() {
+                @Override
+                public KeyDeserializer modifyKeyDeserializer(DeserializationConfig config, JavaType type,
+                                                            KeyDeserializer deserializer) {
+                    if (!type.isEnumType()) {
+                        return super.modifyKeyDeserializer(config, type, deserializer);
+                    }
+                    return new KeyDeserializer() {
+                        @Override
+                        public Object deserializeKey(String key, DeserializationContext ctxt)
+                                throws IOException, JsonProcessingException {
+                            Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                            return Enum.valueOf(rawClass, key.toUpperCase());
+                        }
+                    };
+                }
+            });
+        }
+    });
+    Map<String, Enum> map = mapper.readValue("{\"enumKey\": \"enumValue\"}", new TypeReference<Map<String,
