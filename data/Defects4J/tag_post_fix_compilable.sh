@@ -47,11 +47,22 @@ for bname in $(find . -mindepth 1 -maxdepth 1 -type d | sort -V); do
 #                         git checkout D4J_${bname}_BUGGY_VERSION -- ${fname}
 #                 done
 #         fi
+    for fname in $(defects4j compile 2>&1 | grep -o "${bname}/.*\.java.*error" | grep -o "${bname}/.*\.java" | sort -u); do
+        if git cat-file -e D4J_${bname}_BUGGY_VERSION:${fname#*/} 2>/dev/null; then
+            git checkout D4J_${bname}_BUGGY_VERSION -- ${fname#*/}
+        else
+            git rm -f ${fname#*/}
+        fi
+    done
 
-	for fname in $(defects4j compile 2>&1 | grep -o "${bname}/.*\.java.*error" | grep -o "${bname}/.*\.java" | sort -u); do
-		git rm -f ${fname#*/}
-	done
-	
+    defects4j compile > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        # If still failing, try removing files
+        for fname in $(defects4j compile 2>&1 | grep -o "${bname}/.*\.java.*error" | grep -o "${bname}/.*\.java" | sort -u); do
+            git rm -f ${fname#*/}
+        done
+    fi
+
 	# report fix results
 	defects4j compile > /dev/null 2>&1
 	if [[ $? -eq 0 ]]; then
