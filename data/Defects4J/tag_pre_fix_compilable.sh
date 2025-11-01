@@ -40,7 +40,7 @@ for bname in $(find . -mindepth 1 -maxdepth 1 -type d | sort -V); do
         for fname in $(git diff D4J_${bname}_BUGGY_VERSION --name-only | grep "PackageVersion"); do
             git checkout D4J_${bname}_BUGGY_VERSION -- ${fname}
         done
-        rm src/test/java/com/fasterxml/jackson/databind/ext/TestSOAP.java
+        git rm src/test/java/com/fasterxml/jackson/databind/ext/TestSOAP.java
     fi
 	if [[ ${bname} == *"Time"* ]] && (( $(ls -1 | wc -l) < 5 )); then
 		mv defects4j.build.properties JodaTime
@@ -49,8 +49,8 @@ for bname in $(find . -mindepth 1 -maxdepth 1 -type d | sort -V); do
 	fi
 
 	if [[ ${bname} == *"Lang"* ]]; then
-	    rm -r src/java/org/apache/commons/lang/enum	
-	    rm -r src/test/org/apache/commons/lang/enum	
+	    git rm -r src/java/org/apache/commons/lang/enum	
+	    git rm -r src/test/org/apache/commons/lang/enum	
 	fi
 
     max_retries=5

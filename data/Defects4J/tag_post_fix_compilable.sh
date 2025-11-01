@@ -6,6 +6,12 @@ for bname in $(find . -mindepth 1 -maxdepth 1 -type d | sort -V); do
 	cd ${orgdir}/${bname}
 	bname=${bname#*/}
 
+    if git tag | grep -q "D4J_${bname}_POST_FIX_PRE_TEST_COMPILABLE"; then
+        echo "${bname},already tagged"
+        cd ${orgdir}
+        continue
+    fi
+
 	# setup
 	git reset --hard HEAD > /dev/null 2>&1
         git clean -df > /dev/null 2>&1
@@ -30,7 +36,7 @@ for bname in $(find . -mindepth 1 -maxdepth 1 -type d | sort -V); do
 	if [[ $? -eq 0 ]]; then
 		echo "${bname},ok"
 		git commit -m "D4J_${bname}_POST_FIX_PRE_TEST_COMPILABLE"
-		git tag D4J_${bname}_POST_FIX_PRE_TEST_COMPILABLE
+		git tag  D4J_${bname}_POST_FIX_PRE_TEST_COMPILABLE
 		cd ${orgdir}
 		continue
 	fi
@@ -51,7 +57,7 @@ for bname in $(find . -mindepth 1 -maxdepth 1 -type d | sort -V); do
 	if [[ $? -eq 0 ]]; then
 		echo "${bname},fixed"
  		git commit -m "D4J_${bname}_POST_FIX_PRE_TEST_COMPILABLE"
-                git tag D4J_${bname}_POST_FIX_PRE_TEST_COMPILABLE
+        git tag D4J_${bname}_POST_FIX_PRE_TEST_COMPILABLE
 	else
 		echo "${bname},fail"
 	fi
