@@ -224,6 +224,7 @@ if __name__ == '__main__':
     parser.add_argument('--all', action='store_true')
     parser.add_argument('--projects', nargs='*') 
     parser.add_argument('--exp_name', default='gpt3.5')
+    parser.add_argument('--no_skip', action='store_true')
     args = parser.parse_args()
 
     GEN_TEST_DIR = args.gen_test_dir
@@ -246,7 +247,7 @@ if __name__ == '__main__':
             exec_results = {}
 
         for bug_key, tests in tqdm(sorted(bug2tests.items())):
-            if bug_key in exec_results:
+            if not args.no_skip and bug_key in exec_results:
                 continue
             project, bug_id = bug_key.split('_')
             bug_id = int(bug_id)
