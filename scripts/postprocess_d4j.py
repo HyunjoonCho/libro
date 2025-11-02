@@ -10,7 +10,8 @@ import glob
 import subprocess as sp
 import argparse
 import d4j_util
-
+from multiprocessing import Pool, Manager, Lock
+from functools import partial
 
 def inject_prefix_rootdir(proj, bug_id):
     rpath = d4j_util.repo_path(proj, bug_id)
@@ -215,6 +216,83 @@ def twover_run_experiment(proj, bug_id, example_tests, injection=True):
         })
     return final_results
 
+def process_single_bug(bug_item, gen_test_dir, exec_results, lock, output_path):
+    bug_key, test_files = bug_item
+
+    with lock:
+        if bug_key in exec_results:
+            return None
+
+    project, bug_id = bug_key.split('_')
+    bug_id = int(bug_id)
+    res_for_bug = {}
+
+    example_tests = []
+    for test_file in test_files:
+        with open(test_file) as f:
+            test_content = f.read().strip()
+        if test_content.startswith('```'):
+            test_content = test_content.removeprefix('```')
+        if test_content.endswith('```'):
+            test_content = test_content.removesuffix('```')
+
+        example_tests.append(test_content)
+
+    try:
+        results = twover_run_experiment(project, bug_id, example_tests)
+    except Exception as e:
+        print(f"Error processing {bug_key}: {str(e)}")
+        results = None
+
+    if results is None:
+        return None
+
+    for test_path, res in zip(test_files, results):
+        res_for_bug[os.path.basename(test_path)] = res
+
+    with lock:
+        exec_results[bug_key] = res_for_bug
+        current_results = dict(exec_results)
+        with open(output_path, 'w') as f:
+            json.dump(current_results, f, indent=4)
+
+    return bug_key, res_for_bug
+
+
+def parallel_process_bugs(bug2tests, gen_test_dir, output_path, num_workers=4):
+    if os.path.exists(output_path):
+        with open(output_path) as f:
+            exec_results = json.load(f)
+    else:
+        exec_results = {}
+
+    manager = Manager()
+    shared_results = manager.dict(exec_results)
+    lock = manager.Lock()
+
+    bug_items = sorted(bug2tests.items())
+
+    worker_func = partial(
+        process_single_bug,
+        gen_test_dir=gen_test_dir,
+        exec_results=shared_results,
+        lock=lock,
+        output_path=output_path
+    )
+
+    print(f"Processing {len(bug_items)} bugs with {num_workers} workers...")
+    with Pool(processes=num_workers) as pool:
+        results = list(tqdm(
+            pool.imap_unordered(worker_func, bug_items),
+            total=len(bug_items),
+            desc="Processing bugs"
+        ))
+
+    successful_results = [r for r in results if r is not None]
+    print(f"Successfully processed {len(successful_results)} bugs")
+
+    return dict(shared_results)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--project', default='Time')
@@ -225,6 +303,8 @@ if __name__ == '__main__':
     parser.add_argument('--projects', nargs='*') 
     parser.add_argument('--exp_name', default='gpt3.5')
     parser.add_argument('--no_skip', action='store_true')
+    parser.add_argument('--num_workers', type=int, default=12) 
+
     args = parser.parse_args()
 
     GEN_TEST_DIR = args.gen_test_dir
@@ -238,45 +318,15 @@ if __name__ == '__main__':
             if project_list and not any([bug_id.startswith(p) for p in project_list]):
                 continue
             bug2tests[bug_id].append(gen_test_file)
-    
+
         output_path = f'/root/libro/results/{args.exp_name}.json'
-        if os.path.exists(output_path):
-            with open(output_path) as f:
-                exec_results = json.load(f)
-        else:
-            exec_results = {}
-
-        for bug_key, tests in tqdm(sorted(bug2tests.items())):
-            if not args.no_skip and bug_key in exec_results:
-                continue
-            project, bug_id = bug_key.split('_')
-            bug_id = int(bug_id)
-            res_for_bug = {}
-
-            example_tests = []
-            for test_file in tests:
-                with open(test_file) as f:
-                    test_content = f.read().strip()
-                if test_content.startswith('```'):
-                    test_content = test_content.removeprefix('```')
-                if test_content.endswith('```'):
-                    test_content = test_content.removesuffix('```')
-                
-                example_tests.append(test_content)
-            try:
-                results = twover_run_experiment(project, bug_id, example_tests)
-            except Exception as e:
-                print(str(e))
-                results = None
-            if results is None:
-                continue
-
-            for test_path, res in zip(tests, results):
-                res_for_bug[os.path.basename(test_path)] = res
-            exec_results[bug_key] = res_for_bug
-
-            with open(output_path, 'w') as f:
-                json.dump(exec_results, f, indent=4)
+        
+        exec_results = parallel_process_bugs(
+            bug2tests, 
+            GEN_TEST_DIR, 
+            output_path, 
+            num_workers=args.num_workers
+        )
 
     elif args.test_no is None:
         test_files = glob.glob(os.path.join(GEN_TEST_DIR, f'{args.project}_{args.bug_id}_*.txt'))
