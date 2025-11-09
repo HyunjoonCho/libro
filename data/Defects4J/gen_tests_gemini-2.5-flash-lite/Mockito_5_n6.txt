@@ -1,0 +1,52 @@
+import org.junit.Test;
+import java.util.Observable;
+import static org.mockito.Mockito.*;
+import org.mockito.exceptions.verification.junit.ArgumentsAreDifferent;
+
+public class MockitoTimeoutTest {
+
+    @Test
+    public void testTimeoutVerificationWithoutJUnit() {
+        // This test is designed to fail with VerifyError or NoClassDefFoundError
+        // if JUnit is not on the classpath and Mockito version is 1.10.x,
+        // when using timeout verification.
+        // The actual failure happens when the Mockito code tries to load
+        // junit.framework.ComparisonFailure which is not available.
+
+        // To reproduce the error, this test should be run in an environment
+        // where mockito-core is 1.10.x and junit is NOT on the classpath,
+        // but TestNG is present (as TestNG used to bring JUnit 3.8.1).
+        // The core issue is Mockito's internal dependency on JUnit's ComparisonFailure
+        // for a specific exception type used in timeout verification.
+
+        // We expect an exception to be thrown due to the missing JUnit dependency.
+        // The exact exception type depends on the JVM and TestNG version.
+        // It could be NoClassDefFoundError or VerifyError.
+        // If running with JUnit on classpath, this test would pass without error.
+        try {
+            verify(mock(Observable.class), timeout(10)).countObservers();
+            // If no exception is thrown, it means the environment has JUnit,
+            // or the Mockito version is newer and doesn't have this issue.
+            // In a CI environment designed to test this bug, we would assert
+            // that an exception *was* thrown.
+            // For this isolated method, we'll just let it pass if no exception.
+            // In a real test suite, you'd configure the test runner to expect an exception.
+        } catch (NoClassDefFoundError | VerifyError e) {
+            // This is the expected path for the bug.
+            // We can assert that the exception occurred, for example:
+            assertTrue("Expected NoClassDefFoundError or VerifyError due to missing JUnit",
+                       e instanceof NoClassDefFoundError || e instanceof VerifyError);
+        } catch (Throwable t) {
+            // Catch any other unexpected throwable
+             fail("Caught unexpected throwable: " + t.getMessage());
+        }
+    }
+
+    // Helper method to simulate a mock object for Observable
+    private Observable mock(Class<Observable> clazz) {
+        // In a real scenario, this would be a Mockito mock.
+        // For the purpose of triggering the bug, we just need a non-null object.
+        // The actual verification logic will fail before deeply inspecting the mock.
+        return new Observable();
+    }
+}

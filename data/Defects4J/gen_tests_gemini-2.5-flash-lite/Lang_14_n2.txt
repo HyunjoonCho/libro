@@ -1,0 +1,55 @@
+public void testStringUtilsEqualsCharSequence() {
+    // Mocking the Element and Name classes is not straightforward without a full JSR 175 environment.
+    // However, we can simulate the scenario where two CharSequence implementations
+    // that are not String might not correctly compare themselves using equals().
+    // A common case is where one is a String and the other is a custom CharSequence
+    // that doesn't implement equals correctly for String comparison.
+
+    // Let's create a simple custom CharSequence that mimics the described issue.
+    // This custom class will return false from equals() when compared to a String,
+    // even if the content is the same.
+    class NonEqualCharSequence implements CharSequence {
+        private final String delegate;
+
+        NonEqualCharSequence(String delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public int length() {
+            return delegate.length();
+        }
+
+        @Override
+        public char charAt(int index) {
+            return delegate.charAt(index);
+        }
+
+        @Override
+        public CharSequence subSequence(int start, int end) {
+            return new NonEqualCharSequence(delegate.subSequence(start, end).toString());
+        }
+
+        @Override
+        public String toString() {
+            return delegate;
+        }
+
+        // This is the problematic part: equals() is not implemented to handle String comparison
+        @Override
+        public boolean equals(Object obj) {
+            // This implementation will return false if obj is a String,
+            // even if the content is the same.
+            return !(obj instanceof String) && delegate.equals(((CharSequence)obj).toString());
+        }
+    }
+
+    CharSequence seq1 = "test";
+    CharSequence seq2 = new NonEqualCharSequence("test");
+
+    // The StringUtils.equals(CharSequence, CharSequence) method,
+    // in its buggy state, would likely call seq1.equals(seq2) or seq2.equals(seq1).
+    // If it calls seq2.equals(seq1), it will incorrectly return false.
+    // We expect the buggy behavior to return false.
+    assertFalse(StringUtils.equals(seq1, seq2));
+}

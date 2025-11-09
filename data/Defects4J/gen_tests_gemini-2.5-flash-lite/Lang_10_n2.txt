@@ -1,0 +1,76 @@
+public void testFastDateParserWhitespace() throws ParseException {
+    FastDateParser fdp = new FastDateParser("yyyy MMM dd", Locale.ENGLISH, null);
+    SimpleDateFormat sdf = new SimpleDateFormat("yyyy MMM dd", Locale.ENGLISH);
+
+    String dateStr = "2017 Jan  15"; // Extra space between Jan and 15
+    Date parsedDateFdp = fdp.parse(dateStr);
+    Date parsedDateSdf = sdf.parse(dateStr);
+
+    // The bug is that fdp.parse() succeeds where sdf.parse() would fail
+    // due to the extra whitespace. We can assert that the parsed dates are equal
+    // to show that FDP accepted the input, but the real test is that this
+    // *doesn't* throw a ParseException for FDP if SDF would have.
+    // To specifically show the *failure* of FDP, we'd need a case where FDP
+    // parses *incorrectly* due to whitespace, which is harder to demonstrate
+    // with a simple assertion. The description implies FDP is *too lenient*.
+
+    // Let's try a case where SDF would fail, and FDP *should* ideally fail too,
+    // but the bug description says it parses it.
+    // The description is a bit vague on *what* the incorrect parsing is,
+    // just that it's too lenient.
+
+    // A more direct reproduction of the *problem* is to show FDP parses something
+    // that SDF rejects, and that FDP's output might be unexpected if you assume
+    // SDF's strictness.
+
+    // Let's try parsing with FDP and asserting it doesn't throw an exception,
+    // and then try to parse the *same string* with SDF and assert it *does* throw.
+    // This requires a try-catch block within the test.
+
+    try {
+        fdp.parse("2017 Jan  15"); // FDP should parse this according to description
+        // If we reach here, FDP parsed it. Now, let's verify SDF fails.
+        try {
+            sdf.parse("2017 Jan  15");
+            fail("SimpleDateFormat should have failed to parse with extra whitespace.");
+        } catch (ParseException e) {
+            // This is the expected path for SDF, confirming the difference.
+        }
+    } catch (ParseException e) {
+        fail("FastDateParser should have parsed '2017 Jan  15' according to the bug description.");
+    }
+
+    // Another interpretation: FDP treats *any* whitespace as a single space.
+    // So, "2017 Jan 15" and "2017 Jan  15" might parse to the same date with FDP.
+    // Let's test this.
+    Date dateWithSingleSpace = sdf.parse("2017 Jan 15");
+    Date dateWithDoubleSpaceFdp = fdp.parse("2017 Jan  15");
+    assertEquals("FastDateParser should parse dates with multiple spaces identically to single spaces.", dateWithSingleSpace, dateWithDoubleSpaceFdp);
+
+    // The core issue is that FDP is more lenient.
+    // Let's try a pattern that is sensitive to whitespace differences.
+    FastDateParser fdpStrict = new FastDateParser("yyyy MMM dd", Locale.ENGLISH, null);
+    SimpleDateFormat sdfStrict = new SimpleDateFormat("yyyy MMM dd", Locale.ENGLISH);
+
+    String lenientInput = "2017 Jan   15"; // Multiple spaces
+    String strictInput = "2017 Jan 15"; // Single space
+
+    // According to the bug, FDP should parse lenientInput, while SDF would not.
+    try {
+        fdpStrict.parse(lenientInput);
+        // If FDP parses it, we proceed to check if SDF fails.
+        try {
+            sdfStrict.parse(lenientInput);
+            // If SDF also parses it, then the premise of the bug might be slightly off,
+            // or the pattern is not sensitive enough.
+            // However, the description explicitly states FDP treats single whitespace
+            // as "any number of white-space characters".
+            fail("SimpleDateFormat should not parse '" + lenientInput + "' with the pattern 'yyyy MMM dd'.");
+        } catch (ParseException pe) {
+            // This is the expected outcome for SDF, confirming FDP's leniency.
+            // The test passes if FDP parses and SDF fails.
+        }
+    } catch (ParseException pe) {
+        fail("FastDateParser should have parsed '" + lenientInput + "' according to the bug description.");
+    }
+}

@@ -1,0 +1,79 @@
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.JsonIdentityReference;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class ObjectIdTest {
+
+    public static class Foo {
+
+        @JsonIdentityReference(alwaysAsId = true)
+        public Bar bar1;
+
+        @JsonIdentityReference()
+        public Bar bar2;
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class)
+    public static class Bar {
+
+    }
+
+    @Test
+    public void testForwardReferences() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        Foo foo = new Foo();
+        foo.bar1 = new Bar();
+        foo.bar2 = foo.bar1;
+
+        String json = mapper.writeValueAsString(foo);
+
+        // Expected output: {"bar1":1,"bar2":1} because bar2 should reference the same ID as bar1
+        // The bug causes it to output something like: {"bar1":1,"bar2":{"@id":2}}
+        // We assert against the correct behavior, which is that both should have the same ID.
+        // Note: The exact ID value might change, so we check for the structure.
+        // A more robust test might parse the JSON and check the structure and IDs.
+        // For simplicity here, we check if the ID for bar2 is the same as bar1.
+        // However, since the bug produces a nested object for bar2, we can't directly compare strings.
+        // Let's check the output to ensure it *doesn't* have the incorrect structure.
+        // The incorrect output contains `{"@id":2}` for bar2.
+        // The correct output should have `bar2:1`.
+        // A simple check could be to ensure "bar2":1 is present.
+        // Given the bug description, the output is {"bar1":1,"bar2":{"@id":2}}
+        // This means bar2 is NOT serialized as an ID.
+        // The correct behavior is that bar2 should also be serialized as "1".
+        // Let's parse the JSON to be more precise.
+        // For simplicity, let's assert that the second ID is NOT a nested object.
+        // This is a bit fragile, but reflects the bug description.
+        // A better assertion would be to parse the JSON and check the values.
+
+        // Let's refine the test to parse the JSON and assert the structure.
+        // The expected output is something like: {"bar1":1,"bar2":1}
+        // The actual buggy output is something like: {"bar1":1,"bar2":{"@id":2}}
+        // We can check if bar2 is an integer ID.
+
+        // The simplest check that covers the described bug is to ensure that bar2 is not serialized as a nested object.
+        // If it's serialized correctly, it should be an integer ID.
+        // If it's serialized incorrectly, it will be a JSON object.
+        // We can check if the string "bar2":1 exists, which implies correct serialization.
+        // However, the bug is specifically about bar2 *not* being serialized as an ID.
+
+        // Let's try to parse the JSON and check the structure.
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> map = mapper.readValue(json, java.util.Map.class);
+        Object bar1Value = map.get("bar1");
+        Object bar2Value = map.get("bar2");
+
+        // Both bar1 and bar2 should be serialized as IDs (integers in this case).
+        // The bug is that bar2 is serialized as a nested object `{"@id": 2}`.
+        // So, we expect both bar1Value and bar2Value to be Integers.
+        // And importantly, they should be the *same* Integer.
+        assertEquals("bar1 should be serialized as an ID", Integer.class, bar1Value.getClass());
+        assertEquals("bar2 should be serialized as an ID", Integer.class, bar2Value.getClass());
+        assertEquals("bar1 and bar2 should reference the same ID", bar1Value, bar2Value);
+    }
+}

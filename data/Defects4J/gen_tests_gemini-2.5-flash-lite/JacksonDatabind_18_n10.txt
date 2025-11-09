@@ -1,0 +1,51 @@
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.MappingIterator;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.List;
+
+import static org.junit.Assert.assertTrue;
+
+public class ObjectReaderErrorRecoveryTest {
+
+    @Test
+    public void testReadValuesErrorRecovery() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "[{\"id\": 1}, {\"id\": 2, \"name\": \"test\"}, {\"id\": 3]"; // Malformed JSON
+
+        MappingIterator<TestData> iterator = null;
+        try {
+            iterator = mapper.readerFor(TestData.class).readValues(mapper.createParser(json));
+            while (iterator.hasNext()) {
+                iterator.nextValue();
+            }
+        } catch (JsonProcessingException e) {
+            // Expected exception due to malformed JSON
+            assertTrue(e.getMessage().contains("Unexpected end-of-input"));
+        } finally {
+            if (iterator != null) {
+                // Attempt to close the iterator, which should trigger error recovery if implemented
+                try {
+                    iterator.close();
+                } catch (IOException e) {
+                    // Handle or log potential issues during close
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        // If error recovery is implemented, the iterator should be closed without further exceptions
+        // or be in a state where further operations are safe.
+        // This test primarily checks if the exception is caught and if close() doesn't throw additional errors.
+        // A more robust test would involve checking the state of the iterator after recovery,
+        // but that depends on the specifics of the recovery mechanism.
+    }
+
+    // Dummy class for testing
+    private static class TestData {
+        public int id;
+        public String name;
+    }
+}

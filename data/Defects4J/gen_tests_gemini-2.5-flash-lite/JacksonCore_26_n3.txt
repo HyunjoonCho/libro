@@ -1,0 +1,30 @@
+public void testNonBlockingParserOffsetLeak() throws Exception {
+    JsonFactory jsonFactory = new JsonFactory();
+    JsonParser parser = jsonFactory.createNonBlockingByteArrayParser();
+    ByteArrayFeeder feeder = (ByteArrayFeeder) parser.getNonBlockingInputFeeder();
+
+    byte[] input = "[[[".getBytes(UTF_8);
+
+    feeder.feedInput(input, 2, 3); // Feed the last '[' with an offset of 2
+    assertEquals(JsonToken.START_ARRAY, parser.nextToken());
+    assertEquals(1, parser.getCurrentLocation().getByteOffset()); // Expecting 1, but it's 3
+    assertEquals(1, parser.getTokenLocation().getByteOffset());   // Expecting 1, but it's 3
+
+    // Reset parser for the next test segment
+    parser.clearCurrentToken();
+
+    // Now feed the first '[' with an offset of 0
+    feeder.feedInput(input, 0, 1);
+    assertEquals(JsonToken.START_ARRAY, parser.nextToken());
+    assertEquals(0, parser.getCurrentLocation().getByteOffset()); // Expecting 0, but it's 0 (this part might be correct in the original test)
+    assertEquals(0, parser.getTokenLocation().getByteOffset());   // Expecting 0, but it's 0 (this part might be correct in the original test)
+
+    // Reset parser for the next test segment
+    parser.clearCurrentToken();
+
+    // Feed the second '[' with an offset of 1
+    feeder.feedInput(input, 1, 1);
+    assertEquals(JsonToken.START_ARRAY, parser.nextToken());
+    assertEquals(1, parser.getCurrentLocation().getByteOffset()); // Expecting 1, but it's 1 (this part might be correct in the original test)
+    assertEquals(1, parser.getTokenLocation().getByteOffset());   // Expecting 1, but it's 1 (this part might be correct in the original test)
+}

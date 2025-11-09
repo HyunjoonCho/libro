@@ -1,0 +1,29 @@
+public void testArrayIndexOutOfBoundsExceptionInByteQuadsCanonicalizer() throws Exception {
+    ObjectMapper objectMapper = new ObjectMapper();
+    // Manually create and set the ByteQuadsCanonicalizer with a specific seed
+    // This bypasses the factory method and allows direct control for reproduction
+    JsonFactory jsonFactory = objectMapper.getFactory();
+    Field byteSymbolCanonicalizerField = JsonFactory.class.getDeclaredField("_byteSymbolCanonicalizer");
+    byteSymbolCanonicalizerField.setAccessible(true);
+
+    // Using reflection to call the private createRoot method with the specific seed
+    Method factoryMethod = ByteQuadsCanonicalizer.class.getDeclaredMethod("createRoot", int.class);
+    factoryMethod.setAccessible(true);
+    // The problematic seed value from the original test case
+    int problematicSeed = -523743345;
+    byteSymbolCanonicalizerField.set(jsonFactory, factoryMethod.invoke(null, problematicSeed));
+
+    StringBuilder stringBuilder = new StringBuilder();
+    stringBuilder.append("{\n");
+    stringBuilder.append(" \"expectedGCperPosition\": null");
+    // The loop count that triggers the exception in the original bug report
+    for (int i = 0; i < 60; ++i) {
+        stringBuilder.append(",\n \"").append(i + 1).append("\": null");
+    }
+    stringBuilder.append("\n}");
+
+    // This readValue call is expected to throw ArrayIndexOutOfBoundsException
+    // due to the internal state of ByteQuadsCanonicalizer with the problematic seed
+    // and the specific input string.
+    objectMapper.readValue(stringBuilder.toString().getBytes(StandardCharsets.UTF_8), Map.class);
+}

@@ -1,0 +1,34 @@
+public void testBzip2CompressorInputStreamReadToFullBuffer() throws Exception {
+    byte[] rawData = new byte[1024];
+    for (int i = 0; i < rawData.length; ++i) {
+        rawData[i] = (byte) i;
+    }
+
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    BZip2CompressorOutputStream bzipOut = new BZip2CompressorOutputStream(baos);
+    bzipOut.write(rawData);
+    bzipOut.close();
+
+    ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+    BZip2CompressorInputStream bzipIn = new BZip2CompressorInputStream(bais);
+    byte[] buffer = new byte[1024];
+    // The first read should return the number of bytes read, which is less than buffer size
+    int bytesRead1 = bzipIn.read(buffer, 0, buffer.length);
+    assertTrue(bytesRead1 > 0 && bytesRead1 < buffer.length);
+
+    // The problematic read: offset is equal to length, which means reading 0 bytes.
+    // It should return 0, but it returns -1 indicating end of stream.
+    int bytesRead2 = bzipIn.read(buffer, buffer.length, 0);
+    assertEquals("Reading 0 bytes with offset equal to length should return 0, not -1", 0, bytesRead2);
+
+    // Verify that the stream is not actually at the end
+    // Reset the stream to the beginning and try reading again
+    bais.reset();
+    bzipIn.close(); // Close the previous stream to reset the underlying stream
+    bzipIn = new BZip2CompressorInputStream(bais);
+    byte[] buffer2 = new byte[1024];
+    int bytesRead3 = bzipIn.read(buffer2, 0, buffer2.length);
+    assertTrue(bytesRead3 > 0); // Should be able to read some data
+
+    bzipIn.close();
+}

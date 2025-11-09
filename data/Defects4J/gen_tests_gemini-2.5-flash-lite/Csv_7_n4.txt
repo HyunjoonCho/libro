@@ -1,0 +1,99 @@
+public void testDuplicateHeaderNames() throws IOException {
+    String csvData = "Col1,Col2,Col2,Col3,Col4\n1,2,3,4,5\n4,5,6,7,8";
+    CSVFormat myFormat = CSVFormat.RFC4180.withDelimiter(",").withQuoteChar('"').withQuotePolicy(Quote.MINIMAL)
+            .withIgnoreSurroundingSpaces(true).withHeader().withSkipHeaderRecord(true);
+
+    Reader in = new StringReader(csvData);
+    Mapping<String, String> map = myFormat.parse(in);
+
+    // Expecting the last occurrence of "Col2" to be the one stored, and the first one to be lost.
+    // The map should contain "Col1", "Col2", "Col3", "Col4" as keys.
+    // However, due to the bug, it might only contain "Col1", "Col3", "Col4" or have incorrect values for "Col2".
+    // We'll assert based on the expected behavior of a map with unique keys, and expect a failure if duplicate keys are handled incorrectly.
+
+    // A correct implementation should either throw an error or handle duplicates in a defined way.
+    // The bug report implies that an entry is missed, meaning the map might not contain all expected columns or have incorrect mappings.
+    // Let's check for the presence of all expected column names as keys in the map, and assert the values.
+
+    assertTrue(map.containsKey("Col1"));
+    assertEquals("1", map.get("Col1")); // For the first row
+
+    // This is where the bug manifests. If "Col2" is treated as a single key,
+    // the second "Col2" might overwrite the first, or one might be lost entirely.
+    // We expect the map to reflect the values from the *last* encountered duplicate header if it were to handle it.
+    // However, the description says an entry is *missed*, implying it might not even be in the map.
+    // For the purpose of reproducing the bug, we'll assert based on what a *broken* implementation might do.
+    // A broken implementation might only have one "Col2" key and map it to the value from the *last* row where "Col2" appears.
+    // Or it might map to the first row's value and ignore subsequent ones.
+    // The description says "misses an entry because of the Column name being used as a key". This suggests a key is missing.
+
+    // Let's assume the map will have keys "Col1", "Col2", "Col3", "Col4".
+    // The critical part is how "Col2" is handled. If it's a strict map, only one "Col2" will exist.
+    // The bug description implies a loss of data.
+
+    // To reproduce the described failure, we need to check if the map *fails* to represent all columns or their values correctly.
+    // If the `map` were to contain all columns and their correct values, this test would pass.
+    // The bug is that `map` is inconsistent.
+
+    // Asserting the presence of keys and their expected values for the *first* row,
+    // and then checking the behavior for the duplicate column.
+    // If the map is truly inconsistent, assertions about the second "Col2" might fail.
+
+    // Let's check the content of the map for the first row.
+    // The description implies that when `withHeader()` is used, the `HeaderMap` is created.
+    // The `Mapping` returned by `parse` is likely a `HeaderMap`.
+
+    // Assert that "Col1" is present and has the correct value for the first row.
+    // This part should work fine.
+    assertTrue(map.containsKey("Col1"));
+    assertEquals("1", map.get("Col1"));
+
+    // Now, the problematic part: "Col2".
+    // If the map correctly handles duplicates by, for example, appending indices or throwing an error,
+    // this test would need to be different.
+    // The description says "misses an entry", which implies a key might not be present or mapped incorrectly.
+    // Let's try to assert the presence of "Col2" and its value.
+    // If the bug is that the *first* "Col2" is overwritten by the second, then `map.get("Col2")` would be "3" for the first row.
+    // If the bug is that the *second* "Col2" is ignored, then `map.get("Col2")` would be "2" for the first row.
+    // The description says "misses an entry", which is ambiguous. Let's assume it means one of the "Col2" columns is not represented.
+
+    // Let's check the size of the map keys. If there are duplicate headers, a simple map would only have unique keys.
+    // If the intention is to handle duplicates, the `HeaderMap` should reflect this.
+    // The bug report implies that `HeaderMap` is inconsistent.
+
+    // We will assert that the map contains the expected keys, and if duplicate keys are handled by overwriting,
+    // we check the value associated with the *last* occurrence of the duplicate key in the header.
+    // However, the description says "misses an entry". This suggests that `map.get("Col2")` might not exist or might be wrong.
+
+    // Let's assume the `HeaderMap` is intended to store all columns, perhaps with a mechanism to differentiate duplicates.
+    // If it simply uses column names as keys, then duplicates will cause issues.
+    // The description states "HeaderMap is inconsistent".
+    // Let's assert that the map contains the expected number of *unique* header names.
+    // If there are 4 unique header names (Col1, Col2, Col3, Col4), then the map should have 4 entries.
+    // However, the CSV has 5 columns, with "Col2" duplicated.
+
+    // Let's test the assumption that the `HeaderMap` will simply overwrite values for duplicate keys.
+    // In that case, when parsing the first row, `map.get("Col2")` would be "3" (from the second "Col2" column).
+    // This is a strong assumption about the bug's manifestation.
+
+    // A more direct interpretation of "misses an entry" could be that one of the header names is not a key in the map.
+    // For example, if "Col2" is only present once as a key.
+    // Let's check for all expected *unique* column names.
+    assertTrue(map.containsKey("Col1"));
+    assertTrue(map.containsKey("Col2")); // This is where the bug might cause failure
+    assertTrue(map.containsKey("Col3"));
+    assertTrue(map.containsKey("Col4"));
+
+    // And let's check the values for the first row.
+    assertEquals("1", map.get("Col1"));
+    // The behavior for "Col2" is the core of the issue.
+    // If the map overwrites, then map.get("Col2") should be "3".
+    // If the map misses an entry, then map.get("Col2") might be null or throw an error.
+    // The bug report says "misses an entry because of the Column name being used as a key".
+    // This implies that when looking up "Col2", you might not get the expected value, or the key might be missing.
+    // Let's assert that the value for "Col2" corresponds to the value from the *second* occurrence of "Col2" in the header,
+    // as this is a common behavior when keys are overwritten.
+    assertEquals("3", map.get("Col2")); // This assertion will fail if the first "Col2" is kept, or if "Col2" is missing.
+    assertEquals("4", map.get("Col3"));
+    assertEquals("5", map.get("Col4"));
+}

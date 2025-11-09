@@ -1,0 +1,120 @@
+public void testPolymorphicWithNullTypeId() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(new SimpleModule() {
+        @Override
+        public void setupModule(SetupContext context) {
+            context.registerSubtypes(MySubtype.class);
+        }
+    });
+
+    String json = mapper.writeValueAsString(new MyWrapper(null));
+    // The bug is that the above line should not throw an exception,
+    // and the resulting JSON should represent a null type id.
+    // We are asserting that it doesn't throw and produces a specific output.
+    // The exact expected output might depend on the specific implementation details
+    // of how Jackson handles null type ids for polymorphic types, but a common
+    // expectation would be the absence of the type id field or a null value for it.
+    // For demonstration, let's assume it omits the type id field when the type id is null.
+    // If the defaultImpl is set, Jackson might serialize it differently.
+    // This test assumes no defaultImpl is set for this specific scenario.
+
+    // A more robust test would involve deserialization as well.
+    // For now, we focus on the serialization part that was reportedly failing.
+    // If the original bug caused an exception during serialization, this test
+    // will fail if that exception is still present.
+    // If the bug was about incorrect output (e.g., wrong type id or missing type id),
+    // then asserting the JSON string would be appropriate.
+
+    // Example assertion: If the type id field is simply omitted when null
+    // assertTrue(json.contains("\"data\":null")); // Assuming MyWrapper has a 'data' field
+    // assertFalse(json.contains("\"@type\":")); // Assuming default type id property name
+
+    // Since the bug description doesn't provide a concrete failing case output,
+    // we'll create a minimal setup that *could* trigger such a scenario and
+    // assert that it doesn't throw an exception. A more specific assertion
+    // would require understanding the expected behavior for null type ids.
+
+    // Let's refine this to actually test the serialization of a polymorphic type
+    // where the type id might be null or absent.
+    // We'll define a simple polymorphic structure.
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "@type")
+    @JsonSubTypes({ @JsonSubTypes.Type(value = MyConcreteType.class, name = "concrete") })
+    interface MyPolymorphicBase {}
+
+    static class MyConcreteType implements MyPolymorphicBase {
+        public String value;
+        public MyConcreteType() {}
+        public MyConcreteType(String value) { this.value = value; }
+        @Override public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            MyConcreteType that = (MyConcreteType) o;
+            return Objects.equals(value, that.value);
+        }
+        @Override public int hashCode() { return Objects.hash(value); }
+    }
+
+    static class MyWrapper {
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_OBJECT, property = "type")
+        @JsonSubTypes({ @JsonSubTypes.Type(value = MyConcreteType.class, name = "concrete") })
+        public MyPolymorphicBase polymorphicValue;
+
+        public MyWrapper() {}
+        public MyWrapper(MyPolymorphicBase polymorphicValue) {
+            this.polymorphicValue = polymorphicValue;
+        }
+    }
+
+    // Test case 1: Polymorphic value is null
+    MyWrapper wrapperWithNull = new MyWrapper(null);
+    String jsonWithNull = mapper.writeValueAsString(wrapperWithNull);
+    // Expected: no type id property should be serialized if the value is null
+    assertFalse(jsonWithNull, jsonWithNull.contains("\"type\":"));
+    assertTrue(jsonWithNull, jsonWithNull.contains("\"polymorphicValue\":null"));
+
+
+    // Test case 2: Concrete type is used, but type id might be problematic if null was passed initially
+    // This scenario is less likely to be the direct cause of the bug if the type is concrete.
+    // The bug description implies a scenario where the type id *itself* is null or missing,
+    // potentially leading to issues when determining the type.
+
+    // Let's simulate a scenario where the type information might be missing or null,
+    // and the system needs to handle it gracefully, possibly by falling back to a default.
+    // The original bug might have been triggered by a specific combination of annotations or data.
+    // Without a specific failing input, we are inferring a possible cause.
+
+    // If the bug was about deserialization failing when the type id is null,
+    // a deserialization test would be needed. The description focuses on "Handle null type id for polymorphic values".
+
+    // Consider a scenario where a wrapper object is serialized, and its polymorphic field is null.
+    // The fix might ensure that this null is handled without error, and potentially serialized as null.
+    // The initial test `mapper.writeValueAsString(new MyWrapper(null));` covers this.
+
+    // If the bug was specifically about external type IDs and null type IDs,
+    // we'd need a configuration using `JsonTypeInfo.As.EXTERNAL_PROPERTY`.
+    // Let's assume the fix addresses the general handling of null type ids for polymorphic types.
+
+    // To truly reproduce the bug, we'd need the *exact* code and setup that caused the failure.
+    // Given the description, the most plausible interpretation is that serializing
+    // a polymorphic type with a null value for the polymorphic field caused an issue.
+    // The provided test `testPolymorphicWithNullTypeId` attempts to cover this.
+
+    // If the bug was about deserialization, we would need to construct a JSON string
+    // that *lacks* a type id or has a null type id, and attempt to deserialize it.
+    // Example (if deserialization was the issue):
+    /*
+    String jsonWithoutTypeId = "{\"polymorphicValue\": {\"value\": \"test\"}}"; // Missing type id
+    try {
+        MyWrapper deserialized = mapper.readValue(jsonWithoutTypeId, MyWrapper.class);
+        // Assertions about deserialized object
+    } catch (Exception e) {
+        // This catch block would fail if the original bug was present
+        fail("Deserialization failed with null/missing type id: " + e.getMessage());
+    }
+    */
+
+    // Since the description is vague on the exact failing scenario,
+    // the current test focuses on the serialization aspect of a null polymorphic value,
+    // as this is a common point of failure when type information is expected but absent.
+}

@@ -1,0 +1,88 @@
+public void testDSTSwitchingHours() {
+    // 2004-10-31 01:00:00 MDT
+    // Note: This specific millisecond value might be interpreted differently
+    // depending on the default timezone of the JVM running the test.
+    // For robustness, it's better to explicitly set the timezone if possible,
+    // or use a timezone-aware date/time library if the library under test
+    // doesn't already handle this.
+    // However, to reproduce the described bug, we'll use the provided value.
+    long mdtMillis = 1099206000000L;
+    Date oct31_01MDT = new Date(mdtMillis);
+
+    // The expected behavior *if DST switching were ignored or handled incorrectly*
+    // would be for the time to shift to the new timezone offset.
+    // The bug report states that truncating to the hour results in a time
+    // that is one hour *after* the input hour, implying a DST shift occurred
+    // during the truncation operation itself, leading to an incorrect result.
+
+    // To reproduce the bug, we assert that the result is NOT the input date.
+    // The original bug report implies that the result is different from the input.
+    // If the library correctly handles DST, the truncated date should remain the same.
+    // The bug is that it *changes*.
+
+    // Let's assume the bug causes the date to become 2004-10-31 01:00:00 MST
+    // which is one hour later in wall clock time due to the DST change.
+    // The millisecond value for 2004-10-31 01:00:00 MST would be different.
+    // For the purpose of this test, we focus on the fact that the result
+    // is *not* the original date object if the bug is present.
+
+    // The original assertion in the bug report was `assertEquals(oct31_01MDT, result);`
+    // This assertion implies that the expected behavior is that the date remains unchanged.
+    // The bug is that it *does* change. So, to reproduce the bug, we need to show
+    // that the `result` is *different* from `oct31_01MDT` when the bug is present.
+
+    // A more direct way to test the bug description is to check if the hour
+    // of the resulting date is what's expected *after* the buggy truncation.
+    // The bug report says: "you'll actually get 2004-10-31 01:00:00 MST, which is one hour after the input hour."
+    // This implies the input `oct31_01MDT` was in MDT and the result is in MST.
+    // The key is that the *value* of the date changes due to the DST rule application.
+
+    // Let's simulate the expected buggy outcome.
+    // If the input is 2004-10-31 01:00:00 MDT and truncation causes a DST shift,
+    // the time might become 2004-10-31 01:00:00 MST.
+    // The DST change in autumn typically means clocks go back.
+    // So, 01:00 MDT on Oct 31, 2004, would become 00:00 MST.
+    // The description "one hour after the input hour" is confusing.
+    // If the input is 01:00 MDT, and the DST switch occurs at 02:00 MDT -> 01:00 MST,
+    // then 01:00 MDT is *before* the switch.
+    // The most common DST issue is when the time *skips* an hour (spring forward)
+    // or *repeats* an hour (fall back).
+    // The description "01:00:00 MST, which is one hour after the input hour" is likely
+    // referring to the wall-clock time interpretation.
+    // 01:00 MDT is equivalent to 02:00 UTC.
+    // 01:00 MST is equivalent to 07:00 UTC.
+    // This is a 6 hour difference, not 1 hour.
+
+    // Let's re-interpret the bug description.
+    // The input is `oct31_01MDT`. This is a specific millisecond value.
+    // When `DateUtils.truncate` is called with `Calendar.HOUR_OF_DAY`,
+    // it should return a `Date` object representing the start of that hour.
+    // If the DST transition happens *during* that hour, the library might incorrectly
+    // apply the new timezone offset.
+    // The critical part is that the original `Date` object's millisecond value
+    // should not change if the truncation logic is correct and respects the
+    // original timezone context throughout the operation.
+
+    // The bug is that `DateUtils.truncate(oct31_01MDT, Calendar.HOUR_OF_DAY)`
+    // returns a `Date` object whose millisecond value is *different* from `oct31_01MDT`.
+    // The original assertion `assertEquals(oct31_01MDT, result);` would pass if the bug
+    // were fixed. To reproduce the bug, we need to assert that they are *not* equal.
+
+    Date result = DateUtils.truncate(oct31_01MDT, Calendar.HOUR_OF_DAY);
+
+    // If the bug is present, the `result` Date object will have a different millisecond value
+    // than the original `oct31_01MDT` due to incorrect DST handling during truncation.
+    // Therefore, to reproduce the failure, we assert that they are NOT equal.
+    assertFalse("DateUtils.truncate should not change the date during DST switching hours if handled correctly.", oct31_01MDT.equals(result));
+
+    // Additionally, we can try to assert the *expected faulty value* if we know it.
+    // The description says "you'll actually get 2004-10-31 01:00:00 MST"
+    // Let's try to construct this MST date and see if `result` matches it.
+    // This requires knowing the exact time of DST change and the default timezone for MST/MDT.
+    // For a test, it's often better to rely on the observable side effect: the date object's value changes.
+
+    // A more robust test would involve setting the timezone explicitly.
+    // However, adhering to the original bug report's context:
+    // The assertion `assertEquals(oct31_01MDT, result);` failed because `result` was different.
+    // So, to reproduce the failure, we assert that they are different.
+}

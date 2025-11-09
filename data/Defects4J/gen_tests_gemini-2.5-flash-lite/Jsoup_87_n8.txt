@@ -1,0 +1,50 @@
+public void testParseSettingsPreserveCase() {
+    Parser parser = Parser.htmlParser();
+    parser.settings(ParseSettings.preserveCase);
+    String html = "<div class=\"bdsharebuttonbox\">"
+            + "<A class=bds\_more href=\"http://share.baidu.com/code#\" data-cmd=\"more\">分享到：</A>"
+            + "<A title=分享到QQ空间 class=bds\_qzone href=\"http://share.baidu.com/code#\" data-cmd=\"qzone\">"
+            + "</A><A title=分享到新浪微博 class=bds\_tsina href=\"http://share.baidu.com/code#\" data-cmd=\"tsina\"></A>"
+            + "<A title=分享到腾讯微博 class=bds\_tqq href=\"http://share.baidu.com/code#\" data-cmd=\"tqq\"></A>"
+            + "<A title=分享到人人网 class=bds\_renren href=\"http://share.baidu.com/code#\" data-cmd=\"renren\"></A>"
+            + "<A title=分享到微信 class=bds\_weixin href=\"http://share.baidu.com/code#\" data-cmd=\"weixin\"></A>"
+            + "</div>\r\n";
+    Document doc = Jsoup.parse(html, "", parser);
+    // The issue is that with preserveCase, the nested tags are not being handled correctly,
+    // leading to incorrect HTML structure. We expect the original structure without nesting.
+    // The actual output shows significant incorrect nesting.
+    // We can assert that the number of direct children of the div is not what's expected
+    // if the parsing were correct. In the correct output, there are 6 direct children (5 A tags and 1 empty text node if any).
+    // In the faulty output, there are deeply nested A tags.
+    Element div = doc.selectFirst("div.bdsharebuttonbox");
+    // Assert that there are not an excessive number of nested tags, indicating incorrect parsing.
+    // A simple check could be to count the direct children. The correct parsing should yield
+    // a small, predictable number of direct children.
+    // In the provided faulty output, the nesting is deep. Let's count the direct children of the div.
+    // The faulty output has multiple 'A' tags directly under the div which should not be the case.
+    // A more robust test would involve checking the structure more deeply, but for reproducing the bug,
+    // checking the immediate children count or specific tag attributes can be indicative.
+
+    // Let's check the number of 'a' tags with specific classes directly under the div.
+    // In the correct output, there should be one of each: bds_more, bds_qzone, bds_tsina, etc.
+    // In the buggy output, the nesting creates multiple instances of these classes at the top level.
+    assertEquals("Incorrect number of direct 'a' tags with class 'bds_more'", 1, div.select("a.bds_more").size());
+    assertEquals("Incorrect number of direct 'a' tags with class 'bds_qzone'", 1, div.select("a.bds_qzone").size());
+    assertEquals("Incorrect number of direct 'a' tags with class 'bds_tsina'", 1, div.select("a.bds_tsina").size());
+    assertEquals("Incorrect number of direct 'a' tags with class 'bds_tqq'", 1, div.select("a.bds_tqq").size());
+    assertEquals("Incorrect number of direct 'a' tags with class 'bds_renren'", 1, div.select("a.bds_renren").size());
+    assertEquals("Incorrect number of direct 'a' tags with class 'bds_weixin'", 1, div.select("a.bds_weixin").size());
+
+    // Additionally, we can check the text content of the first 'a' tag to ensure it's parsed correctly.
+    Element firstALink = div.selectFirst("a.bds_more");
+    assertNotNull("First 'a' tag should not be null", firstALink);
+    assertEquals("Incorrect text content for the first 'a' tag", "分享到：", firstALink.text());
+
+    // The core of the bug is the incorrect nesting. The faulty output shows nested A tags that shouldn't be there.
+    // We can assert that there are no 'a' tags that are children of other 'a' tags within the div.
+    for (Element aTag : div.select("a")) {
+        for (Element child : aTag.children()) {
+            assertTrue("Found unexpected nested 'a' tag within another 'a' tag: " + child.tagName(), !child.tagName().equalsIgnoreCase("a"));
+        }
+    }
+}

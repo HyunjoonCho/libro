@@ -1,0 +1,39 @@
+public void testZipVersionNeededToExtractMismatch() throws IOException {
+    File zipFile = File.createTempFile("test", ".zip");
+    zipFile.deleteOnExit();
+
+    try (ZipArchiveOutputStream zipArchiveOutputStream = new ZipArchiveOutputStream(zipFile)) {
+        zipArchiveOutputStream.setMethod(ZipArchiveEntry.DEFLATED);
+        ZipArchiveEntry entry = new ZipArchiveEntry("test.txt");
+        entry.setSize(100);
+        entry.setCompressedSize(50);
+        zipArchiveOutputStream.putArchiveEntry(entry);
+        zipArchiveOutputStream.write(new byte[100]);
+        zipArchiveOutputStream.closeArchiveEntry();
+    }
+
+    try (ZipArchiveInputStream zipArchiveInputStream = new ZipArchiveInputStream(new FileInputStream(zipFile))) {
+        ZipArchiveEntry localEntry = zipArchiveInputStream.getNextZipEntry();
+        assertNotNull(localEntry);
+
+        // Re-open to get central directory entry
+        try (ZipArchiveInputStream zipArchiveInputStream2 = new ZipArchiveInputStream(new FileInputStream(zipFile))) {
+            ZipArchiveEntry centralEntry = null;
+            while ((centralEntry = zipArchiveInputStream2.getNextZipEntry()) != null) {
+                // Find the entry corresponding to our file
+                if (centralEntry.getName().equals("test.txt")) {
+                    break;
+                }
+            }
+            assertNotNull(centralEntry);
+
+            // The bug is that versionNeededToExtract for local header might be different from central directory
+            // We expect version 2.0 for DEFLATED method when data descriptors are used.
+            // The bug causes it to be INITIAL_VERSION (1.0) in the local header.
+            assertEquals("Local version needed to extract should be at least 2.0 for DEFLATED", 2, localEntry.getVersionNeededToExtract());
+            assertEquals("Central directory version needed to extract should be at least 2.0 for DEFLATED", 2, centralEntry.getVersionNeededToExtract());
+        }
+    } finally {
+        zipFile.delete();
+    }
+}

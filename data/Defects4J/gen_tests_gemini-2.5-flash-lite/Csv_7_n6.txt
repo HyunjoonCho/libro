@@ -1,0 +1,287 @@
+public void testDuplicateColumnNames() throws IOException {
+    String csvData = "Col1,Col2,Col2,Col3,Col4\n1,2,3,4,5\n4,5,6,7,8";
+    CSVFormat myFormat = CSVFormat.RFC4180.withDelimiter(",").withQuoteChar('"').withQuotePolicy(Quote.MINIMAL)
+            .withIgnoreSurroundingSpaces(true).withHeader().withSkipHeaderRecord(true);
+
+    Reader in = new StringReader(csvData);
+    Mapping<String, String> map = myFormat.parse(in);
+
+    // The original bug report implies that the map will be inconsistent,
+    // likely missing one of the "Col2" entries. We'll assert that
+    // both "Col2" entries are accessible, demonstrating the expected behavior
+    // if the library were to handle duplicates, or asserting that an exception
+    // is thrown if that's the desired behavior.
+    // Since the bug report doesn't specify the *exact* expected outcome
+    // (e.g., throw exception, or allow access to all columns),
+    // we'll demonstrate a case that *should* work if duplicates are handled
+    // in some way. A common approach is to allow access to the last occurring
+    // column name, or to throw an exception.
+    // Let's assume the intent is to be able to access *all* columns,
+    // which would require a different return type than Map<String, String>
+    // or an exception.
+
+    // If the parser is expected to throw an exception for duplicate headers:
+    // try {
+    //     myFormat.parse(in);
+    //     fail("Expected an exception for duplicate column names.");
+    // } catch (IllegalArgumentException e) {
+    //     // Expected exception
+    // }
+
+    // If the parser is expected to handle duplicates by, for example,
+    // allowing access to all columns via some mechanism not shown in the
+    // original snippet (e.g., by returning a list of values for a key,
+    // or by using a different map implementation), this test would need
+    // to be adapted.
+
+    // Based on the description "HeaderMap returned by the parser misses an entry",
+    // it implies that a standard Map is being used where keys must be unique.
+    // A simple assertion to show the problem: if "Col2" is accessed,
+    // it might return the value from the first or second occurrence,
+    // but not necessarily indicate that there were multiple.
+    // A more robust test would check the *number* of columns mapped,
+    // or the specific values associated with each column if the library
+    // has a way to expose them.
+
+    // For simplicity, let's test if accessing "Col2" returns *a* value,
+    // and if we can access other columns. The bug implies that one "Col2"
+    // might be lost. If the library *correctly* handles duplicates,
+    // it might return the last one, or throw an error.
+    // Assuming the library *doesn't* handle it well and overwrites:
+    // The last "Col2" value for the first row is "3".
+    // The last "Col2" value for the second row is "6".
+
+    // Let's assert that we can get values for all *unique* column names,
+    // and that the behavior with duplicate names is predictable, even if it's
+    // overwriting. The bug is that an entry is *missed*.
+    // If the map is `{"Col1": "1", "Col2": "3", "Col3": "4", "Col4": "5"}`,
+    // then the second "Col2" is lost.
+
+    // To reproduce the *failure*, we need to show that accessing the map
+    // doesn't give us what we expect if there are duplicates.
+    // The description states "HeaderMap returned by the parser misses an entry".
+    // This implies that if you query for "Col2", you might only get one value,
+    // or the map might not even contain the key "Col2" if it was the last
+    // column and there were duplicates before it.
+
+    // Let's try to assert a state that would be wrong if a duplicate was missed.
+    // If the map is `{"Col1": "1", "Col2": "3", "Col3": "4", "Col4": "5"}`
+    // then accessing `map.get("Col2")` would return "3", and there's no way
+    // to access the value "6" from the second "Col2" column.
+
+    // A test that shows the inconsistency:
+    // Check that we can get the first row's data for all *expected* columns,
+    // even if some names are duplicated.
+    assertThat(map.get("Col1"), is("1"));
+    // If "Col2" is duplicated, and the map overwrites, this will get the *last* "Col2" value from the header definition.
+    // In the CSV: "Col1,Col2,Col2,Col3,Col4"
+    // The map keys will likely be "Col1", "Col2", "Col3", "Col4".
+    // The value associated with "Col2" will be from the *last* occurrence of "Col2" in the header.
+    // So, for the first row, map.get("Col2") should be "3".
+    assertThat(map.get("Col2"), is("3")); // This might be the incorrect behavior if the second "Col2" is supposed to be accessible.
+    assertThat(map.get("Col3"), is("4"));
+    assertThat(map.get("Col4"), is("5"));
+
+    // The real issue is that if you try to access the *second* "Col2" column,
+    // you can't. The bug report implies that the *map itself* is inconsistent.
+    // If the map is `{"Col1": "1", "Col2": "3", "Col3": "4", "Col4": "5"}`,
+    // then the second row's "Col2" value ("6") is lost.
+    // The test should reflect this loss.
+
+    // To demonstrate the loss, we can try to access the second row's data.
+    // The `parse` method returns a `Mapping<String, String>`.
+    // This `Mapping` object represents the *entire parsed CSV*.
+    // The `map.get("Col2")` would return the value from the *first* row for "Col2".
+    // The issue is how to access the *second* row's data.
+    // The `Mapping` interface itself might not expose this directly if it's a simple key-value store.
+
+    // Let's assume the `Mapping` object, when `withHeader()` is used,
+    // acts like a map from header names to the *values in the first row*.
+    // The bug is that if there are duplicate header names, one of them is lost *during map creation*.
+    // So, the map returned by `myFormat.parse(in)` would be:
+    // `{"Col1": "1", "Col2": "3", "Col3": "4", "Col4": "5"}`
+    // This means the second "Col2" (value "3" in the first row, "6" in the second row)
+    // only maps to one key "Col2".
+
+    // The bug is that the `HeaderMap` is inconsistent.
+    // Let's make the assertion about the *content* of the map.
+    // If the map is created by iterating through headers and values, and uses the header as a key,
+    // the second "Col2" would overwrite the first.
+    // So, the map should contain:
+    // "Col1" -> "1"
+    // "Col2" -> "3" (from the *second* "Col2" header if it overwrites)
+    // "Col3" -> "4"
+    // "Col4" -> "5"
+    // The assertion should show that only one "Col2" is present.
+
+    // Let's re-read the bug: "HeaderMap returned by the parser misses an entry because of the Column name being used as a key".
+    // This implies that if the header was `A,B,B,C` and data `1,2,3,4`, the map would be `A=1, B=3, C=4`.
+    // The entry for the first `B` would be missed.
+
+    // To reproduce this, we need to inspect the `HeaderMap` or the `Mapping` object it provides.
+    // Assuming `myFormat.parse(in)` returns a `Mapping` that behaves like a `Map<String, String>`
+    // where keys are header names and values are from the first data row.
+
+    // The test should verify that the map contains the expected number of entries *if duplicates were handled correctly*,
+    // or that it contains fewer entries if duplicates are causing issues.
+    // The description implies the latter.
+
+    // Let's assert based on the number of *unique* header names versus the number of entries in the map.
+    // Header names: Col1, Col2, Col2, Col3, Col4 (5 names, 4 unique)
+    // Data row 1: 1, 2, 3, 4, 5
+
+    // If the map is created by iterating headers and overwriting:
+    // Key: "Col1", Value: "1"
+    // Key: "Col2", Value: "2"
+    // Key: "Col2", Value: "3" (overwrites previous "Col2")
+    // Key: "Col3", Value: "4"
+    // Key: "Col4", Value: "5"
+    // The resulting map would be: {"Col1": "1", "Col2": "3", "Col3": "4", "Col4": "5"}
+    // This map has 4 entries.
+
+    // The "failure" is that the `HeaderMap` is inconsistent.
+    // The inconsistency can be demonstrated by checking the number of columns represented.
+    // If the CSV has 5 columns, and the map has only 4 entries, that's an inconsistency.
+
+    // Let's check the size of the map.
+    // If the library correctly handles duplicates (e.g., by throwing an error or by mapping to lists),
+    // the behavior would be different. But based on the description, it's overwriting and losing data.
+
+    // Assert that the map contains specific entries, and that the number of entries is less than expected if all columns were distinct.
+    assertThat(map.get("Col1"), is("1"));
+    // This is the crucial part: if there are duplicate headers, and the map uses them as keys,
+    // the value associated with the *last occurring* duplicate header name will be the one stored.
+    // So, for "Col2", the value stored will be "3" (from the second "Col2" column in the first data row).
+    assertThat(map.get("Col2"), is("3"));
+    assertThat(map.get("Col3"), is("4"));
+    assertThat(map.get("Col4"), is("5"));
+
+    // The actual *bug* is that the `HeaderMap` is inconsistent. The test should demonstrate this.
+    // The inconsistency arises because the map uses header names as keys, and duplicate names lead to overwriting or loss of information.
+    // A more direct way to show this is to check the *size* of the map.
+    // If there are 5 columns (Col1, Col2, Col2, Col3, Col4), and the map only contains 4 entries, that's the inconsistency.
+    // The unique header names are Col1, Col2, Col3, Col4.
+    // If the map correctly represents *all* columns, it would either have more entries (if it mapped to lists of values for duplicates)
+    // or it would error out.
+    // The bug report implies that the map *does not* have an entry for every column *position* if headers are duplicated.
+
+    // Let's assume `map` is an instance of `HeaderMap` or something similar that represents the parsed headers and their corresponding values.
+    // The description says "HeaderMap returned by the parser misses an entry".
+    // This means if we query for a specific header name, we might not get the value that corresponds to that column *position* if the header name was duplicated.
+
+    // Let's assume the `Mapping` object behaves like a Map<String, String> where keys are header names and values are from the first row.
+    // The number of unique headers is 4 (Col1, Col2, Col3, Col4).
+    // The number of actual columns in the header is 5.
+    // If the map has only 4 entries, it means one of the columns is not represented.
+    // The bug is that the map is inconsistent. A simple assertion of the map's size would show this.
+    // The map returned by `myFormat.parse(in)` is a `Mapping<String, String>`.
+    // If it behaves like a standard Map, it will have keys corresponding to the *unique* header names.
+    // In this case, there are 4 unique header names.
+    // So, the map will have 4 entries. This is not necessarily a bug if the library is designed to map unique header names to their last occurring value.
+
+    // The bug description is key: "misses an entry because of the Column name being used as a key".
+    // This means that if you look at the *structure* of the parsed data, you'd expect 5 columns.
+    // But if you look at the `HeaderMap`, you might only find 4 distinct keys.
+
+    // Let's try to get the values for the *second* row as well.
+    // The `Mapping` interface might not directly expose row-by-row access in this context.
+    // The `CSVFormat.parse(in)` returns a `CSVRecordIterator`.
+    // Each `CSVRecord` represents a row.
+    // The `CSVRecord` object has methods like `get(String name)` and `getRecordNumber()`.
+
+    // Let's re-implement the test to use the `CSVRecordIterator`.
+    // The `CSVFormat.parse(in)` returns `Iterable<CSVRecord>`.
+    Iterator<CSVRecord> recordIterator = myFormat.parse(in).iterator();
+
+    // First row
+    assertTrue(recordIterator.hasNext());
+    CSVRecord firstRecord = recordIterator.next();
+    // The `firstRecord.get("Col2")` will return the value for the *last occurring* "Col2" header.
+    // This is "3".
+    assertThat(firstRecord.get("Col1"), is("1"));
+    assertThat(firstRecord.get("Col2"), is("3")); // This is the value from the second "Col2" column.
+    assertThat(firstRecord.get("Col3"), is("4"));
+    assertThat(firstRecord.get("Col4"), is("5"));
+
+    // Second row
+    assertTrue(recordIterator.hasNext());
+    CSVRecord secondRecord = recordIterator.next();
+    // The `secondRecord.get("Col2")` will similarly return the value from the second "Col2" column for the second row.
+    // This is "6".
+    assertThat(secondRecord.get("Col1"), is("4"));
+    assertThat(secondRecord.get("Col2"), is("6"));
+    assertThat(secondRecord.get("Col3"), is("7"));
+    assertThat(secondRecord.get("Col4"), is("8"));
+
+    // The bug is not about accessing values from different rows.
+    // The bug is about the `HeaderMap` itself being inconsistent.
+    // When `withHeader()` is used, the `CSVFormat` creates a `HeaderMap`.
+    // The `HeaderMap` is used internally by `CSVRecord` to map column names to column indices.
+    // If there are duplicate column names, the `HeaderMap` might only store one mapping for that name,
+    // potentially losing track of other columns with the same name.
+
+    // Let's try to access a column by its index if we know the header names are duplicated.
+    // The `CSVRecord.get(int index)` method is available.
+    // We need to know the mapping from header name to index. This is what `HeaderMap` provides.
+
+    // The problem states: "HeaderMap returned by the parser misses an entry because of the Column name being used as a key".
+    // This implies that if we try to get the *index* for a duplicate header name, we might get an incorrect index or an error.
+    // Or, if we iterate through the `HeaderMap` itself, it might not reflect all columns.
+
+    // Let's assume the `CSVFormat`'s `HeaderMap` (which is internal but used by `CSVRecord`) has a bug.
+    // The `CSVRecord` uses `HeaderMap` to resolve `get(String name)`.
+    // If the `HeaderMap` contains `{"Col1": 0, "Col2": 2, "Col3": 3, "Col4": 4}`, it means the first "Col2" (index 1) is lost.
+    // This would mean `firstRecord.get("Col2")` would actually return the value from index 2, which is "3".
+    // This matches our observation above.
+
+    // The test should highlight this loss of mapping for the first duplicate column.
+    // If the `HeaderMap` maps "Col2" to index 2, then the column at index 1 is effectively ignored when using the string name.
+
+    // Let's re-initialize the reader to parse again.
+    in = new StringReader(csvData);
+    recordIterator = myFormat.parse(in).iterator();
+    recordIterator.next(); // Consume the first record
+
+    // Now, let's check the *internal* mapping if possible, or infer it from behavior.
+    // The bug is that the `HeaderMap` is inconsistent.
+    // The `CSVRecord` object has a `Map<String, Integer> mapping` field.
+    // If this mapping is `{"Col1": 0, "Col2": 2, "Col3": 3, "Col4": 4}`, then the column at index 1 (the first "Col2") is lost.
+    // This is the inconsistency.
+
+    // A test that demonstrates this:
+    // If we ask for the value using the name "Col2", we get the value from the *second* "Col2" column.
+    // This is what `firstRecord.get("Col2")` does, and it returns "3".
+    // This is correct *if* the library is designed to map duplicate names to the last occurring column.
+    // However, the bug report says "misses an entry".
+
+    // Let's try to access a column by index to see if it's still there.
+    // The first "Col2" is at index 1.
+    // The second "Col2" is at index 2.
+    // If the `HeaderMap` maps "Col2" to index 2, then `firstRecord.get(1)` should give "2",
+    // but `firstRecord.get("Col2")` gives "3".
+
+    // This implies the `HeaderMap` maps "Col2" to index 2.
+    // The inconsistency is that the column at index 1 is not accessible by its header name "Col2".
+
+    // Let's assert that `firstRecord.get(1)` (which is the first "Col2") is "2".
+    // And `firstRecord.get("Col2")` (which should map to the *last* "Col2" header if overwriting) is "3".
+    // This demonstrates that the mapping for the first "Col2" is lost.
+
+    // Re-parse to get a fresh iterator.
+    in = new StringReader(csvData);
+    recordIterator = myFormat.parse(in).iterator();
+
+    assertTrue(recordIterator.hasNext());
+    CSVRecord record = recordIterator.next();
+
+    // Assert the value of the column at index 1 (the first 'Col2')
+    assertThat(record.get(1), is("2"));
+
+    // Assert the value obtained using the header name 'Col2'.
+    // If the HeaderMap maps 'Col2' to index 2 (the second 'Col2'), this will be "3".
+    assertThat(record.get("Col2"), is("3"));
+
+    // This confirms that the column at index 1 is not accessible via the name "Col2",
+    // demonstrating that the mapping for the first "Col2" is lost.
+    // The `HeaderMap` is inconsistent because it doesn't provide a mapping for every column position when header names are duplicated.
+}

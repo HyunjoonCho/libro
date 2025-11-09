@@ -1,0 +1,117 @@
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.junit.MockitoJUnitRunner;
+
+import static org.junit.Assert.assertEquals;
+
+// Assuming AbstractClass, ClassExtendsAbstractClass, and A are defined as in the bug report
+
+@RunWith(MockitoJUnitRunner.class)
+public class MockitoIssueTest {
+
+    // Define the abstract class and its implementation locally for the test
+    abstract static class AbstractClass {
+        abstract protected Long lol();
+        abstract protected String wow();
+        public String give() {
+            wow();
+            lol();
+            return "give";
+        }
+    }
+
+    static class ClassExtendsAbstractClass extends AbstractClass {
+        @Override
+        protected Long lol() {
+            return 2L;
+        }
+        @Override
+        protected String wow() {
+            return "WOW";
+        }
+    }
+
+    static class A {
+      private AbstractClass classExtendsAbstractClass; // Changed to AbstractClass to allow mocking
+      public A(AbstractClass classExtendsAbstractClass) {
+        this.classExtendsAbstractClass = classExtendsAbstractClass;
+      }
+      public String doSomeThing(){
+        return classExtendsAbstractClass.wow();
+      }
+       public String doGiveThing(){
+        return classExtendsAbstractClass.give();
+      }
+    }
+
+
+    @Mock
+    private AbstractClass mockAbstractClass; // Mock the abstract class directly
+    private A a;
+
+    @Before
+    public void before() {
+        // Mocking the give() method on the abstract class.
+        // The original bug report was mocking a concrete class that extended an abstract class.
+        // To reproduce the error using Mockito, we need to mock the abstract class itself.
+        // The error occurs because Mockito tries to determine the return type for all abstract methods
+        // when setting up a mock, even if those methods are not directly called in the stubbed method.
+        Mockito.when(mockAbstractClass.give()).thenReturn("aaa");
+    }
+
+    @Test
+    public void testWrongTypeOfReturnValueWhenAbstractClassHaveTwoAbstractMethods() {
+        // Initialize A with the mocked abstract class
+        a = new A(mockAbstractClass);
+
+        // The assertion here is not directly testing the return value of doSomeThing(),
+        // but rather ensuring that the setup of the mock and the instantiation of A
+        // does not throw the WrongTypeOfReturnValue exception.
+        // The exception is thrown during the Mockito.when(mockAbstractClass.give()).thenReturn("aaa"); line
+        // if the abstract class has multiple abstract methods and Mockito incorrectly tries to infer
+        // return types for methods not involved in the stubbing.
+
+        // To make this test pass without the exception, the underlying Mockito issue needs to be fixed.
+        // This test is designed to *fail* with the described exception.
+        // If this test passes, it means the bug has been fixed in the Mockito version being used.
+
+        // We can add an assertion that would fail if the exception were not thrown,
+        // but the primary goal is to trigger the exception.
+        // For demonstration, let's try to call the method that would indirectly call the abstract methods.
+        // The bug report states that the error occurs during the `when` setup, not during the actual call.
+        // However, if the setup passes, the call might still fail if the mocking is fundamentally broken.
+
+        // Let's try to trigger the mocked method.
+        // If the 'before' setup failed, this test would already have thrown an exception.
+        // If it didn't fail, we can proceed.
+        // The original bug implies the problem is in the mocking setup itself.
+        // This test is structured to reproduce the setup error.
+        
+        // The actual test to reproduce the bug is the setup in the @Before method.
+        // If the @Before method executes without throwing WrongTypeOfReturnValue, the bug is fixed.
+        // Therefore, this test method's purpose is to *cause* the exception.
+        // If this test method completes execution, it means the exception was NOT thrown.
+        // To make it a failing test when the bug IS present, we can add an assertion that should pass
+        // only if the bug is fixed.
+        
+        // If the bug is present, the @Before method will throw an exception and this test won't even run.
+        // If the bug is fixed, the @Before method will succeed, and this test will run.
+        // So, to make this a "reproducing the failure" test, we expect it to fail.
+        // A simple way to ensure this test *would* fail if the bug is present is to have an assertion
+        // that relies on the mocked behavior.
+
+        // Let's test the doGiveThing method which calls the mocked give() method.
+        // If the mocking setup in @Before was successful (meaning the bug is fixed), this should work.
+        assertEquals("aaa", a.doGiveThing());
+
+        // The core of reproducing the bug is the @Before method. If that method throws the exception,
+        // this test method will not even be reached. If this test method *is* reached, it implies
+        // the bug described in the report has been fixed in the Mockito version used.
+        // Therefore, this test method is structured to *pass* if the bug is fixed, and *fail*
+        // (by not being executed due to an exception in @Before) if the bug is present.
+        // This is a common way to write tests for bugs: the test passes when the bug is fixed.
+    }
+}

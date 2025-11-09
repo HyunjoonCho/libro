@@ -1,0 +1,35 @@
+public void testPreserveCaseParsing() {
+    Parser parser = Parser.htmlParser();
+    parser.settings(ParseSettings.preserveCase);
+    String html = "<div class=\"bdsharebuttonbox\">"
+            + "<A class=bds\_more href=\"http://share.baidu.com/code#\" data-cmd=\"more\">分享到：</A>"
+            + "<A title=分享到QQ空间 class=bds\_qzone href=\"http://share.baidu.com/code#\" data-cmd=\"qzone\">"
+            + "</A><A title=分享到新浪微博 class=bds\_tsina href=\"http://share.baidu.com/code#\" data-cmd=\"tsina\"></A>"
+            + "<A title=分享到腾讯微博 class=bds\_tqq href=\"http://share.baidu.com/code#\" data-cmd=\"tqq\"></A>"
+            + "<A title=分享到人人网 class=bds\_renren href=\"http://share.baidu.com/code#\" data-cmd=\"renren\"></A>"
+            + "<A title=分享到微信 class=bds\_weixin href=\"http://share.baidu.com/code#\" data-cmd=\"weixin\"></A>"
+            + "</div>";
+    Document doc = Jsoup.parse(html, "", parser);
+    // The issue is that preserveCase causes nested tags to be incorrectly parsed.
+    // We assert that the structure is not as expected, indicating the bug.
+    // A correct parsing would result in a flat list of <a> tags within the div.
+    // This assertion checks for an incorrect nested structure.
+    Elements links = doc.select("div.bdsharebuttonbox").select("a");
+    // If preserveCase is working correctly, we should have 5 direct children 'a' tags.
+    // The bug causes incorrect nesting, leading to fewer direct children than expected in some scenarios,
+    // or incorrect attributes being applied. Here we check the direct children count.
+    // In the buggy output, the first 'A' tag is not correctly closed and subsequent tags are nested within it.
+    // Thus, the direct children count of the div might not be as expected.
+    // A more robust check would be to examine the attributes of each link, but checking
+    // the direct children count of the div is a good indicator of the parsing error.
+    // The buggy output has a structure where the first 'A' tag is not properly closed,
+    // and subsequent 'A' tags are nested within it. This leads to the div having
+    // fewer direct 'a' tag children than it should.
+    assertEquals("Incorrect number of direct 'a' tags found. Expected 5, but found " + links.size(), 5, links.size());
+
+    // Additionally, check if the attributes are preserved correctly for the first link.
+    Element firstLink = links.first();
+    assertEquals("Incorrect class attribute for the first link.", "bds_more", firstLink.attr("class"));
+    assertEquals("Incorrect href attribute for the first link.", "http://share.baidu.com/code#", firstLink.attr("href"));
+    assertEquals("Incorrect data-cmd attribute for the first link.", "more", firstLink.attr("data-cmd"));
+}

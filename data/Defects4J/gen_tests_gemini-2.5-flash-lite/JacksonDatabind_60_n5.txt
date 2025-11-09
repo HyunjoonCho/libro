@@ -1,0 +1,98 @@
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Arrays;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+
+public class PolymorphicTypeLostTest {
+
+    private static class RemoteCall {
+        private Object[] args;
+
+        @JsonCreator
+        public RemoteCall(@JsonProperty("args") Object[] args) {
+            this.args = args;
+        }
+
+        public Object[] getArgs() {
+            return args;
+        }
+    }
+
+    private static class CommandAPDU {
+        private byte[] apdu;
+
+        @JsonCreator
+        public CommandAPDU(@JsonProperty("bytes") byte[] apdu) {
+            this.apdu = apdu.clone();
+            // Simulate parsing logic if needed
+        }
+
+        @JsonValue
+        public byte[] getBytes() {
+            return apdu.clone();
+        }
+
+        // For testing deserialization without @JsonValue on the getter
+        public byte[] getApdu() {
+            return apdu;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CommandAPDU that = (CommandAPDU) o;
+            return Arrays.equals(apdu, that.apdu);
+        }
+
+        @Override
+        public int hashCode() {
+            return Arrays.hashCode(apdu);
+        }
+    }
+
+    @Test
+    public void testPolymorphicTypeLostWithJsonValue() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+        mapper.enableDefaultTyping(); // This enables default typing
+
+        // Create an instance of CommandAPDU
+        byte[] originalBytes = {0x01, 0x02, 0x03, 0x04};
+        CommandAPDU commandAPDU = new CommandAPDU(originalBytes);
+
+        // Create a RemoteCall object containing CommandAPDU
+        RemoteCall remoteCall = new RemoteCall(new Object[]{commandAPDU});
+
+        // Serialize the RemoteCall object
+        String json = mapper.writeValueAsString(remoteCall);
+
+        // The bug description implies that the type information for CommandAPDU
+        // might be lost or misrepresented when @JsonValue is used on the getter,
+        // leading to deserialization issues.
+        // Specifically, it suggests that it might deserialize to "[B" (byte array)
+        // instead of using the @JsonCreator constructor.
+
+        // Deserialize the JSON back into a RemoteCall object
+        RemoteCall deserializedRemoteCall = mapper.readValue(json, RemoteCall.class);
+
+        // Retrieve the deserialized object that was originally a CommandAPDU
+        Object deserializedObject = deserializedRemoteCall.getArgs()[0];
+
+        // Assert that the deserialized object is an instance of CommandAPDU
+        // and that its content matches the original CommandAPDU.
+        // The bug report suggests that it might deserialize to a byte array ([B)
+        // or something else that is not a CommandAPDU instance.
+        // We are asserting that it *should* be a CommandAPDU and have the correct content.
+        assertEquals("Deserialized object should be an instance of CommandAPDU", CommandAPDU.class, deserializedObject.getClass());
+        assertArrayEquals("Deserialized CommandAPDU should have the correct byte content", originalBytes, ((CommandAPDU) deserializedObject).getApdu());
+    }
+}

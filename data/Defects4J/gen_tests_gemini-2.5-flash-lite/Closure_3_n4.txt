@@ -1,0 +1,59 @@
+public void testCatchClauseVariableOptimization() {
+    // This test is designed to reproduce the described behavior in a JavaScript engine.
+    // Since we are writing a JUnit test for Java code, we will simulate the scenario
+    // by using a JavaScript engine and executing the problematic code.
+    // The actual assertion will check if the JavaScript execution produces an error
+    // that indicates the variable 'a' is out of scope or undefined, which is the
+    // expected outcome of the described incorrect optimization.
+
+    ScriptEngineManager manager = new ScriptEngineManager();
+    ScriptEngine engine = manager.getEngineByName("JavaScript");
+
+    String script = "function getStack() {" +
+                    " var getErrorObject = function() {" +
+                    " try {" +
+                    " throw Error('');" +
+                    " } catch(err) {" +
+                    " return err;" +
+                    " }" +
+                    " };" +
+                    " return getErrorObject().stack;" +
+                    "}";
+
+    String optimizedScript = "function getStack() { " +
+                             " try { " +
+                             " throw Error(''); " +
+                             " } " +
+                             " catch(a) { " +
+                             " } " +
+                             " return a.stack }"; // This line is expected to cause an error
+
+    try {
+        engine.eval(script); // Execute the correct version first to ensure the engine is working
+        Object resultCorrect = engine.eval("getStack()");
+        assertNotNull(resultCorrect); // Ensure the correct version works
+
+        // Now evaluate the optimized script which is supposed to fail
+        engine.eval(optimizedScript);
+        // If the above line does not throw an exception, it means the optimization
+        // did not cause the expected error. We then try to execute the function.
+        // If 'a' is indeed out of scope, this execution should throw a ReferenceError.
+        try {
+            engine.eval("getStack()");
+            fail("Expected a ReferenceError because the variable 'a' should be out of scope after the catch block.");
+        } catch (ScriptException e) {
+            // We expect a ScriptException. The important part is to check if the error message
+            // indicates an issue with 'a' being undefined or out of scope.
+            // The exact message might vary slightly between JavaScript engines.
+            assertTrue("Error message should indicate 'a' is not defined or out of scope.",
+                       e.getMessage().contains("a is not defined") ||
+                       e.getMessage().contains("ReferenceError: a is not defined"));
+        }
+    } catch (ScriptException e) {
+        // This catch block handles errors during the initial evaluation of the scripts.
+        // If the optimized script evaluation itself throws an error that is NOT the
+        // expected ReferenceError for 'a', we should report it.
+        // However, the primary goal is to catch the 'a.stack' access issue.
+        fail("An unexpected ScriptException occurred during script evaluation: " + e.getMessage());
+    }
+}

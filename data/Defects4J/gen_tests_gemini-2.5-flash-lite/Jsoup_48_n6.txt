@@ -1,0 +1,59 @@
+public void testDuplicateHeaderValue() throws IOException {
+    String html = "<!DOCTYPE html>\n" +
+            "<html>\n" +
+            "<head>\n" +
+            "<title>Test Page</title>\n" +
+            "</head>\n" +
+            "<body>\n" +
+            "<h1>Hello</h1>\n" +
+            "</body>\n" +
+            "</html>";
+    MockWebServer server = new MockWebServer();
+    server.enqueue(new MockResponse().setBody(html)
+            .addHeader("X-Powered-By", "PHP/5.2.8")
+            .addHeader("X-Powered-By", "ASP.NET"));
+    server.enqueue(new MockResponse().setBody(html)
+            .addHeader("Content-Type", "text/html"));
+    server.enqueue(new MockResponse().setBody(html)
+            .addHeader("Set-Cookie", "sessionid=12345; path=/; secure")
+            .addHeader("Set-Cookie", "userid=abcde; path=/"));
+    server.enqueue(new MockResponse().setBody(html)
+            .addHeader("Location", "/new/page")
+            .addHeader("Location", "/another/page"));
+    server.enqueue(new MockResponse().setBody(html)
+            .addHeader("Cache-Control", "no-cache")
+            .addHeader("Cache-Control", "no-store"));
+
+    server.start();
+    String url = server.url("/").toString();
+    Connection connection = Jsoup.connect(url);
+    Document doc = connection.get();
+
+    // Test for duplicate X-Powered-By header
+    // The original implementation would only return the last value.
+    // The fix concatenates values.
+    String poweredBy = doc.connection().response().header("X-Powered-By");
+    assertTrue(poweredBy.contains("PHP/5.2.8"));
+    assertTrue(poweredBy.contains("ASP.NET"));
+
+    // Test for duplicate Set-Cookie header - each should be processed individually
+    // The original implementation would only process the first Set-Cookie header.
+    // The fix iterates through all Set-Cookie headers.
+    Map<String, String> cookies = doc.connection().response().cookies();
+    assertTrue(cookies.containsKey("sessionid"));
+    assertEquals("12345", cookies.get("sessionid"));
+    assertTrue(cookies.containsKey("userid"));
+    assertEquals("abcde", cookies.get("userid"));
+
+    // Test for duplicate Location header
+    String location = doc.connection().response().header("Location");
+    assertTrue(location.contains("/new/page"));
+    assertTrue(location.contains("/another/page"));
+
+    // Test for duplicate Cache-Control header
+    String cacheControl = doc.connection().response().header("Cache-Control");
+    assertTrue(cacheControl.contains("no-cache"));
+    assertTrue(cacheControl.contains("no-store"));
+
+    server.shutdown();
+}

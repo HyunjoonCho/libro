@@ -1,0 +1,41 @@
+public void testCorrelatedRandomVectorGeneratorFailsWithZeroRows() {
+    // Covariance matrix with a row of zeros
+    double[][] covArray = {
+        {0.013445532, 0.01039469, 0.0, 0.009881156, 0.010499559},
+        {0.01039469, 0.023006616, 0.0, 0.008196856, 0.010732709},
+        {0.0, 0.0, 0.0, 0.0, 0.0}, // This row causes the issue
+        {0.009881156, 0.008196856, 0.0, 0.019023866, 0.009210099},
+        {0.010499559, 0.010732709, 0.0, 0.009210099, 0.019107243}
+    };
+    RealMatrix covarianceMatrix = MatrixUtils.createRealMatrix(covArray);
+    
+    // Create a CorrelatedRandomVectorGenerator
+    // Use a seed for reproducibility
+    CorrelatedRandomVectorGenerator generator = new CorrelatedRandomVectorGenerator(covarianceMatrix, 1.0e-10, new MersenneTwister(1234));
+
+    // Attempt to generate a random vector.
+    // The issue is that the generator might not throw an exception or might produce
+    // incorrect results when the covariance matrix has a row of zeros,
+    // leading to a rank deficiency that the RectangularCholeskyDecomposition doesn't handle gracefully.
+    // We are asserting that it should at least produce a result without error,
+    // and ideally, the rank reported should be correct (which is 4 in this case, not 5).
+    // The original bug report implies that the rank calculation or the decomposition itself fails silently.
+    // We'll check the rank here.
+    
+    // The expected rank of this matrix is 4. If it incorrectly reports 5, it indicates a problem.
+    // The RectangularCholeskyDecomposition should handle rank deficiency.
+    // The original bug implies the rank is reported as 5 when it should be 4.
+    assertEquals(4, generator.getRank());
+
+    // Additionally, let's attempt to get a sample. If the decomposition failed, this might throw an exception
+    // or produce NaN/Infinity values. For this test, we'll just ensure it doesn't throw an unexpected exception
+    // and that the generated values are finite.
+    try {
+        double[] sample = generator.nextVector();
+        for (double value : sample) {
+            assertTrue(Double.isFinite(value));
+        }
+    } catch (Exception e) {
+        fail("Generating a vector should not throw an exception for this covariance matrix. Exception: " + e.getMessage());
+    }
+}

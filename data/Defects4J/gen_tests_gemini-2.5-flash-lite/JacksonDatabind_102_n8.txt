@@ -1,0 +1,59 @@
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.ser.std.SqlDateSerializer;
+
+import java.sql.Date;
+import java.text.SimpleDateFormat;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class SqlDateSerializerTest {
+
+    @Test
+    public void testSqlDateSerializationWithCustomFormat() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configOverride(java.sql.Date.class).setFormat(JsonFormat.Value.forPattern("yyyy-MM-dd"));
+
+        // Test serialization
+        java.sql.Date date = java.sql.Date.valueOf("2023-10-26");
+        String serializedDate = mapper.writeValueAsString(date);
+        assertEquals("\"2023-10-26\"", serializedDate, "SQL Date should be serialized with the custom format.");
+
+        // Test deserialization (optional, but good practice)
+        java.sql.Date deserializedDate = mapper.readValue(serializedDate, java.sql.Date.class);
+        assertEquals(date, deserializedDate, "SQL Date should be deserialized correctly.");
+    }
+
+    @Test
+    public void testSqlDateSerializationWithModuleOverride() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new SimpleModule() {
+            {
+                addSerializer(
+                        java.sql.Date.class,
+                        new SqlDateSerializer().withFormat(false, new SimpleDateFormat("yyyy-MM-dd"))
+                );
+            }
+        });
+
+        // Test serialization
+        java.sql.Date date = java.sql.Date.valueOf("2023-10-26");
+        String serializedDate = mapper.writeValueAsString(date);
+        assertEquals("\"2023-10-26\"", serializedDate, "SQL Date should be serialized with the custom format via module override.");
+
+        // Test deserialization (optional, but good practice)
+        java.sql.Date deserializedDate = mapper.readValue(serializedDate, java.sql.Date.class);
+        assertEquals(date, deserializedDate, "SQL Date should be deserialized correctly via module override.");
+    }
+
+    @Test
+    public void testUtilDateSerializationDefault() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        java.util.Date utilDate = new java.util.Date();
+        String serializedUtilDate = mapper.writeValueAsString(utilDate);
+        // Default is numeric timestamp
+        assertEquals(utilDate.getTime(), Long.parseLong(serializedUtilDate), "java.util.Date should serialize as a number by default.");
+    }
+}

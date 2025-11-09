@@ -1,0 +1,61 @@
+public void testStringCollectionDeserializerFailsWithCustomCollection() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    // Configure the mapper to use the immutable version of the custom collection for deserialization
+    SimpleModule module = new SimpleModule();
+    module.addDeserializer(CustomCollection.class, new CustomCollectionDeserializer(ImmutableCustomCollection.class));
+    mapper.registerModule(module);
+
+    // Create a simple object that contains the custom collection of strings
+    ObjectWithCustomCollection obj = new ObjectWithCustomCollection();
+    obj.customCollection = new ImmutableCustomCollection();
+    obj.customCollection.add("test");
+
+    // Serialize the object
+    String json = mapper.writeValueAsString(obj);
+
+    // Deserialize the object - this is where the failure occurs
+    mapper.readValue(json, ObjectWithCustomCollection.class);
+}
+
+// Dummy classes to reproduce the issue
+static class ObjectWithCustomCollection {
+    public CustomCollection<String> customCollection;
+}
+
+static abstract class CustomCollection<T> extends java.util.ArrayList<T> {
+    // Intentionally no default no-arguments constructor
+    public CustomCollection() {
+    }
+
+    public CustomCollection(java.util.Collection<? extends T> c) {
+        super(c);
+    }
+}
+
+static class ImmutableCustomCollection extends CustomCollection<String> {
+    // Intentionally no default no-arguments constructor
+    public ImmutableCustomCollection() {
+    }
+
+    public ImmutableCustomCollection(java.util.Collection<? extends String> c) {
+        super(c);
+    }
+}
+
+static class CustomCollectionDeserializer extends com.fasterxml.jackson.databind.deser.std.CollectionDeserializer {
+    public CustomCollectionDeserializer(Class<? extends java.util.Collection> collectionType) {
+        // Need to pass a reference to the collection type to the super constructor
+        // This is a simplified representation; a real deserializer would handle this more robustly.
+        super(
+                new com.fasterxml.jackson.databind.type.CollectionType(
+                        new com.fasterxml.jackson.databind.type.TypeFactory().constructType(collectionType),
+                        null, null, null, null, null),
+                null, null, null, null);
+    }
+
+    // Override canCreateUsingDefault to return false for custom collections without default constructor
+    @Override
+    protected boolean canCreateUsingDefault(com.fasterxml.jackson.databind.DeserializationContext ctxt) {
+        return false;
+    }
+}

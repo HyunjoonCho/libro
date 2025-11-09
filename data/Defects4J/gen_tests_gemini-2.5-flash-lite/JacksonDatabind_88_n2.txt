@@ -1,0 +1,194 @@
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+import org.junit.Test;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+public class JavaTypeTest {
+
+    @Test
+    public void testPolymorphicTypeIds() {
+        TypeFactory typeFactory = TypeFactory.defaultInstance();
+
+        // Example: A superclass and a subclass
+        JavaType superClass = typeFactory.constructType(List.class);
+        JavaType subClass = typeFactory.constructType(ArrayList.class);
+
+        // This should ideally fail or indicate incompatibility if strict checks were in place
+        // The bug implies that it might incorrectly suggest compatibility or proceed without proper checks.
+        // We are testing the *absence* of a check that *should* be there.
+        // If the current implementation *does* correctly identify incompatibility, this test will pass,
+        // but it's designed to catch the scenario described in the bug.
+
+        // Let's simulate a scenario where a check *should* prevent assignment.
+        // For instance, trying to assign a List<String> to a List<Integer> conceptually.
+        // However, JavaType itself doesn't directly represent parameterized types in this simple construct.
+        // The bug description is a bit abstract. Let's focus on the core idea:
+        // Can we construct JavaTypes that *should* be incompatible but might pass some internal checks?
+
+        // A more concrete interpretation based on the description:
+        // If JavaType had a method like `isAssignableTo`, we'd test that.
+        // Since it doesn't directly expose that for generic types in a way that clearly shows the bug,
+        // we'll test a related concept: constructing types that might be confused.
+
+        // Let's consider the `isContainerType` and `getContentType` methods.
+        // If `List` and `ArrayList` are treated polymorphically, how are their contents handled?
+
+        JavaType listOfString = typeFactory.constructParametricType(List.class, String.class);
+        JavaType arrayListOfInteger = typeFactory.constructParametricType(ArrayList.class, Integer.class);
+
+        // The bug suggests that checks might be missing, leading to potentially incorrect assumptions
+        // about compatibility, especially in polymorphic scenarios.
+        // If `isTypeOrSuperSubTypeOf` were to incorrectly return true for incompatible generic types,
+        // that would be the bug.
+
+        // Let's assume the bug is about `isTypeOrSuperSubTypeOf` incorrectly identifying compatibility
+        // between parameterized types that are not compatible.
+        // We can't directly assert `false` if the method *should* return false but currently returns true.
+        // Instead, we'll demonstrate the construction of types that *could* be problematic if not checked carefully.
+
+        // The description mentions "type compatibility checks". Let's look for a place where such a check
+        // might be bypassed. The `JavaType` class itself doesn't have public methods for direct
+        // compatibility checks between arbitrary generic types that would clearly demonstrate this bug
+        // in isolation without deeper knowledge of Jackson's internals or specific usage patterns.
+
+        // However, the core issue is likely within methods that *use* JavaType for comparisons.
+        // Let's try to construct types that *seem* similar but are fundamentally different.
+
+        JavaType listOfObject = typeFactory.constructParametricType(List.class, Object.class);
+        JavaType listOfString2 = typeFactory.constructParametricType(List.class, String.class);
+
+        // If `JavaType` had a method `isMoreSpecificThan(JavaType other)`, and it incorrectly
+        // returned true for `listOfString2` vs `listOfObject` in a way that implies assignment,
+        // that would be the bug.
+
+        // Given the limitations of testing `JavaType` in isolation for this specific bug without
+        // knowing the exact internal method being abused, we'll focus on constructing types
+        // that highlight the potential for confusion in polymorphic scenarios.
+
+        // Let's re-read: "some of type compatibility checks are not performed".
+        // This implies that a method that *should* return false might be returning true, or
+        // simply not being called.
+
+        // Consider a scenario where we have a base type and try to check if a more specific
+        // (but incompatible) type is a subtype.
+        JavaType baseMapType = typeFactory.constructType(Map.class);
+        JavaType specificMapType = typeFactory.constructParametricType(HashMap.class, String.class, Integer.class);
+
+        // If `baseMapType.isTypeOrSuperSubTypeOf(specificMapType)` incorrectly returns true
+        // when it shouldn't (e.g., if the generic parameters were mismatched in a way that
+        // should prevent subtype relationship), that would be the bug.
+
+        // Since we don't have access to the specific internal method call that fails,
+        // this test aims to create the conditions that *could* trigger such a failure
+        // if the checks are indeed missing. The bug report suggests `JavaType` *supports*
+        // limited generic typing, implying these checks might be applied inconsistently.
+
+        // Let's assume the bug is in a method like `isCompatibleWith`.
+        // We can't directly test a private method.
+
+        // The most direct interpretation of "Missing type checks when using polymorphic type ids"
+        // in the context of `JavaType` is that when dealing with complex, possibly nested generic types,
+        // the system might fail to verify that a type `A` can actually hold instances of type `B`,
+        // especially when `B` is derived polymorphically.
+
+        // Let's try constructing types that are structurally similar but semantically different
+        // in a way that polymorphic assignment would fail.
+        JavaType listOfListOfString = typeFactory.constructParametricType(List.class,
+                typeFactory.constructParametricType(List.class, String.class));
+        JavaType listOfListOfInteger = typeFactory.constructParametricType(List.class,
+                typeFactory.constructParametricType(List.class, Integer.class));
+
+        // The bug implies that a check might be missing that would prevent `listOfListOfString`
+        // from being considered compatible with `listOfListOfInteger` in a context where
+        // assignment is attempted.
+
+        // Without knowing the exact method, we simulate the *potential* for failure.
+        // If `JavaType` had a method `canAssignFrom(JavaType otherType)`, and it returned true
+        // for `listOfListOfString.canAssignFrom(listOfListOfInteger)` incorrectly, that would be the bug.
+
+        // Since we are asked to reproduce the *failure*, and the failure is a *missing check*,
+        // the test should ideally demonstrate a scenario where an incorrect assumption is made.
+        // The description is quite high-level.
+
+        // Let's try a simpler case that might expose a flaw in generic type comparison.
+        JavaType stringType = typeFactory.constructType(String.class);
+        JavaType objectType = typeFactory.constructType(Object.class);
+
+        // If `objectType.isTypeOrSuperSubTypeOf(stringType)` returns true (which it should),
+        // this is correct. The bug is when *incompatible* types are treated as compatible.
+
+        // Let's consider the possibility that the bug relates to `isActualType` or similar methods
+        // in the context of polymorphic deserialization.
+        // The `JavaType` itself might not be the direct source of the bug, but its representation
+        // of types could be mishandled.
+
+        // Let's try to construct a scenario that might lead to a `ClassCastException` later if
+        // type checks are indeed missing during polymorphic deserialization.
+        // The bug implies that `JavaType` might not correctly represent the generic constraints
+        // needed for these checks.
+
+        // Final attempt at interpreting the bug: The `JavaType` system might not properly
+        // distinguish between `List<String>` and `List<Integer>` when performing subtype checks
+        // in a polymorphic context, leading to incorrect assumptions about assignability.
+
+        // We'll construct these types and assert that they are *not* considered subtypes of each other,
+        // assuming that if the bug exists, a check is missing and this assertion *might* fail
+        // in the buggy version (though it's more likely the buggy version would allow an unsafe assignment).
+        // Since we can't directly test the *failure* of a missing check (which would manifest as
+        // incorrect behavior elsewhere), we test the *correct* behavior that the bug violates.
+        // If this test passes, it means the current implementation *does* have the check.
+        // To *reproduce* the failure, we'd need to know *which* check is missing.
+
+        // Let's assume the bug lies in `isContainerType` or related generic handling.
+        // The description is vague, so we'll create a test that *would* fail if generic subtype
+        // checks were improperly implemented.
+
+        JavaType listStringType = typeFactory.constructParametricType(List.class, String.class);
+        JavaType listIntegerType = typeFactory.constructParametricType(List.class, Integer.class);
+
+        // If the bug exists, a method like `isTypeOrSuperSubTypeOf` might incorrectly return true
+        // when comparing `listStringType` and `listIntegerType` in a polymorphic context,
+        // or when checking if `listStringType` is assignable to `listIntegerType`.
+
+        // The most robust way to reproduce the *failure* is to trigger the condition described.
+        // The description implies that `JavaType` itself might not be strict enough.
+        // Let's try to construct a scenario where `isTypeOrSuperSubTypeOf` might be misused.
+
+        // Consider a scenario where a base type is checked against a derived type.
+        JavaType baseList = typeFactory.constructType(List.class);
+        JavaType derivedArrayList = typeFactory.constructType(ArrayList.class);
+
+        // This is generally fine. The issue is with generics.
+        // Let's go back to the parameterized types.
+
+        JavaType stringList = typeFactory.constructParametricType(List.class, String.class);
+        JavaType objectList = typeFactory.constructParametricType(List.class, Object.class);
+
+        // The bug implies that in some polymorphic scenarios, `stringList` might be treated
+        // as compatible with `objectList` in a way that bypasses checks.
+
+        // Since we cannot directly assert a *missing* check, we assert the *expected correct behavior*
+        // that the bug report implies is *not* happening. If this assertion fails, it means
+        // the bug is present.
+
+        // Assert that a List<String> is NOT a subtype of List<Integer>
+        assertFalse("List<String> should not be considered a subtype of List<Integer>",
+                    stringList.isTypeOrSuperSubTypeOf(listIntegerType));
+
+        // Assert that a List<String> is NOT a supertype of List<Integer>
+        assertFalse("List<String> should not be considered a supertype of List<Integer>",
+                    stringList.isSuperSubTypeOf(listIntegerType));
+
+        // Assert that List<Integer> is NOT a subtype of List<String>
+        assertFalse("List<Integer> should not be considered a subtype of List<String>",
+                    listIntegerType.isTypeOrSuperSubTypeOf(stringList));
+
+        // The core of the bug seems to be related to how `JavaType` handles generic parameters
+        // in subtype checks, particularly in polymorphic contexts. The provided description
+        // is abstract, but the implication is that incompatible generic types might pass checks.
+        // The tests above verify the *correct* behavior, which the bug implies is *not* occurring.
+        // If these assertions pass, the bug is fixed or not present in this test case.
+        // To reproduce the failure, one would expect one of these `assertFalse` calls to fail.
+    }
+}

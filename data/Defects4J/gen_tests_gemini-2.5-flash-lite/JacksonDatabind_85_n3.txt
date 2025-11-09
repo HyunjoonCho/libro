@@ -1,0 +1,81 @@
+public void testDateTimeSerializerBaseIgnoresFormat() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.addSerializer(Date.class, new MyCustomDateSerializer());
+    mapper.registerModule(module);
+
+    Date date = new Date();
+    String json = mapper.writeValueAsString(date);
+
+    // This assertion is based on the assumption that the default ISO8601 format
+    // would be used if the bug were present, and a custom format would be preserved.
+    // We'll check if the output matches ISO8601, implying the custom format was ignored.
+    // If the bug is fixed, this assertion would likely fail and need adjustment
+    // to check for a different format if one was intended.
+    // For the purpose of reproducing the bug, we expect the ISO8601 format.
+    // A more robust test would involve a custom format specified via @JsonFormat
+    // on a POJO, but this simplified test demonstrates the core issue with serializer creation.
+    assertTrue(json.startsWith("\"") && json.endsWith("\"")); // Basic check for String serialization
+    // Further checks could involve parsing the string and verifying the format.
+    // For example, if the custom serializer was intended to output "yyyy-MM-dd",
+    // and it outputs ISO8601, the test would fail.
+    // Since the bug report doesn't provide a concrete custom format to test against,
+    // we'll assume a scenario where a custom format *should* be applied but isn't.
+    // The absence of a custom format in the output, when one should be present,
+    // is the key indicator of the bug.
+
+    // To make this test more specific to the bug description, let's assume a POJO
+    // with @JsonFormat annotation.
+    class MyDateContainer {
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT")
+        public Date date = new Date(1678886400000L); // March 15, 2023 12:00:00 PM GMT
+    }
+
+    String jsonWithAnnotation = mapper.writeValueAsString(new MyDateContainer());
+
+    // If the bug is present, the serializer will ignore the @JsonFormat and use
+    // StdDateFormat.DATE_FORMAT_STR_ISO8601.
+    // If the bug is fixed, it should respect the pattern "yyyy-MM-dd HH:mm:ss".
+    // We expect the output to NOT be in the specified format if the bug exists.
+    // The exact output of StdDateFormat.DATE_FORMAT_STR_ISO8601 is "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
+    // So, if the bug is present, the output should look like ISO8601.
+    // If fixed, it should look like "yyyy-MM-dd HH:mm:ss".
+
+    // Let's assert that the output *does not* match the expected custom format,
+    // which implies the bug is present and the default format is being used.
+    // This is a bit reverse, but it directly tests the symptom described.
+    assertFalse("Output format should not be ISO8601 if custom format is applied",
+                jsonWithAnnotation.contains("T") && jsonWithAnnotation.contains("."));
+
+    // To be more precise, let's check if it *does* match the ISO8601 format
+    // as implied by the bug description's fix for the serializer.
+    // This is a strong indicator that the wrong format was used.
+    // The exact ISO8601 format is "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
+    // The date 1678886400000L corresponds to 2023-03-15T12:00:00.000Z (GMT)
+    // So we expect something like: "2023-03-15T12:00:00.000Z"
+    // The actual output might vary slightly in milliseconds or timezone representation depending on StdDateFormat implementation details.
+    // A simpler check is to see if it contains 'T' which is characteristic of ISO8601.
+    assertTrue("Output format appears to be ISO8601, indicating custom format was ignored.",
+               jsonWithAnnotation.contains("T"));
+}
+
+// Dummy serializer to trigger the createContextual logic in DateTimeSerializerBase
+static class MyCustomDateSerializer extends JsonSerializer<Date> {
+    @Override
+    public void serialize(Date value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+        gen.writeString(value.toString()); // Basic serialization, not the focus
+    }
+
+    @Override
+    public JsonSerializer<?> createContextual(SerializerProvider ctxt, BeanProperty property) throws JsonMappingException {
+        // This is the method that the bug report claims has the issue.
+        // We are not changing its implementation here, just ensuring it's called.
+        // The original bug is in the implementation of this method within DateTimeSerializerBase.
+        // The test is designed to trigger this method and observe its behavior via the output.
+        return super.createContextual(ctxt, property);
+    }
+}
+
+// Mock DateFormat for testing purposes if needed, but StdDateFormat is usually available.
+// If StdDateFormat is not directly accessible or behaves differently in test environment,
+// a mock might be necessary. For this bug, focusing on the behavior of StdDateFormat.DATE_FORMAT_STR_ISO8601 is key.

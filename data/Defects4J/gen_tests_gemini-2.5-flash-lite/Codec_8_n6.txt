@@ -1,0 +1,36 @@
+public void testBase64InputStreamMultipleReads() throws IOException {
+    byte[] data = new byte[10920]; // Sufficient data to trigger the bug
+    InputStream in = new ByteArrayInputStream(data);
+    Base64InputStream b64stream = new Base64InputStream(in, true, 0, null);
+
+    int bytesRead = 0;
+    int readByte;
+    while ((readByte = b64stream.read()) != -1) {
+        bytesRead++;
+    }
+
+    // The bug manifests as an ArrayIndexOutOfBoundsException.
+    // If the loop completes without exception, it means the bug wasn't triggered.
+    // We can assert that a certain number of bytes were read, or simply let the test pass
+    // if no exception is thrown, as the goal is to reproduce the exception.
+    // For a test that *reproduces* the failure, we expect an exception.
+    // However, JUnit tests typically assert expected outcomes rather than expecting exceptions.
+    // To make this a valid JUnit test that *would fail* if the bug is present,
+    // we can check for a condition that *should* be true if the bug is fixed,
+    // or more directly, wrap the read loop in a try-catch and assert that an exception *was* caught.
+
+    boolean exceptionCaught = false;
+    try {
+        in = new ByteArrayInputStream(data); // Reset stream for the test
+        b64stream = new Base64InputStream(in, true, 0, null);
+        bytesRead = 0;
+        while ((readByte = b64stream.read()) != -1) {
+            bytesRead++;
+        }
+    } catch (ArrayIndexOutOfBoundsException e) {
+        exceptionCaught = true;
+        // Optionally assert the specific exception type if needed, but the prompt implies reproducing the crash.
+        // assertEquals(2, e.getMessage()); // This might be too specific, the bug report shows "2"
+    }
+    assertTrue("ArrayIndexOutOfBoundsException was not caught", exceptionCaught);
+}

@@ -1,0 +1,100 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import org.junit.Test;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.junit.Assert.assertEquals;
+
+public class JsonDeserializeBugTest {
+
+    // Dummy implementations for the test
+    interface MyCustomIdInterface {
+        UUID getId();
+    }
+
+    static class Foo implements MyCustomIdInterface {
+        private UUID id;
+        private String property;
+
+        @Override
+        public UUID getId() {
+            return id;
+        }
+
+        public void setId(UUID id) {
+            this.id = id;
+        }
+
+        public String getProperty() {
+            return property;
+        }
+
+        public void setProperty(String property) {
+            this.property = property;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Foo foo = (Foo) o;
+            return java.util.Objects.equals(id, foo.id) &&
+                   java.util.Objects.equals(property, foo.property);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(id, property);
+        }
+    }
+
+    static class MyHashMap<K, V extends MyCustomIdInterface> extends HashMap<K, V> {
+        // Custom logic to deserialize from a list of objects to a map keyed by their ID
+        // This is a simplified representation of the custom deserialization logic
+        // In the actual bug report, this logic is more involved, likely within a custom deserializer
+        // or by overriding methods like putAll. For the purpose of reproducing the error,
+        // we simulate the scenario where Jackson tries to deserialize into this type.
+    }
+
+    static class MyPojo {
+        private Map<UUID, Foo> something;
+
+        @JsonDeserialize(as = MyHashMap.class)
+        public void setSomething(Map<UUID, Foo> incomingValue) {
+            this.something = incomingValue;
+        }
+
+        public Map<UUID, Foo> getSomething() {
+            return something;
+        }
+    }
+
+    @Test
+    public void testTypeSpecializationForMaps() throws Exception {
+        String json = "{\n" +
+                "  \"something\": [\n" +
+                "        {\n" +
+                "           \"id\": \"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11\",\n" +
+                "           \"property\": \"value\"\n" +
+                "         }\n" +
+                "  ]\n" +
+                "}";
+
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        // The error occurs when deserializing a JSON structure that Jackson
+        // interprets as needing to instantiate MyCustomIdInterface directly,
+        // but it's annotated with @JsonDeserialize(as = MyHashMap.class)
+        // and the actual type being deserialized into is Foo.
+        // The bug report indicates that in 2.7.x, Jackson tries to use AbstractDeserializer
+        // for MyCustomIdInterface, leading to the error, whereas in 2.6.6 it correctly
+        // uses BeanDeserializer for Foo.
+
+        // This test will likely fail with Jackson 2.7.x and later due to the described behavior change.
+        // The goal is to trigger the error described in the bug report.
+        objectMapper.readValue(json, MyPojo.class);
+    }
+}

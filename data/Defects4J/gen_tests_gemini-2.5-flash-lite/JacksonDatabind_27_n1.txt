@@ -1,0 +1,79 @@
+public void testExternalTypeIdBeforePojo() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.addAbstractTypeResolver(new SimpleAbstractTypeResolver() {
+        @Override
+        public JavaType resolveAbstractType(final TypeResolutionContext context,
+                                            final JavaType type) throws UnresolvedForwardReference {
+            if (type.getRawClass().equals(MyInterface.class)) {
+                return context.constructType(MyImpl.class);
+            }
+            return null;
+        }
+    });
+    mapper.registerModule(module);
+
+    // This is the problematic JSON structure
+    String json = "{\"@type\":\"MyImpl\",\"id\":1,\"name\":\"Test\"}";
+
+    MyInterface result = mapper.readValue(json, MyInterface.class);
+
+    assertNotNull(result);
+    assertTrue(result instanceof MyImpl);
+    assertEquals(1, result.getId());
+    assertEquals("Test", result.getName());
+}
+
+// Helper classes for the test
+interface MyInterface {
+    int getId();
+    String getName();
+}
+
+@JsonTypeName("MyImpl")
+class MyImpl implements MyInterface {
+    private int id;
+    private String name;
+
+    // Default constructor needed for deserialization
+    public MyImpl() {
+    }
+
+    public MyImpl(int id, String name) {
+        this.id = id;
+        this.name = name;
+    }
+
+    @Override
+    public int getId() {
+        return id;
+    }
+
+    @Override
+    public String getName() {
+        return name;
+    }
+
+    // Setters needed for deserialization if fields are private
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        MyImpl myImpl = (MyImpl) o;
+        return id == myImpl.id &&
+               Objects.equals(name, myImpl.name);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id, name);
+    }
+}

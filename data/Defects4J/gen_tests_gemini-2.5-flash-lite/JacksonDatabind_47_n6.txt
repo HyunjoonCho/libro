@@ -1,0 +1,69 @@
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.InvalidDefinitionException;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class JacksonTest {
+
+    public interface AccessionIdentifier {
+    }
+
+    public static class BaseAccessionIdentifier implements AccessionIdentifier {
+        private String id;
+
+        public BaseAccessionIdentifier() {}
+
+        public BaseAccessionIdentifier(String id) {
+            this.id = id;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public void setId(String id) {
+            this.id = id;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            BaseAccessionIdentifier that = (BaseAccessionIdentifier) o;
+            return java.util.Objects.equals(id, that.id);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(id);
+        }
+    }
+
+    public static class Foo {
+        @JsonSerialize(as = BaseAccessionIdentifier.class)
+        public AccessionIdentifier getReference() {
+            return new BaseAccessionIdentifier("TEST-ID");
+        }
+    }
+
+    @Test
+    public void testJsonSerializeAsSuperType() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        Foo foo = new Foo();
+
+        // This should not throw an exception.
+        // The issue is that Jackson thinks BaseAccessionIdentifier should be a *super* type of AccessionIdentifier,
+        // which is incorrect. It should be the other way around or they should be the same.
+        // The fix in 2.7.4 addressed collections, but this individual object case still fails.
+        // The expected behavior is that it serializes correctly using the specified type.
+        String json = mapper.writeValueAsString(foo);
+
+        // We can also test deserialization if needed, but the core issue is serialization.
+        // For this test, we'll focus on verifying that serialization doesn't crash and produces expected output.
+
+        // A simple assertion to ensure it ran without error and produced some output.
+        // A more robust test would parse the JSON and check its content.
+        assertEquals("{\"reference\":{\"id\":\"TEST-ID\"}}", json);
+    }
+}

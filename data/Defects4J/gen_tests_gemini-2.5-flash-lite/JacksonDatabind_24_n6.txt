@@ -1,0 +1,39 @@
+public void testIssue824() throws JsonProcessingException {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(createJodaModule());
+    mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+
+    // In 2.5.4, this call has no effect on the ObjectMapper's time zone.
+    // In 2.6.0, this call sets the ObjectMapper's time zone to the JVM's default.
+    mapper.setDateFormat(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"));
+
+    DateTime dateTime = new DateTime(1988, 6, 25, 20, 30, DateTimeZone.UTC);
+    String serialized = mapper.writeValueAsString(dateTime);
+
+    // The expected output depends on the JVM's default time zone.
+    // For the purpose of this test, we'll assert against the UTC representation
+    // if the ObjectMapper's time zone is still UTC (like in 2.5.4).
+    // If the ObjectMapper's time zone has changed to the default (like in 2.6.0),
+    // the output string will reflect that, and this assertion would fail.
+    // A more robust test would involve checking the actual time zone of the mapper
+    // and asserting accordingly, but this aims to reproduce the observed behavior change.
+    String expectedUtc = "\"1988-06-25 20:30:00\"";
+    if (!TimeZone.getDefault().getID().equals("UTC")) {
+        // If the default time zone is not UTC, the serialization in 2.6.0 will be different.
+        // We can't easily predict the exact output without knowing the default TZ.
+        // However, the bug description shows that the output changes.
+        // For this reproduction, we'll assert that it's NOT the UTC string if TZ changed.
+        assertNotEquals(expectedUtc, serialized);
+    } else {
+        // If the default TZ is UTC, then the behavior should be consistent across versions.
+        assertEquals(expectedUtc, serialized);
+    }
+}
+
+private SimpleModule createJodaModule() {
+    SimpleModule module = new SimpleModule();
+    module.addSerializer(DateTime.class, new DateTimeSerializer(
+            new JacksonJodaDateFormat(DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss")
+                    .withZoneUTC())));
+    return module;
+}

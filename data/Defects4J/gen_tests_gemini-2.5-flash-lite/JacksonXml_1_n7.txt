@@ -1,0 +1,103 @@
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import org.junit.Test;
+
+import java.util.Collections;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+
+public class NestedListDeserializationTest {
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class RootObject {
+        @JsonProperty("records")
+        List<Record> records;
+
+        public List<Record> getRecords() {
+            return records;
+        }
+
+        public void setRecords(List<Record> records) {
+            this.records = records;
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class Record {
+        @JsonProperty("fields")
+        List<Field> fields;
+
+        public List<Field> getFields() {
+            return fields;
+        }
+
+        public void setFields(List<Field> fields) {
+            this.fields = fields;
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class Field {
+        @JsonProperty("name")
+        String name;
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+    }
+
+    @Test
+    public void testNestedNonWrappedListWithEmptyInnerList() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enable(SerializationFeature.INDENT_OUTPUT);
+
+        // JSON with an empty inner list for 'fields'
+        String json = "{\n" +
+                "  \"records\" : [ {\n" +
+                "    \"fields\" : [ ]\n" +
+                "  }, {\n" +
+                "    \"fields\" : [ {\"name\":\"value1\"} ]\n" +
+                "  } ]\n" +
+                "}";
+
+        RootObject root = mapper.readValue(json, RootObject.class);
+
+        // Assertions to check if deserialization was correct
+        // The second record should be correctly deserialized, even though the first had an empty list
+        assertEquals(2, root.getRecords().size());
+        assertEquals(0, root.getRecords().get(0).getFields().size());
+        assertEquals(1, root.getRecords().get(1).getFields().size());
+        assertEquals("value1", root.getRecords().get(1).getFields().get(0).getName());
+    }
+
+    @Test
+    public void testNestedNonWrappedListWithMissingInnerList() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enable(SerializationFeature.INDENT_OUTPUT);
+
+        // JSON with a missing inner list for 'fields'
+        String json = "{\n" +
+                "  \"records\" : [ {\n" +
+                "    \"fields\" : null\n" +
+                "  }, {\n" +
+                "    \"fields\" : [ {\"name\":\"value2\"} ]\n" +
+                "  } ]\n" +
+                "}";
+
+        RootObject root = mapper.readValue(json, RootObject.class);
+
+        // Assertions to check if deserialization was correct
+        assertEquals(2, root.getRecords().size());
+        // Jackson defaults to null for missing lists if not configured otherwise, which is acceptable here.
+        assertEquals(null, root.getRecords().get(0).getFields());
+        assertEquals(1, root.getRecords().get(1).getFields().size());
+        assertEquals("value2", root.getRecords().get(1).getFields().get(0).getName());
+    }
+}

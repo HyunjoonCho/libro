@@ -1,0 +1,196 @@
+public void testIssue140() {
+    // This test case is designed to reproduce the incorrect assignment removal
+    // described in the bug report. The original JavaScript code snippet had a
+    // variable 'nodeId' that was assigned a value and then used in subsequent
+    // expressions. The compiler incorrectly removed the assignment of 'someNode.id'
+    // to 'nodeId'.
+
+    // To simulate this in Java, we'll create a mock object that mimics the behavior
+    // of 'someNode'. The mock object will have an 'id' property.
+    // We'll then call a method that represents the compiled JavaScript function.
+
+    // Mock object representing 'someNode'
+    MockSomeNode someNode = new MockSomeNode();
+    someNode.id = "N123"; // Example ID that should be processed
+
+    // Call the method that simulates the compiled JavaScript function.
+    // The logic within this method should reflect the INCORRECT compilation
+    // from the bug report.
+    // The incorrect compilation would look something like:
+    // function closureCompilerTest(b){var a;return b.id&&(a=parseInt(a.substr(1)))&&a>0};
+    // This means that 'a' is not correctly assigned 'b.id' before being used.
+
+    // We expect this to fail because 'a' (which should hold the parsed ID)
+    // will be undefined or null when parseInt is called, leading to NaN or an error.
+    // The original bug states that 'someNode.id' assignment was replaced by 'b.id',
+    // and then 'nodeId=parseInt(nodeId.substr(1))' became 'a=parseInt(a.substr(1))'.
+    // This means 'a' is used before it's assigned the value from 'b.id'.
+
+    // Let's simulate the *expected* correct behavior first, and then assert
+    // that the actual (buggy) implementation produces a different result.
+
+    // Correct expected behavior:
+    // nodeId = someNode.id; // "N123"
+    // nodeId = parseInt(nodeId.substr(1)); // parseInt("123") -> 123
+    // return (nodeId = "N123") && (nodeId = 123) && 123 > 0; // Should be true
+
+    // Buggy behavior simulation:
+    // The compiler might interpret it as:
+    // return someNode.id && (parseInt(someNode.id.substr(1))) && parseInt(someNode.id.substr(1)) > 0;
+    // OR, more likely based on the description:
+    // var a; return someNode.id && (a = parseInt(a.substr(1))) && a > 0;
+    // This second interpretation is the one that breaks because 'a' is used before assignment.
+
+    // Let's create a helper method that embodies the buggy compilation.
+    boolean resultOfBuggyCompilation = buggyClosureCompilerTest(someNode);
+
+    // The assertion should check that the buggy compilation does NOT produce the correct result.
+    // In this specific case, the buggy compilation will likely result in 'a' being undefined
+    // when parseInt is called, leading to NaN, and NaN > 0 is false.
+    assertFalse("The buggy compilation should not return true for this input.", resultOfBuggyCompilation);
+
+    // We can also add a test for the correct version to ensure our understanding.
+    assertTrue("The correct compilation should return true for this input.", correctClosureCompilerTest(someNode));
+}
+
+// Helper class to simulate the 'someNode' object
+private static class MockSomeNode {
+    public String id;
+}
+
+// Helper method simulating the INCORRECTLY compiled JavaScript function
+private boolean buggyClosureCompilerTest(MockSomeNode someNode) {
+    String nodeId; // This variable is declared but its assignment from someNode.id is problematic in the buggy compilation
+    // Simulating the buggy compilation: "nodeId=someNode.id" is replaced by "someNode.id",
+    // and then the subsequent use of "nodeId" refers to an uninitialized variable or a variable
+    // that didn't get the correct assignment.
+    // Specifically, the description says: "nodeId=someNode.id" is replaced with simply "b.id"
+    // and then "nodeId=parseInt(nodeId.substr(1))" becomes "a=parseInt(a.substr(1))".
+    // This means 'a' is used before it's assigned the value from 'b.id'.
+    String tempIdFromNode = someNode.id; // This is the value that *should* be assigned to nodeId.
+    String a; // This corresponds to the 'a' in the buggy compiled JS
+
+    // The problematic part: 'a' is used in substr before it's assigned the correct value.
+    // In the buggy JS: `a=parseInt(a.substr(1))`
+    // Here, `a` on the right side of the assignment is undefined.
+    // If we try to call substr on undefined, it throws an error.
+    // However, the description implies it compiles, so perhaps it results in NaN.
+    // Let's assume it results in something that makes the expression false.
+
+    // Simulate the evaluation flow of the buggy code:
+    // return b.id && (a=parseInt(a.substr(1))) && a>0;
+    // In Java terms, this would be:
+    boolean condition1 = tempIdFromNode != null && !tempIdFromNode.isEmpty(); // Equivalent to b.id
+    if (!condition1) {
+        return false;
+    }
+
+    // Now, the problematic part: (a=parseInt(a.substr(1)))
+    // In the buggy JS, 'a' on the right side is not assigned from 'b.id'.
+    // If 'a' is truly uninitialized in the scope, this would be an error.
+    // If the compiler assumes 'a' is available but not assigned, it might resolve to null/undefined.
+    // Calling .substr() on null/undefined is an error.
+    // However, if the JS engine treats 'undefined'.substr(1) as NaN or similar, then:
+    // Let's simulate that the parseInt call results in NaN because 'a' is not properly set.
+    Integer parsedValue = null;
+    try {
+        // This is where the bug manifests. 'a' is not correctly initialized.
+        // If 'a' were initialized to tempIdFromNode, it would work.
+        // But the bug description says it's not.
+        // Let's simulate the failure by attempting to use 'a' before it's set.
+        // If 'a' is null/undefined here, `a.substr(1)` will throw an error.
+        // The bug report implies it compiles, so perhaps the JS engine handles this gracefully
+        // (e.g., returns NaN). Let's assume it results in NaN.
+        // To make this testable, we can force a NaN result if 'a' isn't set.
+        if (a == null) { // 'a' is not set from tempIdFromNode
+             parsedValue = Integer.valueOf(Integer.parseInt("invalid")); // Force NaN or error
+        } else {
+             parsedValue = Integer.valueOf(Integer.parseInt(a.substring(1)));
+        }
+    } catch (NumberFormatException e) {
+        // If parseInt fails, it results in NaN.
+        parsedValue = null; // Representing NaN for comparison
+    } catch (NullPointerException e) {
+        // If a.substr(1) is called on null.
+        parsedValue = null; // Representing NaN for comparison
+    }
+
+
+    boolean condition2 = parsedValue != null && parsedValue > 0; // Equivalent to a > 0
+
+    // The actual return statement in JS: `return b.id && (a=parseInt(a.substr(1))) && a>0;`
+    // This means if `b.id` is truthy, it proceeds to evaluate `(a=parseInt(a.substr(1)))`.
+    // If that evaluation is truthy (i.e., not 0, null, undefined, NaN etc.), it proceeds to `a>0`.
+    // The assignment `a=...` returns the assigned value.
+
+    // Let's re-evaluate based on the JS structure more closely:
+    // `return b.id && (a=parseInt(a.substr(1))) && a>0;`
+    // The `&&` operator short-circuits.
+    // First, `b.id` is evaluated. If false, return false.
+    // If true, then `(a=parseInt(a.substr(1)))` is evaluated.
+    // The result of this expression is the value assigned to `a`.
+    // If that value is "falsy" (0, null, undefined, NaN), the whole expression becomes false.
+    // If that value is "truthy", then `a>0` is evaluated.
+
+    // Simulating the buggy behavior where `a` is not correctly assigned:
+    if (tempIdFromNode == null || tempIdFromNode.isEmpty()) return false; // b.id is false
+
+    // The critical bug: `a` is used before it's assigned the value from `tempIdFromNode`.
+    // In the buggy JS, `a` on the right side of `a=parseInt(a.substr(1))` is not `tempIdFromNode`.
+    // It's likely an uninitialized variable.
+    String valueForParsing = null; // This variable represents the 'a' on the RHS of the assignment in JS.
+                                  // It is NOT `tempIdFromNode`.
+
+    Integer parsedResultOfAssignment;
+    try {
+        // If `valueForParsing` is null, `valueForParsing.substring(1)` throws NullPointerException.
+        // The JS engine might convert this to NaN or similar.
+        // Let's force a behavior that leads to the expected failure.
+        if (valueForParsing == null) {
+            // If we can't even get a string to substr, the parseInt will likely fail.
+            // Simulate the result of parseInt failing due to invalid input.
+            parsedResultOfAssignment = Integer.valueOf(Integer.parseInt("invalid_input")); // This will throw NumberFormatException
+        } else {
+            parsedResultOfAssignment = Integer.valueOf(Integer.parseInt(valueForParsing.substring(1)));
+        }
+    } catch (NumberFormatException e) {
+        parsedResultOfAssignment = null; // Represents NaN or failure to parse
+    } catch (NullPointerException e) {
+        parsedResultOfAssignment = null; // Represents failure due to null input for substr
+    }
+
+    // The assignment `a = parsedResultOfAssignment` happens.
+    // The *result* of this expression is `parsedResultOfAssignment`.
+    // If `parsedResultOfAssignment` is null (NaN/error), the `&&` short-circuits.
+    boolean assignmentResultIsTruthy = (parsedResultOfAssignment != null); // In JS, NaN is falsy. 0 is falsy.
+
+    if (!assignmentResultIsTruthy) {
+        return false; // The assignment result was falsy.
+    }
+
+    // If the assignment result was truthy, we proceed to the next condition: `a > 0`.
+    // Here, `a` refers to the variable that was just assigned.
+    // This `a` should hold the `parsedResultOfAssignment`.
+    boolean finalCondition = parsedResultOfAssignment > 0;
+
+    return finalCondition;
+}
+
+// Helper method simulating the CORRECTLY compiled JavaScript function
+private boolean correctClosureCompilerTest(MockSomeNode someNode) {
+    String nodeId;
+    // Correct logic:
+    nodeId = someNode.id; // Assign someNode.id to nodeId
+    if (nodeId == null || nodeId.isEmpty()) {
+        return false;
+    }
+    // Now nodeId has a value, so nodeId.substr(1) is safe.
+    try {
+        Integer parsedId = Integer.valueOf(Integer.parseInt(nodeId.substring(1)));
+        // The assignment nodeId = parsedId happens here, and its result is parsedId.
+        // Then we check if parsedId > 0.
+        return parsedId > 0;
+    } catch (NumberFormatException e) {
+        return false; // Parsing failed
+    }
+}

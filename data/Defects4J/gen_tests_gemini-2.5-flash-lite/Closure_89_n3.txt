@@ -1,0 +1,50 @@
+public void testCompilerRemovesFunctionProperties() {
+    String code = "var map = {};"
+            + "var addToMap = function(key, func) { map[key] = func; };"
+            + "var f1 = function() { return 'f1'; };"
+            + "f1.alwaysCall = true;"
+            + "var f2 = function() { return 'f2'; };"
+            + "addToMap('f1', f1);"
+            + "addToMap('f2', f2);"
+            + "var callFunctionByKey = function(key) {"
+            + " var f = map[key];"
+            + " if (f.alwaysCall) return f();"
+            + "};"
+            + "callFunctionByKey('f1');";
+
+    CompilerOptions options = new CompilerOptions();
+    options.setLanguage(CompilerOptions.LanguageMode.ECMASCRIPT_2020);
+    options.setPrettyPrint(true);
+    options.setClosureLibrarySymbols(ImmutableList.of("goog.base"));
+    options.setCodingConvention(new ClosureCodingConvention());
+    options.setWarningLevel(DiagnosticGroups.ALL, CheckLevel.OFF); // Suppress warnings for this test
+    options.setPreferSingleQuotes(true);
+    options.setRenameVariables(true);
+    options.setCollapseVariableDeclarations(true);
+    options.setFoldConstants(true);
+    options.setInlineVariables(true);
+    options.setInlineConstantVars(true);
+    options.setInlineFunctions(true);
+    options.setInlineLocalFunctions(true);
+    options.setDevMode(true); // Needed for some internal checks
+
+    // Using a dummy externs file to avoid issues with goog.base
+    List<SourceFile> externs = ImmutableList.of(
+            SourceFile.fromCode("externs.js", "var alert = function(msg) {};")
+    );
+
+    Compiler compiler = new Compiler();
+    Result result = compiler.compile(externs, ImmutableList.of(SourceFile.fromCode("test.js", code)), options);
+
+    assertFalse("Compilation failed: " + result.errors, result.success);
+
+    // Check for the specific error related to property removal or incorrect compilation
+    boolean foundError = false;
+    for (Diagnostic d : result.errors) {
+        if (d.description.contains("property alwaysCall") || d.description.contains("unexpected use of property") || d.description.contains("Cannot read property") || d.description.contains("undefined is not a function")) {
+            foundError = true;
+            break;
+        }
+    }
+    assertTrue("Expected error related to property removal not found. Errors: " + result.errors, foundError);
+}

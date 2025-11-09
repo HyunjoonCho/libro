@@ -1,0 +1,115 @@
+public void testIssue107() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    // Need to define the inner class within the test class or as a separate static class
+    // for Jackson to be able to instantiate it correctly during deserialization.
+    // The original example has an issue with non-static inner classes and @JsonCreator.
+    // Let's assume for the test that we can define it in a way that Jackson can handle.
+
+    // If InnerSomething were static:
+    // String ser = mapper.writeValueAsString(new Something(null));
+    // Something result = mapper.readValue(ser, Something.class);
+    // assertNotNull(result);
+
+    // To reproduce the described failure, we need to mock the scenario that leads to ArrayIndexOutOfBoundsException.
+    // The exception happens when Jackson tries to assign parameters to a constructor that is not static
+    // and the deserialization context is not properly set up for it.
+    // The provided example code itself causes the failure.
+
+    // Recreating the setup that causes the failure:
+    // We need a way to serialize and deserialize the outer class which has a non-static inner class
+    // and a @JsonCreator constructor for the outer class that takes an instance of the inner class.
+
+    // Define the classes within the test context or ensure they are accessible.
+    // For simplicity and to avoid complex setup, we'll recreate the structure directly.
+
+    // Mocked Outer Class
+    class MockSomething {
+        public MockInnerSomething a;
+
+        @JsonCreator
+        public MockSomething(@JsonProperty("a") MockInnerSomething a) {
+            this.a = a;
+        }
+
+        // Non-static inner class
+        class MockInnerSomething {
+            @JsonCreator
+            public MockInnerSomething() {}
+        }
+    }
+
+    // Create an instance that would lead to serialization
+    // For the purpose of triggering the deserialization error, we don't strictly need a valid serialized string.
+    // The error occurs during deserialization.
+    // We can directly try to deserialize a structure that would normally be produced by the outer class.
+    // The key is the non-static nature of MockInnerSomething and its @JsonCreator.
+
+    // The failure occurs when Jackson tries to deserialize MockSomething, specifically when it encounters
+    // the @JsonCreator constructor for MockSomething and needs to instantiate MockInnerSomething.
+    // Because MockInnerSomething is non-static, Jackson needs an instance of MockSomething to create it,
+    // but it's in the process of creating MockSomething itself. This leads to the confusion and the error.
+
+    // Let's simulate the deserialization attempt that would fail.
+    // We need a JSON string that would map to MockSomething.
+    // The original bug report implies that serialization of `new Something(null)` works,
+    // and the failure is on `readValue`.
+    // Let's assume a serialized form like `{"a": {}}` would be produced if `a` was not null.
+    // However, the exception seems to happen even if `a` is null in the constructor call.
+
+    // The core issue is the deserialization of the non-static inner class with @JsonCreator.
+    // Let's try to deserialize a simple JSON that would trigger the outer class constructor.
+    // The ObjectMapper will try to instantiate MockInnerSomething.
+
+    // A simple JSON for the outer class, assuming MockInnerSomething can be deserialized.
+    // The failure is not about the JSON content itself, but the internal mechanism of Jackson
+    // when dealing with non-static inner classes and @JsonCreator constructors.
+
+    // To reproduce the exact ArrayIndexOutOfBoundsException, we need to trigger the specific path
+    // in PropertyValueBuffer.assignParameter. This happens when the parameter index is invalid.
+    // The bug report implies this happens because the non-static inner class constructor
+    // is treated incorrectly by the deserializer.
+
+    // Let's use the provided code structure and trigger the readValue.
+    // The classes need to be defined in a way that Jackson can process.
+    // For a test, it's common to define such classes as static inner classes or separate classes.
+    // To *reproduce the bug*, we must use a non-static inner class.
+
+    // Recreating the setup as closely as possible to the bug report:
+    class OuterClass {
+        public InnerClass a;
+
+        @JsonCreator
+        public OuterClass(@JsonProperty("a") InnerClass a) {
+            this.a = a;
+        }
+
+        // Non-static inner class
+        class InnerClass {
+            @JsonCreator
+            public InnerClass() {}
+        }
+    }
+
+    ObjectMapper mapper = new ObjectMapper();
+    String jsonValue = "{}"; // An empty JSON object can trigger the default constructor logic or parameter-based constructor logic.
+
+    // The bug occurs specifically when Jackson tries to resolve parameters for the @JsonCreator
+    // constructor of OuterClass, and one of those parameters is an instance of a non-static InnerClass.
+    // Jackson's internal `PropertyValueBuffer` doesn't handle the context correctly for non-static inner classes,
+    // leading to an incorrect parameter index calculation.
+
+    // We expect an exception, specifically ArrayIndexOutOfBoundsException with index -1.
+    try {
+        mapper.readValue(jsonValue, OuterClass.class);
+        fail("Expected ArrayIndexOutOfBoundsException for non-static inner class constructor");
+    } catch (ArrayIndexOutOfBoundsException e) {
+        // Check if the exception message or stack trace indicates the expected issue.
+        // The exact message might vary, but the type of exception is key.
+        // The bug report shows ArrayIndexOutOfBoundsException: -1
+        assertTrue("Expected ArrayIndexOutOfBoundsException with index -1, but got: " + e.getMessage(),
+                   e.getMessage() == null || e.getMessage().contains("-1"));
+        // Optionally, check the stack trace for specific classes if needed for more robust verification.
+    } catch (Exception e) {
+        fail("Expected ArrayIndexOutOfBoundsException, but got " + e.getClass().getName() + ": " + e.getMessage());
+    }
+}

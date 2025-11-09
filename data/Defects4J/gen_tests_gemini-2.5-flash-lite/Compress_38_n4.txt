@@ -1,0 +1,48 @@
+public void testPaxHeaderTrailingSlash() throws Exception {
+    TarArchiveInputStream tarIn = null;
+    try {
+        // Simulate a PAX header entry with a name ending in "/"
+        // This is a simplified representation; a real PAX header would be more complex.
+        // We'll create a byte array that mimics the structure TarArchiveInputStream expects.
+        // A real test would involve creating a tar file with such an entry.
+
+        // Minimal Tar header structure for a PAX header entry (link flag 'x')
+        // We're creating a header that *looks* like a PAX header to the parser
+        // and has a name ending with a slash.
+        byte[] headerBytes = new byte[512];
+        // Name: "some/dir/" (ends with /)
+        System.arraycopy("some/dir/".getBytes(StandardCharsets.UTF_8), 0, headerBytes, 0, "some/dir/".length());
+        // Mode: 0 - regular file (but link flag 'x' will override interpretation)
+        // UID, GID, Size, Mtime, Checksum, Typeflag: 'x' (PAX)
+        headerBytes[100] = (byte) 0x78; // 'x' for PAX
+        // ... other fields can be zeroed out for this test
+
+        ByteArrayInputStream bais = new ByteArrayInputStream(headerBytes);
+        tarIn = new TarArchiveInputStream(bais);
+
+        TarArchiveEntry entry = tarIn.getNextTarEntry();
+
+        assertNotNull("Should have found an entry", entry);
+        // The bug is that isDirectory() returns true for PAX headers ending with '/'
+        // even though it's not technically a directory in the tar sense if it's a PAX entry.
+        // The fix involves checking if it's a PAX header *before* checking for trailing slash
+        // or modifying the name.
+        // The expected behavior after a fix would be that it's *not* treated as a directory
+        // solely based on the trailing slash when it's a PAX header.
+        // If it were a regular directory entry, isDirectory() would be true.
+        // For a PAX header entry with a name "some/dir/", it should NOT be considered a directory
+        // by the logic that prevents content reading.
+        // We assert that it's NOT a directory based on the buggy interpretation.
+        assertFalse("Entry should not be treated as a directory due to trailing slash on PAX header", entry.isDirectory());
+
+        // If it were treated as a directory, getNextTarEntry() would advance,
+        // but since it's not, the stream would be stuck.
+        // A more robust test would involve a stream with multiple entries.
+        // For this simplified test, we focus on the isDirectory() behavior.
+
+    } finally {
+        if (tarIn != null) {
+            tarIn.close();
+        }
+    }
+}

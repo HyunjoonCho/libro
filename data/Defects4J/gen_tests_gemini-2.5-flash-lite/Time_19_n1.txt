@@ -1,0 +1,83 @@
+public void testIssue124() {
+    DateTimeZone londonTimeZone = DateTimeZone.forID("Europe/London");
+    DateTime britishDate = new DateTime(2011, 10, 30, 1, 59, 0, 0, londonTimeZone);
+    // The bug report indicates that for Europe/London, the time 01:59:00 on 2011-10-30
+    // should be interpreted as +01:00 (British Summer Time) in Joda-Time 1.6.2,
+    // but in Joda-Time 2.0 it's interpreted as UTC (00:59:00+01:00).
+    // The expected behavior described in the bug report for 2.0 is that it should
+    // return the earlier instant (summer time) during an overlap.
+    // However, the specific example in the bug report states the *output* should be
+    // "2011-10-30T01:59:00.000+01:00". This implies that the DateTime object
+    // itself, when printed, should reflect this offset.
+    // The bug seems to be that the DateTime object created with the local time
+    // is not correctly reflecting the offset during DST transition.
+    // Based on the bug description and the release notes, the intent is to
+    // capture the *earlier* of the two possible instants.
+    // The critical part is how the offset is handled.
+    // Let's assert the offset based on the *expected* output in the bug report.
+
+    // The bug report states the *output* should be 2011-10-30T01:59:00.000+01:00 for Europe/London.
+    // This means the DateTime object itself should represent that specific instant.
+    // Therefore, we check the offset.
+    assertEquals("+01:00", britishDate.toString(DateTimeFormatter.ofPattern("Z")).substring(0, 4));
+
+    // The other timezones are provided for context and to show the inconsistency,
+    // but the core bug is with Europe/London.
+    // Let's create them to ensure they are consistent with the bug report's
+    // observation of the *inconsistent* behavior in 2.0, even though the bug
+    // fix focuses on London.
+    DateTime norwDate = new DateTime(2011, 10, 30, 2, 59, 0, 0, DateTimeZone.forID("Europe/Oslo"));
+    DateTime finnishDate = new DateTime(2011, 10, 30, 3, 59, 0, 0, DateTimeZone.forID("Europe/Helsinki"));
+
+    // In 2.0, the bug report states Oslo and Helsinki also show an incorrect offset.
+    // Oslo (Europe/Oslo) is UTC+1 during standard time, UTC+2 during summer time.
+    // Helsinki (Europe/Helsinki) is UTC+2 during standard time, UTC+3 during summer time.
+    // The DST transition in Europe for 2011 was on Oct 30th at 01:00 BST (UTC+1) to 01:00 CET (UTC+0).
+    // So, 01:59 BST becomes 00:59 UTC.
+    // 02:59 in Oslo would be 01:59 UTC.
+    // 03:59 in Helsinki would be 01:59 UTC.
+    // The bug report states the *output* for Oslo is 2011-10-30T02:59:00.000+02:00 and Helsinki is 2011-10-30T03:59:00.000+03:00 in 2.0.
+    // This implies the offset is being applied incorrectly.
+    // The "earlier instant" rule means that when the clock goes back from 2 AM to 1 AM,
+    // the period between 1 AM and 2 AM happens twice. The code should pick the first occurrence.
+    // The bug report's expected output for London is 2011-10-30T01:59:00.000+01:00.
+    // This implies that the local time 01:59:00 on that day in London is *before* the DST change,
+    // and therefore it should be BST (UTC+1).
+
+    // Let's re-evaluate the expected behavior based on the release notes:
+    // "Now, it always returns the earlier instant (summer time) during an overlap."
+    // In Europe/London on Oct 30, 2011, the clocks went back from 02:00 BST (UTC+1) to 01:00 GMT (UTC+0) at 01:00 BST.
+    // This means the time 01:00 to 01:59 occurs twice.
+    // The earlier instant is when it's still BST (UTC+1).
+    // So, 2011-10-30 01:59:00 local time in London *should* be interpreted as 2011-10-30 00:59:00 UTC, which is 01:59:00+01:00.
+    // The bug report's *expected output* for London is 2011-10-30T01:59:00.000+01:00.
+    // This matches the "earlier instant" rule.
+    // The bug is that in 2.0, it's producing 2011-10-30T01:59:00.000Z (which is UTC, equivalent to 00:59:00+01:00), not 01:59:00+01:00.
+
+    // Therefore, the assertion for britishDate should be that its offset is +01:00.
+    // The bug report's example for Oslo and Helsinki in 2.0:
+    // norwDate: 2011-10-30T02:59:00.000+02:00
+    // finnishDate: 2011-10-30T03:59:00.000+03:00
+    // This is inconsistent with the "earlier instant" rule for these zones as well.
+    // For Oslo, the clock goes back from 02:00 CEST (UTC+2) to 01:00 CET (UTC+1) at 01:00 CEST.
+    // The period 01:00-01:59 occurs twice. The earlier instant is when it's still CEST (UTC+2).
+    // So, 2011-10-30 02:59:00 local time in Oslo *should* be interpreted as 2011-10-30 00:59:00 UTC, which is 02:59:00+02:00.
+    // The bug report's output for Oslo in 2.0 seems to be correct for the "earlier instant" rule.
+    // For Helsinki, the clock goes back from 03:00 EEST (UTC+3) to 02:00 EET (UTC+2) at 02:00 EEST.
+    // The period 02:00-02:59 occurs twice. The earlier instant is when it's still EEST (UTC+3).
+    // So, 2011-10-30 03:59:00 local time in Helsinki *should* be interpreted as 2011-10-30 00:59:00 UTC, which is 03:59:00+03:00.
+    // The bug report's output for Helsinki in 2.0 seems to be correct for the "earlier instant" rule.
+
+    // The core of the bug is that Europe/London's offset is not being set correctly.
+    // The assertion `assertEquals("+01:00", britishDate.toString(DateTimeFormatter.ofPattern("Z")).substring(0, 4));`
+    // is testing that the created DateTime object for London has the +01:00 offset,
+    // which is what the bug report implies is the correct behavior for the "earlier instant" rule.
+
+    // The inconsistency mentioned in the bug report title might be a misunderstanding of the bug's scope.
+    // The fix seems to be specifically about how the Joda-Time library handles the DST overlap in Europe/London.
+    // The provided code snippet's output for 1.6.2 shows all three as representing the same instant,
+    // which implies a consistent underlying UTC value.
+    // The output for 2.0 shows different UTC values (implied by different offsets and local times).
+    // The bug report's *expected output* for London is 2011-10-30T01:59:00.000+01:00.
+    // This is what the test should verify.
+}

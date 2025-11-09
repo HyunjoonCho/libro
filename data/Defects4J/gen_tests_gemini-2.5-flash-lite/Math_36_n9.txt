@@ -1,0 +1,58 @@
+public void testBigFractionDoubleValueNaN() {
+    BigInteger largeValue = BigInteger.ONE.shiftLeft(1024); // Value larger than Double.MAX_VALUE
+    BigFraction bf = new BigFraction(largeValue, BigInteger.TEN);
+    // This assertion will fail with the current implementation as largeValue.doubleValue() is Infinity
+    // The expected behavior is to return a valid double representation if mathematically possible.
+    // However, without the specific fix, we can only assert that it doesn't return NaN in a case
+    // where the final result *should* be representable.
+    // A more accurate test would involve the fix, but this aims to reproduce the described failure.
+    double result = bf.doubleValue();
+    // The original bug description implies that for certain large inputs, NaN is returned.
+    // We can try to trigger that specific scenario if possible, or at least show a case that
+    // *could* lead to NaN if intermediate steps overflow.
+    // A direct reproduction of NaN might be tricky without knowing the exact threshold for overflow
+    // in the intermediate doubleValue() calls.
+    // Let's assume a case that *would* cause intermediate overflow if not handled correctly.
+    // For example, a very large numerator and a relatively small denominator.
+    BigInteger veryLargeNumerator = new BigInteger("1" + "0".repeat(310)); // Larger than Double.MAX_VALUE
+    BigFraction bfLargeNum = new BigFraction(veryLargeNumerator, BigInteger.TEN);
+    double resultLargeNum = bfLargeNum.doubleValue();
+
+    // The bug report states it returns Double.NaN. We can assert that it *does not* return NaN
+    // if the *mathematical* result is representable, or assert that it *does* return NaN
+    // if we can construct a case that is guaranteed to hit the specific overflow issue.
+    // Given the description, the issue is with BigInteger.doubleValue() itself.
+    // Let's test a case where the *final* result is representable but intermediate steps might fail.
+    // The description mentions "308-digit numerator or denominator".
+    // Let's use a numerator that is > Double.MAX_VALUE but the denominator is such that
+    // the final result is representable.
+
+    // Example: numerator = 10^309, denominator = 10^308. Result = 10.
+    // BigInteger.valueOf(10).doubleValue() is 10.0.
+    // But BigInteger.ONE.shiftLeft(1024).doubleValue() is Infinity.
+    // The fix likely involves comparing magnitudes or using logarithms to avoid direct conversion.
+
+    // To reproduce the failure, we need to trigger the NaN. This happens when the division
+    // of two infinities or an infinity and a finite number occurs in double arithmetic.
+    // Let's try a numerator slightly larger than Double.MAX_VALUE and a denominator that's small.
+    BigInteger numeratorOverflow = new BigInteger("179769313486231570814527423731704356798070567525844996598917476803157260780028149407906317438448740149469185467413758090958057745643154158196996453641777871497391397090503301656077917684584801621743707692246196978898178480873994912701963813169006568658778948944278498583706187310951809240795149901433076293768"); // approx 1.8e308, slightly larger than Double.MAX_VALUE
+    BigFraction bfOverflow = new BigFraction(numeratorOverflow, BigInteger.TEN);
+    double resultOverflow = bfOverflow.doubleValue();
+
+    // The assertion should reflect the described failure.
+    // If the bug is present, this might return NaN.
+    // A more robust test would check the *fixed* behavior.
+    // For now, let's assert that it *could* be NaN, or that it's not the mathematically correct value.
+    // The simplest way to reproduce the described failure is to check if it results in NaN
+    // in a situation where the *mathematical* result should be a finite number.
+
+    // Let's try a numerator that is clearly larger than Double.MAX_VALUE, and a denominator
+    // that is also clearly larger than Double.MAX_VALUE, but their ratio is representable.
+    BigInteger largeNum = BigInteger.ONE.shiftLeft(1024); // > Double.MAX_VALUE
+    BigInteger largeDen = BigInteger.ONE.shiftLeft(1023); // > Double.MAX_VALUE
+    BigFraction bfLargeRatio = new BigFraction(largeNum, largeDen);
+    // Mathematically, this is 2.0.
+    // The bug is that largeNum.doubleValue() -> Infinity, largeDen.doubleValue() -> Infinity.
+    // Infinity / Infinity is NaN.
+    assertTrue("Expected NaN for large numerator and denominator leading to Infinity/Infinity", Double.isNaN(bfLargeRatio.doubleValue()));
+}

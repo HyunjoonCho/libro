@@ -1,0 +1,140 @@
+public void testGetJavaVersionAsFloatAndroid() {
+    // Mocking SystemUtils to simulate Android runtime behavior
+    // This is a simplified approach as directly running on Android is complex in a standard JUnit test
+    try {
+        // Temporarily override the SystemUtils behavior or a property that influences it
+        // In a real scenario, you might need to use reflection or a testing framework that supports environment mocking.
+        // For this example, we'll simulate the condition that leads to the exception.
+        // The exception happens in getJavaVersionAsFloat when parsing a version string like "1.6.0_22"
+        // The problematic line in SystemUtils.java (around line 1153 in older versions) is:
+        // float version = Float.parseFloat(javaVersion.substring(0, index));
+        // If 'index' is 0, substring(0,0) returns an empty string, causing NumberFormatException.
+        // This can happen if java.version is not properly set or is an unexpected format.
+        // On Android, java.version might be something like "1.6".
+
+        // To reproduce the StringIndexOutOfBoundsException specifically, we need to make
+        // javaVersion.substring(0, index) fail. This happens if 'index' is negative,
+        // which is unlikely with standard version strings.
+        // However, the stack trace points to StringIndexOutOfBoundsException in substring(0, index).
+        // This implies 'index' could be 0 and the logic around it is flawed.
+        // Let's assume a scenario where 'index' becomes 0, and the code attempts substring(0, 0).
+        // While substring(0,0) is valid and returns "", the *intent* of the bug report
+        // suggests an issue with how the version string is parsed leading to an exception.
+
+        // A more direct interpretation of the stack trace and bug report:
+        // The ExceptionInInitializerError wraps a StringIndexOutOfBoundsException.
+        // The StringIndexOutOfBoundsException is thrown from java.lang.String.substring(String.java:1571)
+        // which is called by org.apache.commons.lang.SystemUtils.getJavaVersionAsFloat(SystemUtils.java:1153).
+        // The bug report implies that on Android, the java.version property might be in a format
+        // that causes this specific exception.
+
+        // Let's simulate a version string that might cause issues.
+        // If java.version is "1.6", then index might be 1. substring(0, 1) is "1". Float.parseFloat("1") works.
+        // If java.version is "0.0", then index might be 1. substring(0, 1) is "0". Float.parseFloat("0") works.
+
+        // The bug description mentions "StringIndexOutOfBoundsException on Android runtime/Dalvik VM".
+        // The stack trace shows the exception occurs in `SystemUtils.getJavaVersionAsFloat`.
+        // The common cause of StringIndexOutOfBoundsException in substring is an invalid index.
+        // If `javaVersion.indexOf('.')` returns 0 (e.g., version starts with '.'), then `substring(0, 0)`
+        // would be called, which is valid but might not be handled correctly by subsequent parsing.
+        // Or, if `javaVersion.indexOf('.')` returns -1 and the code tries to use that -1 in substring.
+
+        // Let's test the specific line that's likely causing the issue based on common Java version parsing.
+        // The line `float version = Float.parseFloat(javaVersion.substring(0, index));` is key.
+        // If `javaVersion` is "1.6", `index` is 1. `substring(0, 1)` is "1". `parseFloat("1")` works.
+        // If `javaVersion` is ".6", `index` is 0. `substring(0, 0)` is "". `parseFloat("")` throws NumberFormatException.
+        // If `javaVersion` is "1.", `index` is 1. `substring(0, 1)` is "1". `parseFloat("1")` works.
+        // If `javaVersion` is "1.6.something", `index` is 1. `substring(0, 1)` is "1". `parseFloat("1")` works.
+
+        // The report says StringIndexOutOfBoundsException, not NumberFormatException.
+        // This means `substring` itself is failing. This happens if the start index is negative
+        // or greater than the end index, or if the end index is out of bounds.
+        // In `javaVersion.substring(0, index)`, the problematic case for StringIndexOutOfBoundsException
+        // is if `index` is less than 0, or if `index` is greater than `javaVersion.length()`.
+        // Since `index` is obtained from `indexOf('.')`, it will be >= -1.
+        // If `index` is -1 (no dot), then `substring(0, -1)` would throw StringIndexOutOfBoundsException.
+        // This is a plausible scenario if a version string like "1" is encountered.
+
+        // Let's simulate a version string that has no dot.
+        // This would cause `indexOf('.')` to return -1.
+        // Then `javaVersion.substring(0, -1)` would be called, resulting in StringIndexOutOfBoundsException.
+        String originalJavaVersion = System.getProperty("java.version");
+        try {
+            // Set a system property to simulate the problematic environment
+            System.setProperty("java.version", "1"); // A version string without a dot
+
+            // Trigger the static initializer of SystemUtils, which calls getJavaVersionAsFloat
+            // Accessing a static field or method will cause the initialization.
+            SystemUtils.getJavaIoTmpdir(); // Just to trigger initialization if not already done.
+
+            // The actual call that fails is within the static initializer of SystemUtils.
+            // We can't directly call the static initializer in a test method.
+            // The best we can do is rely on the fact that accessing any part of SystemUtils
+            // *after* this property is set should trigger the initialization and the bug.
+
+            // To be absolutely sure, we might need reflection to force re-initialization
+            // or to call the specific method if it were not static initializer.
+            // However, the bug report implies the static block itself fails.
+
+            // Let's try to access a method that *uses* the problematic static field.
+            // If the static initializer failed, this will likely throw an ExceptionInInitializerError.
+            // We are specifically looking for StringIndexOutOfBoundsException *within* that error.
+
+            // Since we can't easily reset static initializers, we'll simulate the condition
+            // that *would* lead to the exception if the class were initialized in that state.
+            // A more direct test would involve mocking the SystemUtils class or its dependencies.
+
+            // Given the constraint of writing a JUnit test *method*, and the fact that this is
+            // a static initializer issue, the most reliable reproduction within a single method
+            // is to set the condition and then *expect* the error if the class is initialized.
+
+            // Let's assume the class SystemUtils is *not* yet initialized.
+            // Setting the property and then accessing a part of SystemUtils should trigger initialization.
+            System.setProperty("java.version", "1"); // Simulate version without a dot
+            String javaVersion = System.getProperty("java.version");
+            int index = javaVersion.indexOf('.');
+            // The problematic line in SystemUtils (older versions) would be:
+            // float version = Float.parseFloat(javaVersion.substring(0, index));
+            // If index is -1, this would be: Float.parseFloat("1".substring(0, -1)); -> StringIndexOutOfBoundsException
+
+            // We can't call the private static method directly.
+            // We must rely on the fact that SystemUtils.<clinit> will be called.
+            // The bug report implies this happens upon first use.
+            // Let's try to access a field that is initialized in the static block.
+            // For example, IS_OS_WINDOWS, IS_OS_UNIX, etc.
+
+            // If SystemUtils is already initialized, this test might pass incorrectly.
+            // To truly test the initializer, we would need to reset the class state, which is hard.
+            // However, the goal is to *reproduce the failure*. This means setting up the condition
+            // and *demonstrating* that the failure occurs.
+
+            // A common way to reproduce static initializer failures in tests is to:
+            // 1. Set the problematic system property.
+            // 2. Attempt to access a static member of the class that triggers the initializer.
+            // 3. Assert that an ExceptionInInitializerError (or the underlying exception) is thrown.
+
+            // Let's try accessing a constant field that is initialized in the static block.
+            boolean isWindows = SystemUtils.IS_OS_WINDOWS; // This should trigger initialization
+
+            // If the code reaches here without exception, the test fails to reproduce the bug.
+            fail("Expected ExceptionInInitializerError due to StringIndexOutOfBoundsException on Android runtime");
+
+        } catch (ExceptionInInitializerError e) {
+            // Check if the cause is indeed StringIndexOutOfBoundsException
+            Throwable cause = e.getCause();
+            assertTrue("Expected StringIndexOutOfBoundsException as cause, but got: " + cause,
+                       cause instanceof StringIndexOutOfBoundsException);
+            // Optionally, check the message or stack trace for more specific verification if needed.
+        } finally {
+            // Restore original system property
+            if (originalJavaVersion != null) {
+                System.setProperty("java.version", originalJavaVersion);
+            } else {
+                System.clearProperty("java.version");
+            }
+        }
+    } catch (Throwable t) {
+        // Catch any other unexpected errors during setup
+        fail("An unexpected error occurred during test setup: " + t.getMessage());
+    }
+}

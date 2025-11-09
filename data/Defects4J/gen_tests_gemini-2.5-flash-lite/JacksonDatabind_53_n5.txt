@@ -1,0 +1,120 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import org.junit.Test;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+public class JsonDeserializeTest {
+
+    // Define the types involved in the test
+    interface MyCustomIdInterface {
+        UUID getId();
+        String getProperty();
+    }
+
+    static class Foo implements MyCustomIdInterface {
+        private UUID id;
+        private String property;
+
+        public Foo() {}
+
+        public Foo(UUID id, String property) {
+            this.id = id;
+            this.property = property;
+        }
+
+        @Override
+        public UUID getId() {
+            return id;
+        }
+
+        public void setId(UUID id) {
+            this.id = id;
+        }
+
+        @Override
+        public String getProperty() {
+            return property;
+        }
+
+        public void setProperty(String property) {
+            this.property = property;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Foo foo = (Foo) o;
+            return java.util.Objects.equals(id, foo.id) &&
+                   java.util.Objects.equals(property, foo.property);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(id, property);
+        }
+    }
+
+    // Custom HashMap that uses the interface for deserialization
+    // This is the problematic part that behaves differently between Jackson versions
+    static class MyHashMap<K, V extends MyCustomIdInterface> extends HashMap<K, V> {
+        // This class is primarily for annotation purposes.
+        // The actual deserialization logic is handled by Jackson's type resolution.
+    }
+
+    static class MyPojo {
+        private Map<UUID, Foo> something;
+
+        @JsonDeserialize(as = MyHashMap.class) // This annotation causes issues in newer Jackson versions
+        public void setSomething(Map<UUID, Foo> incomingValue) {
+            this.something = incomingValue;
+        }
+
+        public Map<UUID, Foo> getSomething() {
+            return something;
+        }
+    }
+
+    @Test
+    public void testTypeSpecializationForMapsWithJsonDeserializeAs() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\n" +
+                      "  \"something\": [\n" +
+                      "        {\n" +
+                      "           \"id\": \"a1b2c3d4-e5f6-7890-1234-567890abcdef\",\n" +
+                      "           \"property\": \"value\"\n" +
+                      "         }\n" +
+                      "  ]\n" +
+                      "}";
+
+        // The expected behavior is that Jackson should deserialize the array into a Map
+        // where the "id" field becomes the key and the rest of the object becomes the value.
+        // The @JsonDeserialize(as = MyHashMap.class) annotation on the setter is intended
+        // to guide Jackson, but it causes issues in 2.7.x and later.
+
+        // In versions prior to 2.7.x, this would work.
+        // In 2.7.x and later, it throws "Can not construct instance of MyCustomIdInterface..."
+        // because it tries to instantiate MyCustomIdInterface directly instead of Foo.
+
+        // To reproduce the failure, we simply try to deserialize the JSON.
+        // The test will pass if it deserializes correctly and fail with an exception otherwise.
+
+        MyPojo result = mapper.readValue(json, MyPojo.class);
+
+        assertNotNull(result);
+        assertNotNull(result.getSomething());
+        assertEquals(1, result.getSomething().size());
+
+        UUID expectedId = UUID.fromString("a1b2c3d4-e5f6-7890-1234-567890abcdef");
+        Foo expectedFoo = new Foo(expectedId, "value");
+
+        assertEquals(expectedId, result.getSomething().keySet().iterator().next());
+        assertEquals(expectedFoo, result.getSomething().values().iterator().next());
+    }
+}

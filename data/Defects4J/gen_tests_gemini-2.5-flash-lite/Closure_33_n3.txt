@@ -1,0 +1,89 @@
+import com.google.javascript.jscomp.CompilationLevel;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.util.Collections;
+
+public class JsCompilerTest {
+
+    private static final String REPRO_JS = "/**\n" +
+            " * @param {{text: string}} opt_data\n" +
+            " * @return {string}\n" +
+            " */\n" +
+            "function temp1(opt_data) {\n" +
+            " return opt_data.text;\n" +
+            "}\n" +
+            "\n" +
+            "/**\n" +
+            " * @param {{activity: (boolean|number|string|null|Object)}} opt_data\n" +
+            " * @return {string}\n" +
+            " */\n" +
+            "function temp2(opt_data) {\n" +
+            " /** @notypecheck */\n" +
+            " function __inner() {\n" +
+            " return temp1(opt_data.activity);\n" +
+            " }\n" +
+            " return __inner();\n" +
+            "}\n" +
+            "\n" +
+            "/**\n" +
+            " * @param {{n: number, text: string, b: boolean}}\n" +
+            " * @return {string}\n" +
+            " */\n" +
+            "function temp3(opt_data) {\n" +
+            " return 'n: ' + opt_data.n + ', t: ' + opt_data.text + '.';\n" +
+            "}\n" +
+            "\n" +
+            "function callee() {\n" +
+            " var output = temp3({\n" +
+            " n: 0,\n" +
+            " text: 'a string',\n" +
+            " b: true\n" +
+            " })\n" +
+            " alert(output);\n" +
+            "}\n" +
+            "\n" +
+            "callee();\n";
+
+    @Test
+    public void testWeirdObjectLiteralInvalidPropertyError() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setCompilationLevel(CompilationLevel.ADVANCED_OPTIMIZATIONS);
+        options.addError(new com.google.javascript.jscomp.DiagnosticGroup("accessControls"));
+        options.addError(new com.google.javascript.jscomp.DiagnosticGroup("checkTypes"));
+        options.addError(new com.google.javascript.jscomp.DiagnosticGroup("checkVars"));
+        options.setPrettyPrint(true); // Set to true to potentially see more details in error messages if needed
+
+        SourceFile sourceFile = SourceFile.fromCode("repro.js", REPRO_JS);
+
+        // When the compiler runs, it should produce specific errors related to the type mismatch.
+        // We are asserting that an error IS thrown, and ideally, we'd check the error message content.
+        // For this reproduction test, we'll just check that an error occurs, which is the core of the bug.
+        // The exact error message might change between compiler versions, so checking for the presence of *an* error is more robust for a reproduction test.
+        try {
+            compiler.compile(SourceFile.NO_FILES, Collections.singletonList(sourceFile), options);
+        } catch (Exception e) {
+            // The compiler throws exceptions for certain errors, or we can check the errors list.
+            // For this specific bug, it's reported as a Diagnostic error, not necessarily an exception.
+            // Let's check the compiler's error list.
+        }
+
+        assertNotEquals(0, compiler.getErrors().size(), "Compiler should report errors for the given JavaScript code.");
+
+        // Optionally, you could check if a specific error code or message is present.
+        // This is more brittle as error messages can change.
+        boolean foundExpectedError = false;
+        for (com.google.javascript.jscomp.JSError error : compiler.getErrors()) {
+            if (error.getDescription().contains("actual parameter 1 of temp3 does not match formal parameter") &&
+                error.getDescription().contains("found : {b: boolean, n: number, text: (string|undefined)}")) {
+                foundExpectedError = true;
+                break;
+            }
+        }
+        assertTrue(foundExpectedError, "The specific type mismatch error for temp3 was not found.");
+    }
+}

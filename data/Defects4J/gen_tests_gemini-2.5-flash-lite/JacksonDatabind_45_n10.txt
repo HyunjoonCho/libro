@@ -1,0 +1,84 @@
+public void testExplicitNumberShapeShouldNotEnableTextual() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.enable(MapperFeature.USE_STD_BEAN_NAMING);
+    mapper.setNodeFactory(new NodeFactory() {
+        @Override
+        public NumericNode numberNode(int v) {
+            return super.numberNode(v);
+        }
+
+        @Override
+        public NumericNode numberNode(long v) {
+            return super.numberNode(v);
+        }
+
+        @Override
+        public NumericNode numberNode(double v) {
+            return super.numberNode(v);
+        }
+
+        @Override
+        public NumericNode numberNode(BigInteger v) {
+            return super.numberNode(v);
+        }
+
+        @Override
+        public NumericNode numberNode(double v, boolean canBeInt) {
+            return super.numberNode(v, canBeInt);
+        }
+
+        @Override
+        public NumericNode numberNode(BigDecimal v) {
+            return super.numberNode(v);
+        }
+    });
+    mapper.setAnnotationIntrospector(new JacksonAnnotationIntrospector() {
+        @Override
+        public JsonFormat.Value findFormat(Annotated a) {
+            if (a.hasAnnotation(JsonFormat.class)) {
+                return super.findFormat(a);
+            }
+            return null;
+        }
+    });
+    mapper.setSerializerProvider(new DefaultSerializerProvider.Impl() {
+        @Override
+        public JsonSerializer<Object> findValueSerializer(JavaType type, BeanProperty property) throws JsonMappingException {
+            if (type.getRawClass() == Integer.class) {
+                return new JsonSerializer<Object>() {
+                    @Override
+                    public void serialize(Object value, JsonGenerator gen, SerializerProvider serializers) throws IOException, JsonProcessingException {
+                        gen.writeNumber(value.toString());
+                    }
+                };
+            }
+            return super.findValueSerializer(type, property);
+        }
+    });
+    SimpleModule module = new SimpleModule();
+    module.addSerializer(Integer.class, new JsonSerializer<Integer>() {
+        @Override
+        public void serialize(Integer value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+            gen.writeNumber(value.toString());
+        }
+    });
+    mapper.registerModule(module);
+    MyBean bean = new MyBean();
+    bean.setMyInt(123);
+    String json = mapper.writeValueAsString(bean);
+    assertTrue(json.contains("\"myInt\":\"123\""));
+    assertFalse(json.contains("\"myInt\":123"));
+}
+
+private static class MyBean {
+    private Integer myInt;
+
+    @JsonFormat(shape = JsonFormat.Shape.NUMBER)
+    public Integer getMyInt() {
+        return myInt;
+    }
+
+    public void setMyInt(Integer myInt) {
+        this.myInt = myInt;
+    }
+}

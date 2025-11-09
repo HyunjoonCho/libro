@@ -1,0 +1,142 @@
+public void testFastDateFormatTimeZoneBug() {
+    FastDateFormat formatter = FastDateFormat.getInstance("h:mma z");
+    Calendar usCentralCal = Calendar.getInstance(TimeZone.getTimeZone("US/Central"));
+    String formattedString = formatter.format(usCentralCal);
+    // The bug is that the 'z' part should reflect US/Central, not the system default.
+    // We can't assert the exact string because timezone abbreviations vary.
+    // However, we can assert that it's NOT the abbreviation for the system default timezone
+    // if the system default is different from US/Central.
+    // A more robust test would involve checking against expected abbreviations for known timezones.
+    // For the purpose of reproducing the bug, we'll check if the formatted string
+    // contains the abbreviation for US/Central. This is still imperfect as abbreviations can clash.
+    // A better approach might be to check the length or presence of certain characters
+    // if we know the system default timezone abbreviation is significantly different.
+
+    // Let's try a simpler assertion that focuses on the *absence* of the system default timezone's abbreviation
+    // if the calendar's timezone is different. This is still tricky due to abbreviation variations.
+
+    // A more reliable reproduction: check if the timezone *name* part
+    // is consistent with the calendar's timezone, not the formatter's.
+    // The bug report states that the 'z' pattern uses the formatter's timezone, not the calendar's.
+    // Let's assume the system default timezone is NOT US/Central for this test case.
+    // If it is, the test might pass incorrectly.
+
+    TimeZone systemDefaultTimeZone = TimeZone.getDefault();
+    String systemDefaultTimeZoneId = systemDefaultTimeZone.getID();
+
+    if (!systemDefaultTimeZoneId.equals("US/Central")) {
+        // If the system default is not US/Central, then the formatted string
+        // should NOT contain the abbreviation for US/Central if the formatter
+        // was incorrectly using the system default.
+        // Conversely, if the formatter IS working correctly, it SHOULD contain
+        // the abbreviation for US/Central.
+
+        // The bug is: it prints the SYSTEM default timezone's abbreviation,
+        // even though the time is formatted for US/Central.
+        // So, if we format for US/Central, and the system default is NOT US/Central,
+        // the 'z' part should be the abbreviation for US/Central.
+        // If it's the abbreviation for the system default, it's a bug.
+
+        // Let's get the expected abbreviation for US/Central.
+        // This is still problematic as abbreviations can be ambiguous.
+        // A better test would be to check for the full timezone name if possible,
+        // or to create a known string output and compare.
+
+        // Given the limitations, let's simulate the *expected* behavior if the bug were fixed.
+        // The *fixed* behavior should output the abbreviation for US/Central.
+        // The *buggy* behavior outputs the abbreviation for the system default timezone.
+
+        // We need a way to reliably get the abbreviation for US/Central.
+        // FastDateFormat itself is supposed to do this.
+        // Let's create a formatter specifically for the US/Central timezone to get its abbreviation.
+        FastDateFormat usCentralFormatter = FastDateFormat.getInstance("z", TimeZone.getTimeZone("US/Central"));
+        String usCentralAbbreviation = usCentralFormatter.format(usCentralCal); // This should be the correct abbreviation for US/Central
+
+        // Now, let's check the output of the buggy formatter.
+        // The buggy formatter will use the system default timezone for 'z'.
+        FastDateFormat systemDefaultFormatter = FastDateFormat.getInstance("z");
+        String systemDefaultAbbreviation = systemDefaultFormatter.format(usCentralCal); // This uses the system default timezone for 'z'
+
+        // The bug is that `formattedString` should contain `usCentralAbbreviation`,
+        // but it actually contains `systemDefaultAbbreviation` (if system default is different).
+        // So, we assert that the formatted string does NOT contain the system default abbreviation,
+        // implying it must contain the US/Central one (if the bug is present and system default is different).
+        // This is an indirect way to test.
+
+        // Let's re-read the description: "it will print the time in the correct timezone, but the timezone name at the end (the "z" pattern) will always be the system default timezone."
+        // So, `formattedString` contains the time in US/Central, but the 'z' part is the abbreviation of the system default timezone.
+
+        // To reproduce the failure, we need to ensure the system default timezone is NOT US/Central.
+        // Then, we check that the output string's timezone abbreviation part IS the system default's abbreviation,
+        // and NOT the US/Central abbreviation.
+
+        // Let's get the abbreviation for the system default timezone.
+        String systemDefaultAbbrev = TimeZone.getDefault().getDisplayName(false, TimeZone.SHORT);
+
+        // The buggy code produces: "h:mma [US/Central Time] [System Default Abbreviation]"
+        // The correct code produces: "h:mma [US/Central Time] [US/Central Abbreviation]"
+
+        // So, we need to check if the end of the formatted string matches the system default abbreviation.
+        // This is still tricky because the time part might contain digits that look like abbreviations.
+        // A safer approach is to parse the string or use a more robust pattern.
+
+        // Let's use a pattern that separates the timezone part more clearly for assertion.
+        // For example, "h:mma 'at' z"
+        FastDateFormat formatterWithLiteral = FastDateFormat.getInstance("h:mma 'at' z");
+        String formattedWithLiteral = formatterWithLiteral.format(usCentralCal);
+
+        // Now, let's get the expected abbreviation for US/Central.
+        // We can use the Calendar instance itself to get its timezone display name.
+        String expectedTimeZoneDisplayName = usCentralCal.getTimeZone().getDisplayName(false, TimeZone.SHORT, Locale.ENGLISH); // Using Locale for consistency
+
+        // The buggy output will have the system default timezone's short display name.
+        String actualTimeZoneDisplayName = TimeZone.getDefault().getDisplayName(false, TimeZone.SHORT, Locale.ENGLISH);
+
+        // The bug is that `formattedWithLiteral` contains `actualTimeZoneDisplayName` where it should contain `expectedTimeZoneDisplayName`.
+        // So, we assert that the formatted string ends with the system default's display name.
+        assertTrue("The timezone abbreviation should reflect the calendar's timezone (US/Central), not the system default.",
+                   formattedWithLiteral.endsWith(" at " + expectedTimeZoneDisplayName));
+        // If the above fails, it means the bug is present. The assertion should fail.
+        // To *reproduce* the failure, we expect this assertion to FAIL.
+
+        // Let's refine the assertion to directly check for the bug.
+        // The bug is that the 'z' part uses the formatter's timezone (which is default if not set), not the calendar's.
+        // So, if the calendar is US/Central, and the formatter's timezone (default) is NOT US/Central,
+        // the 'z' part will be the default timezone's abbreviation.
+
+        // Let's construct the expected string IF THE BUG IS PRESENT.
+        // The time part should be correct for US/Central.
+        // The timezone part should be the abbreviation for the system default timezone.
+
+        // Create a formatter that *should* produce the buggy output.
+        // FastDateFormat formatter = FastDateFormat.getInstance("h:mma z"); // This formatter has no explicit timezone set, so it uses default.
+        // Calendar myCal = Calendar.getInstance(TimeZone.getTimeZone("US/Central")); // Calendar is set to US/Central
+
+        // Expected buggy output: Time formatted for US/Central, but timezone abbreviation is for default system timezone.
+        // Let's get the time part formatted correctly for US/Central.
+        FastDateFormat timeFormatter = FastDateFormat.getInstance("h:mma");
+        String timePart = timeFormatter.format(usCentralCal);
+
+        // Get the abbreviation for the system default timezone.
+        String systemDefaultAbbrevForZ = TimeZone.getDefault().getDisplayName(false, TimeZone.SHORT); // Use the same logic FastDateFormat uses for 'z'
+
+        // Construct the string that the buggy code *should* produce.
+        String expectedBuggyOutput = timePart + " " + systemDefaultAbbrevForZ;
+
+        // Assert that the actual output matches this buggy expectation.
+        // This test method *reproduces* the failure by asserting that the buggy behavior occurs.
+        assertEquals("The FastDateFormat 'z' pattern should use the calendar's timezone, not the system default.",
+                     expectedBuggyOutput, formattedString);
+
+    } else {
+        // If the system default timezone is US/Central, this test case might not expose the bug directly
+        // because the system default and the calendar's timezone are the same.
+        // In this scenario, the output would coincidentally be correct.
+        // We can still assert the correct behavior.
+        FastDateFormat usCentralFormatter = FastDateFormat.getInstance("h:mma z", TimeZone.getTimeZone("US/Central"));
+        Calendar usCentralCalForCheck = Calendar.getInstance(TimeZone.getTimeZone("US/Central"));
+        String formattedString = usCentralFormatter.format(usCentralCalForCheck);
+        String expectedAbbreviation = TimeZone.getTimeZone("US/Central").getDisplayName(false, TimeZone.SHORT);
+        assertTrue("Formatted string should contain the correct timezone abbreviation.", formattedString.endsWith(" " + expectedAbbreviation));
+    }
+}

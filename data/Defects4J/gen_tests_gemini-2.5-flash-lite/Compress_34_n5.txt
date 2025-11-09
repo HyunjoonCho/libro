@@ -1,0 +1,37 @@
+public void testIssue107() throws Exception {
+    // Construct a minimal zip file with a 0-sized "ux" extra field
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    ZipArchiveOutputStream zaos = new ZipArchiveOutputStream(baos);
+
+    ZipArchiveEntry entry = new ZipArchiveEntry("test.txt");
+    entry.setLocalFileDataExtra(new byte[]{
+            // UT (Unix) extra field - timestamp
+            (byte) 0x55, (byte) 0x54, // Header ID
+            (byte) 0x05, (byte) 0x00, // Length (5 bytes for timestamp)
+            (byte) 0x07, // Unknown byte (example value)
+            (byte) 0x90, (byte) 0x94, (byte) 0x33, (byte) 0x55, // Timestamp (example value)
+
+            // UX (Unix) extra field - 0-sized
+            (byte) 0x55, (byte) 0x78, // Header ID
+            (byte) 0x00, (byte) 0x00  // Length (0 bytes)
+    });
+    zaos.putArchiveEntry(entry);
+    zaos.write("hello".getBytes());
+    zaos.closeArchiveEntry();
+    zaos.close();
+
+    byte[] zipContent = baos.toByteArray();
+
+    // Use Tika to detect the content type, which should not throw an exception
+    Tika tika = new Tika();
+    String detectedType = tika.detect(zipContent, "test.zip");
+
+    // Assert that no exception was thrown and a sensible type was detected
+    assertNotNull(detectedType);
+    // Depending on the Tika version and its internal detectors,
+    // the expected type might vary. For a generic zip, "application/zip" is common.
+    // If Tika is able to identify the content inside, a more specific type might be returned.
+    // For this test, we'll just assert that it's not null and doesn't throw.
+    // A more precise assertion could be added if the exact expected output is known.
+    assertTrue(detectedType.startsWith("application/zip") || detectedType.startsWith("application/octet-stream"));
+}

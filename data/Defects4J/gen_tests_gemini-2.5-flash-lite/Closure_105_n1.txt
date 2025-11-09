@@ -1,0 +1,75 @@
+public void testArrayJoinMungedIncorrectly() {
+    String original = "$.fn.hasClass = function(selector) {\n return ( this.length > 0 ? \n!( ( ['', this[0].className, ''].join(' ') ).indexOf( ['', selector, ''].join(' ') ) == -1 )\n : false );\n};\n";
+    String minified = "$.fn.hasClass=function(a){return this.length>0?(\"\"+this[0].className).indexOf(\"\"+a)!=-1:false};";
+    
+    // The original code relied on join(' ') to correctly pad the class name and selector
+    // with spaces to ensure accurate matching. The minified version removes this padding.
+    // We need to simulate this behavior to show the difference.
+    
+    // Test case where the original logic would work but the minified one fails
+    String className = "myClass anotherClass";
+    String selector = "anotherClass";
+    
+    // Simulate original logic
+    boolean originalResult = (className.length() > 0) ?
+                             !( ( (new StringBuilder()).append("").append(className).append("").toString().indexOf( (new StringBuilder()).append("").append(selector).append("").toString() ) == -1) )
+                             : false;
+
+    // Simulate minified logic
+    boolean minifiedResult = (className.length() > 0) ?
+                             ( (new StringBuilder()).append("").append(className).append("").toString().indexOf( (new StringBuilder()).append("").append(selector).append("").toString() ) != -1)
+                             : false;
+
+    // The minified logic will incorrectly return true if the selector is a substring of another class name.
+    // For example, if className is "myClass anotherClass" and selector is "anotherClass",
+    // the original logic with padding would correctly find it.
+    // The minified logic without padding might incorrectly match "another" if the class name was "myClass another".
+    // Let's craft a test case that highlights this.
+
+    String className2 = "someClass otherClass";
+    String selector2 = "other"; // This should not match "otherClass"
+
+    // Simulate original logic with padding
+    boolean originalResult2 = (className2.length() > 0) ?
+                              !( ( (new StringBuilder()).append("").append(className2).append("").toString().indexOf( (new StringBuilder()).append("").append(selector2).append("").toString() ) == -1) )
+                              : false;
+    
+    // Simulate minified logic without padding
+    boolean minifiedResult2 = (className2.length() > 0) ?
+                              ( (new StringBuilder()).append("").append(className2).append("").toString().indexOf( (new StringBuilder()).append("").append(selector2).append("").toString() ) != -1)
+                              : false;
+
+    // The bug is that the minified version incorrectly returns true for selector2 when it shouldn't.
+    // The original version using join(' ') would have correctly handled the padding.
+    // Let's assert that the minified version gives an incorrect result in a specific scenario.
+    
+    // A better example to show the exact issue:
+    // Original: " myClass anotherClass ".indexOf(" anotherClass ") != -1  -> true
+    // Minified: "myClass anotherClass".indexOf("anotherClass") != -1 -> true (correct in this specific case)
+
+    // The problem arises when the selector might be a substring of another class name.
+    // Original: " myClass someOtherClass ".indexOf(" someOther ") == -1 -> true (correctly false)
+    // Minified: "myClass someOtherClass".indexOf("someOther") != -1 -> true (incorrectly true)
+
+    String className3 = "myClass someOtherClass";
+    String selector3 = "someOther";
+
+    // Simulate original logic with padding
+    String paddedClassName3 = (new StringBuilder()).append("").append(className3).append("").toString();
+    String paddedSelector3 = (new StringBuilder()).append("").append(selector3).append("").toString();
+    boolean originalResult3 = (className3.length() > 0) ?
+                              !(paddedClassName3.indexOf(paddedSelector3) == -1)
+                              : false;
+
+    // Simulate minified logic without padding
+    String className3Minified = (new StringBuilder()).append("").append(className3).append("").toString();
+    String selector3Minified = (new StringBuilder()).append("").append(selector3).append("").toString();
+    boolean minifiedResult3 = (className3.length() > 0) ?
+                              (className3Minified.indexOf(selector3Minified) != -1)
+                              : false;
+    
+    // Assert that the minified result is incorrect in this case.
+    // The original would return false (not hasClass), but the minified returns true.
+    assertTrue("The minified version incorrectly identifies 'hasClass' for a substring.", minifiedResult3);
+    assertFalse("The original logic correctly determined 'hasClass' is false.", originalResult3);
+}

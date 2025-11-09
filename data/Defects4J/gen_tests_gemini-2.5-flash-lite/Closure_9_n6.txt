@@ -1,0 +1,33 @@
+public void testAmdModuleInSubdirectory() throws Exception {
+    String fooJs = "goog.provide('Foo');\nFoo.bar = function() { return 'bar'; };";
+    String barJs = "goog.provide('Bar');\nvar foo = goog.require('Foo');\nBar.baz = function() { return foo.bar(); };";
+    File fooFile = new File("lib/Foo.js");
+    fooFile.getParentFile().mkdirs();
+    Files.write(fooFile.toPath(), fooJs.getBytes());
+    File barFile = new File("Bar.js");
+    Files.write(barFile.toPath(), barJs.getBytes());
+
+    String[] args = {
+        "--transform_amd_modules",
+        "--process_common_js_modules",
+        "--common_js_entry_module=Bar.js",
+        "--compilation_level=ADVANCED_OPTIMIZATIONS",
+        "--js_output_file=out.js",
+        "--js=Bar.js",
+        "--js=lib/Foo.js"
+    };
+
+    ByteArrayOutputStream errStream = new ByteArrayOutputStream();
+    Compiler compiler = new Compiler();
+    compiler.compile(new String[]{}, new JSSourceFile[]{
+        JSSourceFile.fromCode("Bar.js", barJs),
+        JSSourceFile.fromFile("lib/Foo.js")
+    }, new CompilerOptions(), new BasicErrorManager(errStream));
+
+    String errorMessage = errStream.toString();
+    assertTrue("Compiler should have failed with an error about the module.", errorMessage.contains("required entry point \"module$lib$Foo\" never provided"));
+
+    fooFile.delete();
+    barFile.delete();
+    new File("lib").delete();
+}

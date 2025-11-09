@@ -1,0 +1,59 @@
+public void testHandleUnknownTypeIdReturningVoidCausesNPE() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.enableDefaultTyping();
+
+    SimpleModule module = new SimpleModule();
+    module.addDeserializer(Object.class, new JsonDeserializer<Object>() {
+        @Override
+        public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+            // Simulate an unknown type ID
+            JavaType javaType = ctxt.constructType(Object.class);
+            String typeId = "com.example.UnknownClass";
+            TypeIdResolver resolver = null; // Not strictly needed for this test scenario
+            String propertyName = null;
+
+            // This is the crucial part: handleUnknownTypeId returns Void.class
+            Object result = ctxt.handleUnknownTypeId(javaType, typeId, resolver, propertyName);
+            if (result == Void.class) {
+                // Normally, Jackson would throw an exception or handle this.
+                // In older versions (like 2.9), this return value could lead to NPEs later.
+                // We'll simulate the scenario by returning null, which might be handled differently
+                // or trigger the NPE depending on the Jackson version.
+                // For the purpose of reproduction, we'll just return a placeholder that *should*
+                // cause issues if the bug is present.
+                return null;
+            }
+            return result;
+        }
+    });
+    mapper.registerModule(module);
+
+    // A simple JSON string that would trigger type resolution
+    String json = "[\"com.example.UnknownClass\", {\"name\": \"test\"}]";
+
+    // Asserting that a specific exception is NOT thrown, or if it is, that it's the expected one.
+    // The original bug report implies an NPE. We'll try to trigger that.
+    // Depending on the exact Jackson version and context, the behavior might vary slightly.
+    // The key is that handleUnknownTypeId returning Void.class causes a problem.
+    try {
+        mapper.readValue(json, Object.class);
+        // If we reach here without an exception, the bug might not be present in this version
+        // or the test setup is not triggering it correctly.
+        // However, the description implies an NPE, so we'll expect one.
+        fail("Expected an exception due to handleUnknownTypeId returning Void.class");
+    } catch (NullPointerException e) {
+        // This is the expected outcome if the bug is present.
+        // We can add a message to be more specific if needed.
+        assertTrue(true); // Test passes if NPE occurs.
+    } catch (JsonMappingException e) {
+        // In some cases, an NPE might be wrapped in a JsonMappingException.
+        // Check the cause if necessary.
+        if (e.getCause() instanceof NullPointerException) {
+            assertTrue(true); // Test passes if NPE is the cause.
+        } else {
+            fail("Expected NullPointerException but got JsonMappingException with different cause: " + e.getMessage());
+        }
+    } catch (Exception e) {
+        fail("Expected NullPointerException but got different exception: " + e.getClass().getName() + ": " + e.getMessage());
+    }
+}

@@ -1,0 +1,75 @@
+@Test
+    public void typeVariable_of_self_type() {
+        // This is a simplified reproduction of the original test case.
+        // It focuses on the specific scenario causing StackOverflowError
+        // due to recursive type bounds.
+
+        // Define the interface locally to avoid external dependencies
+        interface GenericsSelfReference<T extends GenericsSelfReference<T>> {
+            T self();
+        }
+
+        // Mockito's GenericMetadataSupport.inferFrom and related methods
+        // are complex and depend on internal Mockito structures.
+        // To reproduce the StackOverflowError, we need to simulate the
+        // problematic type resolution that occurs within those methods.
+
+        // The core issue is how TypeVariableImpl.hashCode() interacts
+        // with HashMap when dealing with recursive generic types.
+        // We can trigger this by creating a TypeVariableImpl that refers
+        // to itself indirectly through its bounds.
+
+        // Create a TypeVariableImpl representing 'T'
+        TypeVariableImpl<?> typeVariableT = new TypeVariableImpl<>("T", GenericsSelfReference.class);
+
+        // Create a TypeVariableImpl representing the bound 'GenericsSelfReference<T>'
+        // This is where the recursion happens.
+        // We need to simulate the creation of the generic type argument.
+        // In the original code, this would be inferred by Mockito.
+        // Here, we manually construct a similar scenario.
+
+        // Simulate the generic type 'GenericsSelfReference<T>'
+        ParameterizedType parameterizedType = new ParameterizedType() {
+            @Override
+            public Type[] getActualTypeArguments() {
+                // This is the crucial part: it returns the typeVariableT itself
+                return new Type[]{typeVariableT};
+            }
+
+            @Override
+            public Type getRawType() {
+                return GenericsSelfReference.class;
+            }
+
+            @Override
+            public Type getOwnerType() {
+                return null;
+            }
+        };
+
+        // Now, set the bounds of typeVariableT to include this recursive parameterized type.
+        // This is a simplification; in Mockito, this happens during inference.
+        // We are effectively forcing the TypeVariableImpl to have a bound that
+        // indirectly refers back to itself.
+        try {
+            // Use reflection to set the bounds field, as it's not publicly settable.
+            // This is a hack to reproduce the problematic state.
+            Field boundsField = TypeVariableImpl.class.getDeclaredField("bounds");
+            boundsField.setAccessible(true);
+            boundsField.set(typeVariableT, new Type[]{parameterizedType});
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to set TypeVariableImpl bounds", e);
+        }
+
+        // Now, when TypeVariableImpl.hashCode() is called on typeVariableT,
+        // it will recursively call hashCode() on its bounds, which will
+        // eventually lead to a StackOverflowError due to the self-referential type.
+        // We wrap this in a try-catch to assert that the StackOverflowError occurs.
+        try {
+            typeVariableT.hashCode(); // This should trigger the StackOverflowError
+            fail("Expected StackOverflowError was not thrown.");
+        } catch (StackOverflowError e) {
+            // Expected exception
+            assertTrue(true); // Test passes if StackOverflowError is caught
+        }
+    }

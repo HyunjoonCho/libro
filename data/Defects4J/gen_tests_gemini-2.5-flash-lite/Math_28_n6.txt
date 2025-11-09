@@ -1,0 +1,476 @@
+import org.junit.Test;
+import org.junit.Before;
+import static org.junit.Assert.*;
+
+import java.util.ArrayList;
+import java.util.Collection;
+
+import org.apache.commons.math3.optim.PointValuePair;
+import org.apache.commons.math3.optim.linear.LinearConstraint;
+import org.apache.commons.math3.optim.linear.LinearConstraintSet;
+import org.apache.commons.math3.optim.linear.LinearObjectiveFunction;
+import org.apache.commons.math3.optim.linear.NonNegativeConstraint;
+import org.apache.commons.math3.optim.linear.Relationship;
+import org.apache.commons.math3.optim.linear.SimplexSolver;
+import org.apache.commons.math3.optim.linear.UnboundedSolutionException;
+import org.apache.commons.math3.optim.nonlinear.scalar.GoalType;
+
+public class SimplexSolverTest {
+
+    private SimplexSolver solver;
+    private LinearObjectiveFunction f;
+    private Collection<LinearConstraint> constraints;
+
+    @Before
+    public void setUp() {
+        solver = new SimplexSolver();
+        constraints = new ArrayList<LinearConstraint>();
+    }
+
+    @Test(expected = UnboundedSolutionException.class)
+    public void testUnboundedSolutionException() {
+        // Based on the description, we need to create a minimization problem
+        // with a potentially unbounded solution. The number of variables affects
+        // the behavior. Let's set ENTITIES_COUNT to a value that exhibits the issue.
+        // The description mentions 15 variables causing many exceptions.
+        // We'll simplify the problem structure to demonstrate the unboundedness.
+
+        int numberOfVariables = 15; // As suggested in the bug report
+
+        // Objective function: min(1*t + 0*L) which simplifies to min(t)
+        // We'll represent 't' as the first variable (index 0)
+        double[] coefficients = new double[numberOfVariables];
+        coefficients[0] = 1.0; // Coefficient for 't'
+        for (int i = 1; i < numberOfVariables; i++) {
+            coefficients[i] = 0.0; // Coefficients for 'L' variables
+        }
+        f = new LinearObjectiveFunction(coefficients, 0);
+
+        // Constraints:
+        // -q(r) + QL >= 0
+        // x(r)t - XL >= 0
+        // L >= 0
+
+        // To induce unboundedness, we can create constraints that allow variables to grow indefinitely.
+        // Let's simplify the matrices Q and X from the description.
+        // For demonstration, let's assume R = 1 (so L is a single variable l(1))
+        // and Q and X are simple matrices.
+
+        // Constraint 1: -q(1) + Q(1,1)*l(1) >= 0
+        // Let q(1) = 1, Q(1,1) = 1. So, -1 + l(1) >= 0 => l(1) >= 1
+        // This doesn't directly lead to unboundedness for 't'.
+
+        // Let's re-interpret the constraints to create unboundedness for the objective function 't'.
+        // The objective is to minimize 't'.
+        // If we have constraints that force 't' to be non-negative and don't provide an upper bound,
+        // and if the other variables 'L' can be chosen freely or in a way that doesn't constrain 't' from below,
+        // we might get unboundedness.
+
+        // Let's consider a simpler scenario that is known to cause unboundedness in minimization.
+        // For example, minimize x subject to x >= 0. This is unbounded below if we allow negative x.
+        // If we minimize x subject to x >= 5, the minimum is 5.
+        // If we minimize x subject to -x >= 0 (i.e., x <= 0), and x >= 0, then x=0 is the solution.
+
+        // The bug description implies that for a minimization problem, the solver incorrectly throws UnboundedSolutionException.
+        // This means the problem *should* have a solution, but the solver *thinks* it's unbounded.
+        // Or, the problem *is* unbounded, and the expectation is to catch the exception.
+        // The test is written with `expected = UnboundedSolutionException.class`, so we are testing that it *does* throw this exception.
+
+        // Let's construct constraints that are likely to lead to an unbounded solution for minimization.
+        // If we have a minimization problem and no lower bound on the objective function, it's unbounded.
+
+        // Example: Minimize z subject to:
+        // z + x1 + x2 >= 10
+        // x1 >= 0, x2 >= 0
+        // Here, z can be arbitrarily negative.
+
+        // Let's adapt the bug description's structure.
+        // min(t)
+        // s.t.
+        // -q(r) + QL >= 0
+        // x(r)t - XL >= 0
+        // L >= 0
+
+        // Let's simplify for R=1, and assume Q and X are scalars.
+        // min(t)
+        // s.t.
+        // -q + Q*l >= 0   => Q*l >= q
+        // x*t - X*l >= 0  => x*t >= X*l
+        // l >= 0
+
+        // To make 't' unbounded below, we need to ensure that 't' can be arbitrarily negative.
+        // The constraint x*t >= X*l implies t >= (X/x)*l, if x > 0.
+        // If we set x to a small positive number and X to a large positive number, and l can be large,
+        // then t must be large and positive. This doesn't help with minimization.
+
+        // If x is negative, t <= (X/x)*l. If X/x is negative, t can be arbitrarily negative.
+        // Let's try setting x to a small negative number.
+
+        // Let's try a simpler unbounded problem structure directly.
+        // Minimize x1
+        // Subject to:
+        // x1 - x2 >= 0
+        // x1 + x2 >= 0
+        // x1, x2 >= 0
+
+        // In this case, x1 can be 0, and x2 can be 0. Minimum is 0.
+
+        // Let's try to make it unbounded.
+        // Minimize x1
+        // Subject to:
+        // x1 - x2 >= 0  => x1 >= x2
+        // x1 + x2 >= 0  => x1 >= -x2
+        // x1, x2 >= 0
+
+        // Here, if x2 increases, x1 must also increase to satisfy x1 >= x2.
+        // This doesn't seem unbounded.
+
+        // The key to an unbounded minimization problem is that the objective function can be decreased indefinitely
+        // while satisfying all constraints.
+
+        // Let's consider the constraints from the bug description again:
+        // min(1*t + 0*L)
+        // s.t.
+        // -q(r) + QL >= 0
+        // x(r)t - XL >= 0
+        // L >= 0
+
+        // Let's assume R = 1, L = [l1], Q = [q11], X = [x11], x(1) = x_coeff
+        // min(t)
+        // s.t.
+        // -q11 + q11*l1 >= 0  => q11*l1 >= q11
+        // x_coeff*t - x11*l1 >= 0 => x_coeff*t >= x11*l1
+        // l1 >= 0
+
+        // If q11 > 0, then l1 >= 1.
+        // If x_coeff > 0, then t >= (x11/x_coeff)*l1. Since l1 can be arbitrarily large, t must be arbitrarily large. This is a bounded problem (lower bound on t).
+        // If x_coeff < 0, then t <= (x11/x_coeff)*l1. Since l1 can be arbitrarily large, and x11/x_coeff is negative, t can be arbitrarily negative. THIS IS UNBOUNDED.
+
+        // So, we need to set up constraints such that x_coeff is negative.
+        // Let's create R=1, and use the variables t, l1.
+        // We need to map these to the SimplexSolver's expected input.
+        // SimplexSolver operates on a vector of variables. Let's say the variables are [t, l1, ...].
+        // If numberOfVariables = 15, we have t and 14 'L' variables.
+
+        // Let's simplify the problem to have only 't' and one 'L' variable (l1).
+        // So, numberOfVariables = 2.
+        // Objective: min(t) => coefficients = [1.0, 0.0]
+
+        // Constraints:
+        // Let's assume R=1.
+        // -q(1) + Q(1,1)*l1 >= 0
+        // x(1)*t - X(1,1)*l1 >= 0
+        // l1 >= 0
+
+        // To make it unbounded for minimization, we need x(1) < 0.
+        // Let's choose:
+        // q(1) = 1
+        // Q(1,1) = 1  => 1*l1 >= 1 => l1 >= 1
+        // x(1) = -1   => -1*t - X(1,1)*l1 >= 0 => -t >= X(1,1)*l1
+        // X(1,1) = 1  => -t >= l1 => t <= -l1
+
+        // Since l1 >= 1, t must be <= -1.
+        // As l1 can increase (e.g., l1=100), t can be <= -100.
+        // This means t can be arbitrarily negative, so the problem is unbounded.
+
+        // So, for numberOfVariables = 2, the variables are [t, l1].
+        // Objective: [1.0, 0.0]
+        // Constraint 1: l1 >= 1
+        //   -q(1) + Q(1,1)*l1 >= 0 => -1 + 1*l1 >= 0
+        //   Coefficients: [0.0, 1.0], Relationship: GEQ, RHS: 1.0
+        constraints.add(new LinearConstraint(new double[]{0.0, 1.0}, Relationship.GEQ, 1.0));
+
+        // Constraint 2: t <= -l1
+        //   x(1)*t - X(1,1)*l1 >= 0 => -1*t - 1*l1 >= 0
+        //   Coefficients: [-1.0, -1.0], Relationship: GEQ, RHS: 0.0
+        constraints.add(new LinearConstraint(new double[]{-1.0, -1.0}, Relationship.GEQ, 0.0));
+
+        // Non-negativity constraint for l1
+        // L >= 0 => l1 >= 0
+        // This is handled by NonNegativeConstraint, but our l1 >= 1 makes it redundant.
+
+        // Now, let's consider the case with numberOfVariables = 15.
+        // The bug description implies the number of exceptions depends on the number of variables.
+        // The problem is formulated as:
+        // min(1*t + 0*L) where L is a vector of R variables.
+        // s.t.
+        // -q(r) + QL >= 0
+        // x(r)t - XL >= 0
+        // L >= 0
+
+        // If R is the number of 'L' variables, and we have 't' as well, the total number of variables is 1 + R.
+        // The bug description states "The number of exception thrown depends on the number of variables."
+        // And "set a final variable ENTITIES_COUNT = 2 and that will give almost good result and then set it to 15".
+        // This implies ENTITIES_COUNT is the total number of variables.
+
+        // Let's try to construct an unbounded problem with 15 variables.
+        // Let the variables be [t, l1, l2, ..., l14]. Total 15 variables.
+        // Objective: min(t) => coefficients = [1.0, 0.0, 0.0, ..., 0.0] (15 elements)
+        double[] objCoeffs = new double[15];
+        objCoeffs[0] = 1.0; // Coefficient for 't'
+        f = new LinearObjectiveFunction(objCoeffs, 0);
+
+        // We need to create constraints that lead to unboundedness.
+        // The critical constraint is x(r)t - XL >= 0.
+        // If we can make x(r) negative for some r, and the corresponding row in X matrix allows L to grow,
+        // and the corresponding element in q and Q allow L to be positive, we can create unboundedness.
+
+        // Let's use the structure suggested in the bug report, assuming R = number of L variables.
+        // If ENTITIES_COUNT = 15, and one variable is 't', then R = 14.
+        // Variables: [t, l1, l2, ..., l14]
+
+        // Constraints:
+        // For each r from 1 to 14:
+        // -q(r) + Q(r,1)*l1 + ... + Q(r,14)*l14 >= 0
+        // x(r)*t - X(r,1)*l1 - ... - X(r,14)*l14 >= 0
+        // l1, ..., l14 >= 0
+
+        // To induce unboundedness, we need one of the x(r) to be negative.
+        // Let's pick r=1 and set x(1) = -1.
+        // Then the second constraint for r=1 becomes:
+        // -1*t - X(1,1)*l1 - ... - X(1,14)*l14 >= 0
+        // -t >= X(1,1)*l1 + ... + X(1,14)*l14
+        // t <= -(X(1,1)*l1 + ... + X(1,14)*l14)
+
+        // If we can make the RHS (X*L) arbitrarily large positive, then t can be arbitrarily large negative.
+        // This requires X(r,j) to be such that X*L can grow.
+
+        // Let's simplify and set most Q and X coefficients to 0.
+        // Let's focus on one 'L' variable, say l1, and one constraint index r=1.
+        // Variables: [t, l1, l2, ..., l14]
+        // Objective: [1.0, 0, ..., 0]
+
+        // Constraint for r=1:
+        // -q(1) + Q(1,1)*l1 >= 0  (Assume Q(1,j)=0 for j>1)
+        // x(1)*t - X(1,1)*l1 >= 0  (Assume X(1,j)=0 for j>1)
+        // l1 >= 0
+
+        // Let q(1)=1, Q(1,1)=1 => 1*l1 >= 1 => l1 >= 1
+        // Let x(1)=-1, X(1,1)=1 => -1*t - 1*l1 >= 0 => -t >= l1 => t <= -l1
+
+        // With l1 >= 1, t can be arbitrarily negative.
+        // So, for the 15-variable case:
+        // Variable indices: 0=t, 1=l1, 2=l2, ..., 14=l14.
+
+        // Constraint for r=1:
+        // First row: -q(1) + Q(1,1)*l1 >= 0
+        // Coefficients: [0.0, 1.0, 0.0, ..., 0.0] (1 at index 1)
+        // RHS: 1.0 (assuming q(1)=1, Q(1,1)=1)
+        constraints.add(new LinearConstraint(new double[]{0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}, Relationship.GEQ, 1.0));
+
+        // Second row: x(1)*t - X(1,1)*l1 >= 0
+        // Coefficients: [-1.0, -1.0, 0.0, ..., 0.0] (-1 at index 0 and 1)
+        // RHS: 0.0 (assuming x(1)=-1, X(1,1)=1)
+        constraints.add(new LinearConstraint(new double[]{-1.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}, Relationship.GEQ, 0.0));
+
+        // All L variables must be non-negative.
+        // l1 >= 0, l2 >= 0, ..., l14 >= 0
+        // The first constraint (l1 >= 1) makes l1 >= 0 redundant.
+        // The non-negativity of l2 to l14 is implicitly handled by NonNegativeConstraint if it's applied.
+        // However, the SimplexSolver constructor takes a NonNegativeConstraint.
+        // If we don't provide it, we might need explicit constraints like `new LinearConstraint(new double[]{0.0, 0.0, 1.0, ...}, Relationship.GEQ, 0.0)` for each l_i.
+
+        // Let's re-read the SimplexSolver documentation.
+        // The SimplexSolver constructor can take `NonNegativeConstraint`.
+        // If `NonNegativeConstraint` is used, all variables are assumed to be non-negative.
+        // So, we don't need explicit `l_i >= 0` constraints.
+
+        // The test expects `UnboundedSolutionException`.
+        // We have constructed a problem that is mathematically unbounded for minimization.
+        // The bug report implies that the solver should throw this exception.
+        // So, the test should pass if this exception is thrown.
+
+        // We need to ensure the problem is set up correctly for the SimplexSolver.
+        // The `SimplexSolver` constructor takes `NonNegativeConstraint`.
+        // Let's use it.
+        solver = new SimplexSolver(1.0e-9, 100); // Using default tolerances and max iterations for now.
+                                                  // The bug might be related to these.
+
+        // Re-initialize constraints for the 15-variable case
+        constraints = new ArrayList<LinearConstraint>();
+        double[] objCoeffs15 = new double[15];
+        objCoeffs15[0] = 1.0; // Coefficient for 't'
+        f = new LinearObjectiveFunction(objCoeffs15, 0);
+
+        // Constraint 1 (for r=1): -q(1) + Q(1,1)*l1 >= 0
+        // Using q(1)=1, Q(1,1)=1
+        // Coefficients: [0.0, 1.0, 0, ..., 0]
+        // RHS: 1.0
+        constraints.add(new LinearConstraint(new double[]{0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}, Relationship.GEQ, 1.0));
+
+        // Constraint 2 (for r=1): x(1)*t - X(1,1)*l1 >= 0
+        // Using x(1)=-1, X(1,1)=1
+        // Coefficients: [-1.0, -1.0, 0, ..., 0]
+        // RHS: 0.0
+        constraints.add(new LinearConstraint(new double[]{-1.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}, Relationship.GEQ, 0.0));
+
+        // The bug mentions that the number of exceptions depends on the number of variables.
+        // This implies that the solver might be trying to iterate through the variables or constraints in a way that
+        // exposes an issue when the problem size increases.
+        // The structure of the problem from the description is quite specific.
+        // The test case above constructs *an* unbounded problem.
+        // The bug report suggests that *this specific formulation* leads to an issue.
+        // The key seems to be the `x(r)t - XL >= 0` constraint when `x(r)` is negative.
+
+        // Let's try to reproduce the issue more directly by using a large number of variables,
+        // and ensuring the structure that leads to unboundedness is present.
+        // The bug description is vague about the exact matrices Q and X, and the vectors q and x.
+        // It says "It is trivial to fix createLong() - just use Long.decode() instead of valueOf()."
+        // This suggests the problem is in the `SimplexSolver` implementation itself, not in the problem formulation utility.
+
+        // The bug says: "SimplexSolver throws UnboundedSolutionException when trying to solve minimization linear programming problem."
+        // And the test is marked with `expected = UnboundedSolutionException.class`.
+        // This means the test is verifying that the exception *is* thrown for this type of problem.
+        // If the problem is truly unbounded, and the solver correctly identifies it, then this exception is the expected outcome.
+
+        // The bug might be that it throws *too many* exceptions, or throws it when it shouldn't.
+        // The current test asserts that it *does* throw it for a problem that *is* unbounded.
+        // If the fix is to make it *not* throw this exception for problems that are bounded,
+        // then this test would fail after the fix, and a new test would be needed.
+        // For now, we assume the bug is that it *doesn't* throw it when it should, or it behaves erratically for larger N.
+
+        // Let's try to construct a problem that is *bounded* but the solver incorrectly flags as unbounded,
+        // or a problem that is *unbounded* and the solver fails to throw the exception.
+        // Given the test is `expected = UnboundedSolutionException.class`, it implies we *want* the exception for this input.
+        // The bug might be that for certain inputs (like the 15-variable case), it might fail to throw it, or throw it repeatedly.
+        // The JUnit test setup only allows for one expected exception.
+
+        // Let's focus on making the problem unbounded as described.
+        // The core of unboundedness for minimization comes from the objective function being able to decrease indefinitely.
+        // This happens when there's a direction in the feasible region along which the objective function decreases.
+
+        // Consider the constraints again:
+        // x(r)t - XL >= 0
+        // If x(r) < 0, then t <= (XL)/x(r).
+        // If XL can be made arbitrarily large positive, then t can be arbitrarily large negative.
+
+        // Let's use the structure where R = 14, and one of the x(r) is negative.
+        // This leads to 15 variables: t, l1, ..., l14.
+
+        // Let's make the constraint matrix more general.
+        // Assume R=14.
+        // Variables: [t, l1, ..., l14]
+
+        // For r = 1:
+        // -q(1) + Q(1,1)l1 + ... + Q(1,14)l14 >= 0
+        // x(1)t - X(1,1)l1 - ... - X(1,14)l14 >= 0
+
+        // To ensure unboundedness:
+        // Let x(1) = -1.
+        // Let Q(1,j) = 0 for all j.
+        // Let q(1) = 1.
+        // Then the first constraint is -1 + 0 >= 0, which is false. This formulation is not feasible.
+
+        // Let's re-examine the bug: "SimplexSolver throws UnboundedSolutionException when trying to solve minimization linear programming problem."
+        // This implies the exception *is* thrown. The problem might be *why* or *how many times*.
+        // "The number of exception thrown depends on the number of variables."
+        // This suggests that the solver might enter a loop or re-throw the exception multiple times.
+        // A standard JUnit test can only catch one expected exception.
+        // If the bug is about "massive of unbounded exceptions", then a single `expected = UnboundedSolutionException.class` is not sufficient to capture that specific aspect.
+        // However, the goal is to reproduce the failure *behavior*. The behavior is that it *throws* this exception.
+
+        // Let's try to create a scenario where the exception is thrown.
+        // The problem needs to be a minimization problem.
+        // The objective function is `min(t)`.
+        // The constraints need to allow `t` to become arbitrarily negative.
+
+        // Let's set up a problem with 15 variables and try to make it unbounded.
+        // Variables: `v[0]` to `v[14]`
+        // Objective: Minimize `v[0]` (this is our `t`)
+        double[] objectiveCoefficients = new double[15];
+        objectiveCoefficients[0] = 1.0;
+        LinearObjectiveFunction objectiveFunction = new LinearObjectiveFunction(objectiveCoefficients, 0);
+
+        // Constraints that lead to unboundedness for minimization:
+        // We need a direction vector `d` such that `objectiveFunction.dotProduct(d) < 0`
+        // and `constraint.dotProduct(d) >= 0` for all constraints, and `d` is in the feasible region.
+        // Or, more simply, a feasible region that is not bounded below by the objective function.
+
+        // Let's consider the constraints from the bug report again:
+        // x(r)t - XL >= 0
+        // If x(r) is negative, say x(1) = -1:
+        // -t - X(1,:) * L >= 0  => t <= - (X(1,:) * L)
+        // If we can make X(1,:) * L arbitrarily large positive, then t can be arbitrarily large negative.
+
+        // Let's define X(1,1) = 1, and X(1,j) = 0 for j > 1.
+        // Let L = [l1, l2, ..., l14].
+        // Then X(1,:) * L = X(1,1)*l1 = 1*l1.
+        // So, t <= -l1.
+
+        // We also need the other constraints to be satisfied and to allow l1 to grow.
+        // -q(r) + QL >= 0
+        // Let's use r=1 for the first constraint as well.
+        // -q(1) + Q(1,1)*l1 + ... + Q(1,14)*l14 >= 0
+        // Let q(1) = 1.
+        // Let Q(1,1) = 1, and Q(1,j) = 0 for j > 1.
+        // Then -1 + 1*l1 >= 0 => l1 >= 1.
+
+        // So, with these specific choices:
+        // Variables: [t, l1, l2, ..., l14]
+        // Objective: min(t)
+        // Constraints:
+        // 1. l1 >= 1
+        // 2. t <= -l1
+        // 3. l_i >= 0 for i=1..14 (handled by NonNegativeConstraint)
+
+        // This setup creates an unbounded minimization problem.
+        // Variable indices: 0=t, 1=l1, 2=l2, ..., 14=l14.
+
+        Collection<LinearConstraint> constraintSet = new ArrayList<>();
+
+        // Constraint 1: l1 >= 1
+        // Coefficients: [0.0, 1.0, 0.0, ..., 0.0]
+        double[] coeffs1 = new double[15];
+        coeffs1[1] = 1.0; // Coefficient for l1
+        constraintSet.add(new LinearConstraint(coeffs1, Relationship.GEQ, 1.0));
+
+        // Constraint 2: t <= -l1  =>  t + l1 <= 0  => -t - l1 >= 0
+        // Coefficients: [-1.0, -1.0, 0.0, ..., 0.0]
+        double[] coeffs2 = new double[15];
+        coeffs2[0] = -1.0; // Coefficient for t
+        coeffs2[1] = -1.0; // Coefficient for l1
+        constraintSet.add(new LinearConstraint(coeffs2, Relationship.GEQ, 0.0));
+
+        // The bug report says "The number of exception thrown depends on the number of variables."
+        // This implies that the solver might be doing something iterative.
+        // The default SimplexSolver constructor uses specific tolerances and iteration limits.
+        // Let's stick to the default ones for now, as the bug might be in the logic itself.
+
+        // The test should be set up to expect the UnboundedSolutionException.
+        // If the solver correctly identifies this problem as unbounded, it will throw this exception.
+        // The bug description implies that for some reason, this exception is problematic.
+        // Either it's thrown incorrectly, or the number of throws is excessive.
+        // The test as written with `expected = UnboundedSolutionException.class` will pass if the exception is thrown.
+
+        // Let's try to instantiate the solver with the constraints.
+        // The SimplexSolver constructor takes `maxIterations`. The bug mentions "massive of unbounded exceptions".
+        // This could imply that the solver gets stuck in a loop or re-throws.
+        // Let's try a large number of iterations to see if it affects the outcome.
+        // The default is 100. Let's try 1000.
+        solver = new SimplexSolver(1.0e-9, 1000); // Increased max iterations.
+
+        // Now, call the solve method.
+        // The `solve` method returns a `PointValuePair`.
+        // If the problem is unbounded, it should throw `UnboundedSolutionException`.
+        try {
+            PointValuePair solution = solver.optimize(
+                objectiveFunction,
+                new LinearConstraintSet(constraintSet),
+                GoalType.MINIMIZE,
+                new NonNegativeConstraint(true) // All variables are non-negative by default
+            );
+            // If we reach here, no exception was thrown, which would be a failure if the problem is indeed unbounded.
+            fail("Expected UnboundedSolutionException but got a solution.");
+        } catch (UnboundedSolutionException e) {
+            // This is the expected outcome. The test will pass if this exception is caught.
+            // The bug might be related to the *number* of exceptions or conditions under which it's thrown.
+            // For now, catching it confirms the behavior.
+            // We can add assertions here if needed, but the `expected` annotation is usually sufficient.
+            // For example, we could check the message of the exception if it provides details.
+            // System.out.println("Caught expected UnboundedSolutionException: " + e.getMessage());
+        } catch (Exception e) {
+            // Catch any other unexpected exceptions.
+            fail("Expected UnboundedSolutionException but got " + e.getClass().getName() + ": " + e.getMessage());
+        }
+    }
+}

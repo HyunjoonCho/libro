@@ -1,0 +1,343 @@
+public void testTarUtilsParseNameSpecialCharacters() throws Exception {
+    // Create a byte array representing a tar entry name with special characters
+    // The exact bytes will depend on the encoding, but we'll simulate a common scenario
+    // where characters outside the 0-127 range are represented by multi-byte sequences
+    // or extended ASCII characters.
+    // For demonstration, let's assume the problematic character is '±' which is 0xB1 in Latin-1.
+    // The bug report implies that using (char) buffer[i] incorrectly interprets these bytes.
+    // We need to construct a byte array that, when interpreted byte-by-byte as characters,
+    // produces the incorrect output, but when treated as a byte array and converted to a String
+    // using a suitable encoding (like ISO-8859-1 or Windows-1252), produces the correct name.
+
+    // Let's construct a simplified example name: "File±Name"
+    // Assuming '±' is represented by 0xB1 in a single byte.
+    // The incorrect parsing might turn 0xB1 into a character that looks like 'ﾱ' or similar.
+    // The correct parsing should interpret 0xB1 as '±'.
+
+    // Let's use the example from the bug report, simplified: "0302-0601-3±±±F06±W220±ZB±LALALA±±±±±±±±±±CAN±±DC±±±04±060302±MOE.model"
+    // We need to represent the '±' character (0xB1) and other characters.
+    // The bug report suggests using `new String(new byte[] { buffer[i] })` which implies
+    // each byte is treated individually and then combined. This is usually done with
+    // an assumed default encoding or the platform's default encoding.
+
+    // Let's manually create a byte array that represents the expected correct string.
+    // We'll use ISO-8859-1 as a common encoding where 0xB1 represents '±'.
+    // The incorrect version in the bug report shows 'ﾱ' which is a Unicode character,
+    // likely resulting from a misinterpretation of byte sequences or a different encoding.
+
+    // Constructing the byte array for "0302-0601-3±±±F06±W220±ZB±LALALA±±±±±±±±±±CAN±±DC±±±04±060302±MOE.model"
+    // where '±' is 0xB1.
+    byte[] buffer = {
+        '0', '3', '0', '2', '-', '0', '6', '0', '1', '-', '3',
+        (byte) 0xB1, (byte) 0xB1, (byte) 0xB1,
+        'F', '0', '6',
+        (byte) 0xB1,
+        'W', '2', '2', '0',
+        (byte) 0xB1,
+        'Z', 'B',
+        (byte) 0xB1,
+        'L', 'A', 'L', 'A', 'L', 'A',
+        (byte) 0xB1, (byte) 0xB1, (byte) 0xB1, (byte) 0xB1, (byte) 0xB1, (byte) 0xB1, (byte) 0xB1, (byte) 0xB1, (byte) 0xB1, (byte) 0xB1,
+        'C', 'A', 'N',
+        (byte) 0xB1, (byte) 0xB1,
+        'D', 'C',
+        (byte) 0xB1, (byte) 0xB1,
+        (byte) 0x30, (byte) 0x34, // '0', '4'
+        (byte) 0xB1,
+        (byte) 0x30, (byte) 0x36, (byte) 0x30', '3', '0', '3', '2', // '0', '6', '0', '3', '0', '2'
+        (byte) 0xB1,
+        'M', 'O', 'E', '.', 'm', 'o', 'd', 'e', 'l'
+    };
+
+    // The TarUtils.parseName method is expected to take this byte array and return the String.
+    // The bug is that it incorrectly parses the bytes outside the 0-127 range.
+    // The fix suggests using `new String(new byte[] { buffer[i] })` within the loop,
+    // which implies the original code was doing something like `result.append((char) buffer[i])`.
+    // The `(char) buffer[i]` cast interprets the byte as an ASCII character, which is fine for 0-127.
+    // For bytes > 127, it can lead to incorrect character representation depending on the system's default encoding.
+    // The suggested fix `new String(new byte[] { buffer[i] })` implies that each byte should be
+    // treated as a single-byte character and then appended. This is effectively using the platform's
+    // default encoding to interpret each byte. If that encoding is something like ISO-8859-1,
+    // then 0xB1 would correctly become '±'.
+
+    // We need to mock or simulate the behavior of TarUtils.parseName.
+    // Since we don't have the TarUtils class itself, we'll write a test that *would* fail
+    // if the original implementation were present and then assume the fix is applied.
+    // The core of the test is to provide input that triggers the bug.
+
+    // Let's assume a hypothetical `TarUtils.parseName` method exists and we are testing it.
+    // Since we cannot call the actual method, we will simulate the *expected* output
+    // and demonstrate the input that causes the problem.
+
+    // The problem occurs when parsing bytes like 0xB1.
+    // The incorrect output shown in the bug report is:
+    // "0302-0101-3ﾱﾱﾱF06ﾱW220ﾱZBﾱHECKMODULﾱﾱﾱﾱﾱﾱﾱﾱﾱﾱECEﾱﾱDCﾱﾱﾱ07±060302±MOE.model"
+    // Notice how '±' (0xB1) is rendered as 'ﾱ' and some parts of the string are different.
+    // The bug report mentions "0302-0601-3±±±F06±W220±ZB±LALALA±±±±±±±±±±CAN±±DC±±±04±060302±MOE.model"
+    // vs
+    // "0302-0101-3ﾱﾱﾱF06ﾱW220ﾱZBﾱHECKMODULﾱﾱﾱﾱﾱﾱﾱﾱﾱﾱECEﾱﾱDCﾱﾱﾱ07±060302±MOE.model"
+    // There are differences in the numbers too (0601 vs 0101, 04 vs 07, LALALA vs HECKMODUL, CAN vs ECE).
+    // This suggests the parsing logic itself might be flawed beyond just character encoding.
+
+    // However, the primary issue highlighted is the handling of characters outside 0-127.
+    // The fix suggests `new String(new byte[] { buffer[i] })`.
+    // Let's assume this means each byte is converted to a String using the platform's default encoding.
+    // In many environments, ISO-8859-1 or Windows-1252 is used, where 0xB1 is '±'.
+
+    // We need to construct an input byte array that, when parsed byte-by-byte with the *incorrect* logic,
+    // produces the garbled output. And when parsed with the *correct* logic (as suggested by the fix),
+    // produces the expected output.
+
+    // Let's focus on the character representation part.
+    // Assume the incorrect `(char) buffer[i]` approach leads to a different character for 0xB1.
+    // For example, if the default encoding is UTF-8 and the byte is 0xB1, `(char) 0xB1` is '±'.
+    // If the input was actually a multi-byte sequence that `(char) buffer[i]` misinterpreted.
+
+    // The bug report is a bit ambiguous on the exact mechanism of failure for characters outside 0-127.
+    // The most direct interpretation of the fix is that each byte should be treated as a character
+    // in some encoding.
+
+    // Let's simulate the input that would cause issues.
+    // We'll use a sequence that includes bytes > 127.
+    // Let's create a byte array representing a name with a character like 'é' (0xE9 in Latin-1).
+    // If the incorrect method uses `(char) 0xE9`, it might render 'é'.
+    // If the incorrect method misinterprets a sequence, it could be different.
+
+    // Let's follow the example from the bug report more closely.
+    // The bug report says:
+    // correct name: 0302-0601-3±±±F06±W220±ZB±LALALA±±±±±±±±±±CAN±±DC±±±04±060302±MOE.model
+    // name resolved by TarUtils.parseName: 0302-0101-3ﾱﾱﾱF06ﾱW220ﾱZBﾱHECKMODULﾱﾱﾱﾱﾱﾱﾱﾱﾱﾱECEﾱﾱDCﾱﾱﾱ07±060302±MOE.model
+
+    // The critical part is that the bytes representing '±' are misinterpreted.
+    // Let's assume the original code was something like:
+    /*
+    public static String parseName(byte[] buffer) {
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < buffer.length; i++) {
+            // Incorrect handling for non-ASCII characters
+            result.append((char) buffer[i]);
+        }
+        return result.toString();
+    }
+    */
+
+    // And the fix is:
+    /*
+    public static String parseName(byte[] buffer) {
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < buffer.length; i++) {
+            // Correct handling using platform default encoding for each byte
+            result.append(new String(new byte[] { buffer[i] }));
+        }
+        return result.toString();
+    }
+    */
+    // This implies that the `new String(new byte[] { buffer[i] })` constructor
+    // uses the platform's default charset to interpret the single byte.
+
+    // To reproduce the failure, we need to provide an input `buffer` that contains bytes
+    // which, when cast to `char`, produce a different result than when interpreted as
+    // a single-byte string using the default charset.
+
+    // Let's construct the byte array that should result in the "correct" name.
+    // We'll use ISO-8859-1 as a reference for '±' (0xB1).
+    byte[] inputBytes = {
+        (byte) 0x30, (byte) 0x33, (byte) 0x30, (byte) 0x32, // "0302"
+        (byte) 0x2d, // "-"
+        (byte) 0x30, (byte) 0x36, (byte) 0x30, (byte) 0x31, // "0601" - This is the part that seems different in the buggy output
+        (byte) 0x2d, // "-"
+        (byte) 0x33, // "3"
+        (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, // "±±±" - These are the characters that get mangled
+        (byte) 0x46, (byte) 0x30, (byte) 0x36, // "F06"
+        (byte) 0xb1, // "±"
+        (byte) 0x57, (byte) 0x32, (byte) 0x32, (byte) 0x30, // "W220"
+        (byte) 0xb1, // "±"
+        (byte) 0x5a, (byte) 0x42, // "ZB"
+        (byte) 0xb1, // "±"
+        (byte) 0x4c, (byte) 0x41, (byte) 0x4c, (byte) 0x41, (byte) 0x4c, (byte) 0x41, // "LALALA"
+        (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, // "±±±±±±±±±±"
+        (byte) 0x43, (byte) 0x41, (byte) 0x4e, // "CAN"
+        (byte) 0xb1, (byte) 0xb1, // "±±"
+        (byte) 0x44, (byte) 0x43, // "DC"
+        (byte) 0xb1, (byte) 0xb1, // "±±"
+        (byte) 0x30, (byte) 0x34, // "04" - This part also seems different in the buggy output
+        (byte) 0xb1, // "±"
+        (byte) 0x30, (byte) 0x36, (byte) 0x30, (byte) 0x33, (byte) 0x30, (byte) 0x32, // "060302"
+        (byte) 0xb1, // "±"
+        (byte) 0x4d, (byte) 0x4f, (byte) 0x45, (byte) 0x2e, (byte) 0x6d, (byte) 0x6f, (byte) 0x64, (byte) 0x65, (byte) 0x6c // "MOE.model"
+    };
+
+    // The expected correct output string based on the bug description.
+    // Note: The bug description has inconsistencies between the "correct name" and the "name resolved" part.
+    // Let's focus on the character encoding part and assume the rest of the parsing logic is intended.
+    // The core issue is how bytes > 127 are handled.
+    // The bug report's "name resolved" shows "ﾱ" which is U+FFB1.
+    // If the input byte is 0xB1, and `(char) 0xB1` produces '±' (U+00B1), then the bug is not directly about misinterpreting 0xB1 as ﾱ.
+    // However, the description explicitly states "TarUtils.parseName does not properly handle characters outside the range 0-127".
+    // And the fix involves `new String(new byte[] { buffer[i] })`.
+
+    // Let's assume the input byte array `buffer` is what `TarUtils.parseName` receives.
+    // The failure occurs when `TarUtils.parseName` is called with such an array.
+    // The test should assert that the output of the method *is incorrect* if the bug is present.
+    // Since we are writing a test *to reproduce the failure*, we need to simulate the faulty behavior.
+
+    // We cannot directly call the faulty `TarUtils.parseName` if it's not available.
+    // The best approach is to construct the input that triggers the bug and assert what the *expected*
+    // incorrect output would be, or if the fix is applied, assert the correct output.
+
+    // Let's assume the fix has been applied and the method `TarUtils.parseName` now works correctly.
+    // The test should then assert the correct output.
+    // This means the test will pass *after* the bug is fixed.
+    // To reproduce the failure, one would run this test *before* the fix, and it would fail.
+
+    // The expected correct output string.
+    String expectedCorrectName = "0302-0601-3±±±F06±W220±ZB±LALALA±±±±±±±±±±CAN±±DC±±±04±060302±MOE.model";
+
+    // We need to simulate the `TarUtils.parseName` method with the buggy logic.
+    // Since we don't have the original code, we'll write a test that *expects* the correct behavior
+    // after the fix. This test would fail if the bug is present.
+
+    // Let's create a dummy `TarUtils` class with the *fixed* logic for the purpose of writing the test.
+    // This is a common pattern when the class under test is not directly accessible in the test environment.
+    // In a real scenario, you would import the class and call its method.
+
+    // For the sake of this exercise, let's assume we have access to `TarUtils.parseName`
+    // and it's currently buggy. We want to write a test that *would fail* with the buggy version.
+
+    // Let's construct the input bytes that are problematic.
+    // The bug report mentions "characters outside the range 0-127".
+    // Let's use a byte value of 0xB1, which is '±' in ISO-8859-1.
+    // If the incorrect code used `(char) 0xB1`, it would produce '±'.
+    // If the input was a multi-byte sequence that `(char)` cast misinterpreted, that's another story.
+    // The fix `new String(new byte[] { buffer[i] })` suggests that each byte is treated as a character.
+
+    // Let's create an input byte array that contains a byte > 127.
+    // We'll simulate the input that *should* produce the correct name.
+    // The test will then assert that the `TarUtils.parseName` (if it were buggy) would *not* produce this.
+
+    // Let's construct the problematic input byte array.
+    // We'll use the full example from the bug report.
+    byte[] problematicInput = {
+        (byte) 0x30, (byte) 0x33, (byte) 0x30, (byte) 0x32, // "0302"
+        (byte) 0x2d, // "-"
+        (byte) 0x30, (byte) 0x36, (byte) 0x30, (byte) 0x31, // "0601" - Buggy output shows "0101"
+        (byte) 0x2d, // "-"
+        (byte) 0x33, // "3"
+        (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, // "±±±" - Buggy output shows "ﾱﾱﾱ"
+        (byte) 0x46, (byte) 0x30, (byte) 0x36, // "F06"
+        (byte) 0xb1, // "±" - Buggy output shows "ﾱ"
+        (byte) 0x57, (byte) 0x32, (byte) 0x32, (byte) 0x30, // "W220"
+        (byte) 0xb1, // "±" - Buggy output shows "ﾱ"
+        (byte) 0x5a, (byte) 0x42, // "ZB"
+        (byte) 0xb1, // "±" - Buggy output shows "ﾱ"
+        (byte) 0x48, (byte) 0x45, (byte) 0x43, (byte) 0x4b, (byte) 0x4d, (byte) 0x4f, (byte) 0x44, (byte) 0x55, (byte) 0x4c, // "HECKMODUL" - This part is different from the "correct name" LALALA
+        (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, (byte) 0xb1, // "±±±±±±±±±±" - Buggy output shows "ﾱﾱﾱﾱﾱﾱﾱﾱﾱﾱ"
+        (byte) 0x45, (byte) 0x43, (byte) 0x45, // "ECE" - This part is different from the "correct name" CAN
+        (byte) 0xb1, (byte) 0xb1, // "±±" - Buggy output shows "ﾱﾱ"
+        (byte) 0x44, (byte) 0x43, // "DC"
+        (byte) 0xb1, (byte) 0xb1, // "±±" - Buggy output shows "ﾱﾱ"
+        (byte) 0x30, (byte) 0x37, // "07" - Buggy output shows "07" (correct name had "04")
+        (byte) 0xb1, // "±" - Buggy output shows "±" (correct name had "±")
+        (byte) 0x30, (byte) 0x36, (byte) 0x30, (byte) 0x33, (byte) 0x30, (byte) 0x32, // "060302"
+        (byte) 0xb1, // "±"
+        (byte) 0x4d, (byte) 0x4f, (byte) 0x45, (byte) 0x2e, (byte) 0x6d, (byte) 0x6f, (byte) 0x64, (byte) 0x65, (byte) 0x6c // "MOE.model"
+    };
+
+    // The actual expected output *if the bug is present*.
+    // This is what the test should assert to reproduce the failure.
+    String buggyOutput = "0302-0101-3ﾱﾱﾱF06ﾱW220ﾱZBﾱHECKMODULﾱﾱﾱﾱﾱﾱﾱﾱﾱﾱECEﾱﾱDCﾱﾱﾱ07±060302±MOE.model";
+
+    // Since we cannot call the buggy `TarUtils.parseName` directly,
+    // we will write a test that *asserts the buggy output*.
+    // This test would fail if the `TarUtils.parseName` method were fixed.
+    // Therefore, this test *reproduces the failure* by expecting the faulty behavior.
+
+    // If we were to implement the buggy `parseName` method here for demonstration:
+    /*
+    class BuggyTarUtils {
+        public static String parseName(byte[] buffer) {
+            StringBuilder result = new StringBuilder();
+            for (int i = 0; i < buffer.length; i++) {
+                // This is the problematic part: casting byte to char directly
+                // can lead to misinterpretation of non-ASCII bytes.
+                result.append((char) buffer[i]);
+            }
+            return result.toString();
+        }
+    }
+    */
+    // Then the test would be:
+    // assertEquals(buggyOutput, BuggyTarUtils.parseName(problematicInput));
+
+    // Given the constraints of writing *only* the test method, we assume `TarUtils.parseName` exists.
+    // The test method should call this (assumed) buggy method with the problematic input
+    // and assert that it returns the known incorrect output.
+
+    // We need to use the `problematicInput` byte array.
+    // The test method itself is the artifact that demonstrates the failure.
+    // It will fail if the method is fixed.
+
+    // Let's use the `problematicInput` byte array.
+    // This test will fail if `TarUtils.parseName` is fixed, thus reproducing the failure.
+    // The assertion will be against the known buggy output.
+    // We need to assume `TarUtils.parseName` exists and is currently buggy.
+
+    // The bug report's example implies that the parsing of bytes like 0xB1 results in different characters.
+    // The `ﾱ` character (U+FFB1) is not directly produced by `(char) 0xB1` in standard encodings.
+    // This suggests either the input bytes were different, or the `(char)` cast combined with
+    // some other logic (or platform default encoding) produced this.
+
+    // The simplest interpretation of the bug and fix is that `(char) byte` is insufficient for bytes > 127.
+    // The fix `new String(new byte[] { buffer[i] })` implies each byte is treated as a character.
+
+    // Let's assume the `TarUtils.parseName` method is available and buggy.
+    // This test method, when run against the buggy code, will fail.
+    // If the method is fixed, this test method will pass.
+    // To reproduce the failure, we write the test that *expects* the buggy output.
+
+    // We will construct the byte array that is supposed to represent the name.
+    // The test will then call the (assumed buggy) `TarUtils.parseName` and assert that
+    // the output matches the known buggy output.
+
+    // The most robust way to represent this is to provide the input that causes the problem
+    // and assert that the output is the *incorrect* one.
+    // This test will fail if the bug is fixed, thus demonstrating the failure condition.
+
+    // Let's use the byte array `problematicInput` which contains bytes like 0xB1.
+    // The test should assert the `buggyOutput`.
+
+    // This test assumes the existence of `TarUtils.parseName(byte[] buffer)`.
+    // If this test fails, it means the `TarUtils.parseName` method is *not* producing the `buggyOutput`
+    // for the given `problematicInput`, which implies the bug might be fixed or the
+    // test case is not perfectly aligned with the bug.
+    // However, the prompt asks to reproduce the *failure behavior*. This means writing a test
+    // that *would fail* if the bug is present.
+
+    // To reproduce the failure, the test should assert the *expected incorrect* output.
+    // If the test passes, it means the method is already fixed, or the test is wrong.
+    // If the test fails, it means the method is buggy and produces a different output than expected (which is good for finding bugs).
+
+    // Let's refine the input and expected output based on the most direct interpretation of the bug.
+    // The core issue is handling bytes outside 0-127.
+    // Let's use a simpler input: a single byte 0xB1.
+    // If the buggy code is `result.append((char) 0xB1)`, it appends '±'.
+    // If the fix is `result.append(new String(new byte[] { (byte) 0xB1 }))`, it appends '±' (assuming default encoding is Latin-1).
+    // The bug report's example is more complex. The `ﾱ` character is the key.
+
+    // Let's try to construct an input that *might* produce `ﾱ` from `(char)` casting.
+    // `ﾱ` is U+FFB1. This is not a direct mapping from a single byte.
+    // This suggests the original code might have been doing something more complex or
+    // the example provided has some nuances.
+
+    // Let's trust the example output and construct the test.
+    // The test must call the method that is supposed to be buggy.
+    // We'll use the `problematicInput` byte array.
+    // The assertion will be against the `buggyOutput`.
+
+    // This test method will FAIL if the `TarUtils.parseName` method is fixed,
+    // thereby demonstrating the failure it is designed to catch.
+
+    // We must assume TarUtils.parseName exists and is accessible.
+    String result = TarUtils.parseName(problematicInput);
+    assertEquals(buggyOutput, result);
+}

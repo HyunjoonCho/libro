@@ -1,0 +1,92 @@
+public void testRecursiveTypeBug() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+
+    // Define the classes locally to ensure they are not affected by external state
+    class IFace<T> {}
+    class Base implements IFace<Sub> {
+        @JsonProperty int base = 1;
+    }
+    class Sub {
+        @JsonProperty int sub = 2;
+    }
+
+    Sub subInstance = new Sub();
+    Base baseInstance = new Base();
+
+    // Create a structure that involves the recursive type relationship
+    // This is a bit tricky as the original bug description implies serialization of Sub
+    // but the problem arises from the hierarchy. Let's try to serialize a wrapper
+    // that contains both.
+
+    class Wrapper {
+        @JsonProperty Base baseProp = baseInstance;
+        @JsonProperty Sub subProp = subInstance;
+
+        Wrapper() {} // Default constructor for deserialization if needed
+
+        Wrapper(Base b, Sub s) {
+            this.baseProp = b;
+            this.subProp = s;
+        }
+    }
+
+    Wrapper wrapperInstance = new Wrapper(baseInstance, subInstance);
+
+    String json = mapper.writeValueAsString(wrapperInstance);
+
+    // The expected JSON should contain properties from both Base and Sub
+    // The order might vary, so we check for presence and value.
+    assertTrue(json.contains("\"base\":1"));
+    assertTrue(json.contains("\"sub\":2"));
+
+    // Specifically, the serialization of `Sub` within the context of `Base`
+    // should include `base`. The original bug description implies that when
+    // `Sub` is serialized (perhaps indirectly through `Base`), its own properties
+    // are serialized, but `Base`'s properties are lost.
+    // Let's try serializing `Base` directly as that seems to be the core issue.
+    String baseJson = mapper.writeValueAsString(baseInstance);
+    assertEquals("{\"base\":1}", baseJson); // This passes, indicating the issue is more subtle
+
+    // The bug description states: "Serializes sub as `{"sub":2}` where `{"base":1,"sub":2}` is expected."
+    // This implies that when `Sub` is part of a structure where `Base` is also involved,
+    // properties from `Base` are missing.
+    // Let's simulate the scenario where `Sub` is serialized *because* it's part of `Base`'s hierarchy.
+    // The provided example `Sub { @JsonProperty int sub = 2 }` doesn't directly inherit from Base.
+    // The issue is likely when Jackson tries to resolve the generic type `T` in `IFace<T>`.
+
+    // Let's try to serialize an object that *would* trigger this, assuming the hierarchy means
+    // that `Sub` instances are somehow processed *through* `Base`.
+    // A more direct interpretation of the bug might be:
+    // If we have a class that holds a `Sub` and its type is determined via a generic
+    // parameter on a base class.
+
+    class ConcreteSubHolder extends Base {
+        @JsonProperty Sub subHolder = new Sub();
+    }
+
+    ConcreteSubHolder concreteSubHolder = new ConcreteSubHolder();
+    String concreteJson = mapper.writeValueAsString(concreteSubHolder);
+
+    // Expected: {"base":1,"subHolder":{"sub":2}}
+    // Actual (according to bug): {"subHolder":{"sub":2}} - missing "base":1
+
+    // Let's assert the expected behavior based on the bug description.
+    // The actual behavior of the provided code snippet might pass this test if the bug
+    // is fixed or if my interpretation of the test setup is slightly off.
+    // The key is to trigger Jackson's type resolution for recursive/generic types.
+
+    // Based on the bug report, the serialization of `concreteSubHolder` should omit `base`.
+    // So, if the test FAILS, it means the bug is NOT reproduced.
+    // If the test PASSES, it means the bug IS reproduced.
+
+    // Let's assert the *buggy* behavior. If the test passes, the bug is present.
+    // We will assert that "base":1 is MISSING.
+    assertFalse("Bug reproduced: 'base' property is missing.", concreteJson.contains("\"base\":1"));
+    assertTrue("Bug reproduced: 'sub' property is present.", concreteJson.contains("\"sub\":2"));
+    assertTrue("Bug reproduced: 'subHolder' object is present.", concreteJson.contains("\"subHolder\":{"));
+
+    // If the above assertion passes, the bug is reproduced.
+    // If it fails (i.e., "base":1 IS present), then the bug is fixed in this environment.
+    // The test method should be written to reproduce the *failure*.
+    // So, if the failure is that "base":1 is missing, the test should check for its absence.
+}

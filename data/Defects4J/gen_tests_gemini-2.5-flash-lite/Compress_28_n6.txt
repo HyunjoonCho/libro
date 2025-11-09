@@ -1,0 +1,38 @@
+public void testTarArchiveInputStreamDetectsCorruptedTar() throws IOException {
+    // Create a dummy tar file that is intentionally corrupted (truncated)
+    String corruptedTarPath = "corrupted.tar";
+    try (OutputStream fos = new FileOutputStream(corruptedTarPath);
+         TarArchiveOutputStream taos = new TarArchiveOutputStream(fos)) {
+        
+        // Add a valid entry
+        ArchiveEntry entry1 = new TarArchiveEntry("entry1.txt");
+        entry1.setSize(10);
+        taos.putArchiveEntry(entry1);
+        taos.write(new byte[10]);
+        taos.closeArchiveEntry();
+
+        // Add another entry, but truncate the stream before writing its content or metadata completely
+        ArchiveEntry entry2 = new TarArchiveEntry("entry2.txt");
+        entry2.setSize(20);
+        taos.putArchiveEntry(entry2);
+        // Intentionally do not write all 20 bytes, simulating a truncated file
+        taos.write(new byte[5]); 
+        // The stream will be closed here, but the tar file is incomplete
+    }
+
+    TarArchiveInputStream tarInput = null;
+    try {
+        tarInput = new TarArchiveInputStream(new FileInputStream(corruptedTarPath));
+        tarInput.getNextEntry(); // Should process entry1 successfully
+        // The next call to getNextEntry() should detect the corruption and throw an exception
+        tarInput.getNextEntry(); 
+        fail("Expected IOException due to corrupted tar file");
+    } catch (IOException e) {
+        // Expected exception
+        assertTrue("Exception message should indicate EOF or corruption", 
+                   e.getMessage().contains("unexpected EOF") || e.getMessage().contains("corrupt"));
+    } finally {
+        IOUtils.closeQuietly(tarInput);
+        new File(corruptedTarPath).delete(); // Clean up the dummy file
+    }
+}

@@ -1,0 +1,158 @@
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Map;
+import java.util.Random;
+import java.util.UUID;
+import java.util.Map.Entry;
+
+import static org.junit.Assert.fail;
+
+public class JacksonBugReproducer {
+
+    private static final Logger logger = LoggerFactory.getLogger(JacksonBugReproducer.class);
+    private static final UUID user = UUID.randomUUID(); // Dummy user
+
+    @Test
+    public void testArrayIndexOutOfBoundsException() {
+        ObjectMapper mapper = new ObjectMapper();
+        Map<ObjectUserKey, ServerIndexPair> ssip = Maps.newConcurrentMap();
+        try {
+            for (int i = 0; i < 10000; ++i) {
+                byte[] indexPairBytes = new byte[2080];
+                new Random().nextBytes(indexPairBytes);
+                ServerIndexPair sip = new ServerIndexPair(indexPairBytes);
+
+                byte[] s = mapper.writeValueAsBytes(ImmutableMap.of(UUID.randomUUID().toString(), sip));
+                Map<String, ServerIndexPair> metadata = mapper.readValue(s, new TypeReference<Map<String, ServerIndexPair>>() {});
+                for (Entry<String, ServerIndexPair> metadataEntry : metadata.entrySet()) {
+                    ServerIndexPair indexPair = metadataEntry.getValue();
+                    ssip.put(new ObjectUserKey(metadataEntry.getKey(), user), indexPair);
+                }
+                // Log progress, but not too often to avoid slowing down the test excessively
+                if (i % 1000 == 0) {
+                    logger.info("Iteration: {}", i);
+                }
+            }
+        } catch (JsonProcessingException e) {
+            fail("JsonProcessingException occurred: " + e.getMessage());
+        } catch (ArrayIndexOutOfBoundsException e) {
+            // This is the exception we are trying to reproduce
+            logger.error("Successfully reproduced ArrayIndexOutOfBoundsException", e);
+            throw e; // Re-throw to make the test fail as expected
+        }
+    }
+
+    // --- Helper classes (copied from the bug report for completeness) ---
+
+    public static class ServerIndexPair {
+        public static final String INDEX_PAIR_FIELD = "indexPair";
+        private final byte[] indexPair;
+
+        @com.fasterxml.jackson.annotation.JsonCreator
+        public ServerIndexPair(@com.fasterxml.jackson.annotation.JsonProperty(INDEX_PAIR_FIELD) byte[] indexPair) {
+            Preconditions.checkState(indexPair.length == 2080, "Index pair must be 2080 bytes long.");
+            this.indexPair = indexPair;
+        }
+
+        @com.fasterxml.jackson.annotation.JsonProperty(INDEX_PAIR_FIELD)
+        public byte[] getIndexPair() {
+            return indexPair;
+        }
+    }
+
+    public static class ObjectUserKey {
+        public static final String SEPARATOR = ":";
+        private final String objectId;
+        private final UUID userKey;
+
+        @com.fasterxml.jackson.annotation.JsonCreator
+        public ObjectUserKey(@com.fasterxml.jackson.annotation.JsonProperty(Names.ID_FIELD) String objectId,
+                             @com.fasterxml.jackson.annotation.JsonProperty(Names.USER_FIELD) UUID userKey) {
+            super();
+            this.objectId = objectId;
+            this.userKey = userKey;
+        }
+
+        @com.fasterxml.jackson.annotation.JsonProperty(Names.ID_FIELD)
+        public String getObjectId() {
+            return objectId;
+        }
+
+        @com.fasterxml.jackson.annotation.JsonProperty(Names.USER_FIELD)
+        public UUID getUserKey() {
+            return userKey;
+        }
+
+        @Override
+        public int hashCode() {
+            final int prime = 31;
+            int result = 1;
+            result = prime * result + ((objectId == null) ? 0 : objectId.hashCode());
+            result = prime * result + ((userKey == null) ? 0 : userKey.hashCode()); // Added userKey to hashCode
+            return result;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null) {
+                return false;
+            }
+            if (!(obj instanceof ObjectUserKey)) {
+                return false;
+            }
+            ObjectUserKey other = (ObjectUserKey) obj;
+            if (objectId == null) {
+                if (other.objectId != null) {
+                    return false;
+                }
+            } else if (!objectId.equals(other.objectId)) {
+                return false;
+            }
+            if (userKey == null) {
+                if (other.userKey != null) {
+                    return false;
+                }
+            } else if (!userKey.equals(other.userKey)) {
+                return false;
+            }
+            return true;
+        }
+
+        @Override
+        public String toString() {
+            return userKey + SEPARATOR + objectId;
+        }
+
+        public static ObjectUserKey fromString(String value) {
+            int index = value.lastIndexOf(ObjectUserKey.SEPARATOR);
+            Preconditions.checkState(index > -1, "Separator character " + SEPARATOR
+                    + " should be present for ObjectUserKey");
+            String userKeyString = value.substring(0, index);
+            String objectIdString = value.substring(index + 1);
+            UUID userKey = UUID.fromString(userKeyString);
+            return new ObjectUserKey(objectIdString, userKey);
+        }
+
+        public byte[] asBytes() {
+            return this.toString().getBytes();
+        }
+
+    }
+
+    // Dummy Names class to avoid compilation errors
+    public static class Names {
+        public static final String ID_FIELD = "id";
+        public static final String USER_FIELD = "user";
+    }
+}

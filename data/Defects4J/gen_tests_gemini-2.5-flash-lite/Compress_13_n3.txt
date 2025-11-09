@@ -1,0 +1,43 @@
+public void testUmlautDirectoryInWinzip() throws IOException, ArchiveException {
+    // Create a dummy zip file with a directory containing an umlaut
+    // This requires creating a ZipOutputStream and adding entries manually
+    // For demonstration purposes, we'll simulate the problematic entry structure
+    // In a real test, you would create a zip file using WinZip with the specified conditions
+
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    ZipArchiveOutputStream zaos = new ZipArchiveOutputStream(baos);
+
+    // Simulate a directory entry with an umlaut using backslashes and incorrect flag
+    // WinZip with unicode flag on for umlauts sometimes creates entries like this
+    ZipArchiveEntry umlautDirEntry = new ZipArchiveEntry("ä\\"); // Incorrect path separator and no directory flag set
+    umlautDirEntry.setGeneralPurposeFlag((short) 0x01); // Simulate unicode flag set
+    zaos.putArchiveEntry(umlautDirEntry);
+    zaos.closeArchiveEntry();
+
+    // Simulate a file entry within the problematic directory
+    ZipArchiveEntry fileEntry = new ZipArchiveEntry("ä\\file.txt");
+    fileEntry.setGeneralPurposeFlag((short) 0x01); // Simulate unicode flag set
+    zaos.putArchiveEntry(fileEntry);
+    zaos.write("test".getBytes());
+    zaos.closeArchiveEntry();
+
+    zaos.finish();
+    zaos.close();
+
+    ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+    ArchiveInputStream ais = new ArchiveStreamFactory().createArchiveInputStream(ArchiveEntry.ZIP, bais);
+
+    ArchiveEntry entry = ais.getNextEntry();
+    assertNotNull("Should have at least one entry", entry);
+    // The bug is that this entry is not recognized as a directory
+    assertFalse("Directory entry with umlaut should not be marked as a file", entry.isDirectory());
+    // And the name is mangled
+    assertEquals("Directory entry name is incorrect", "ä/", entry.getName().replace('\\', '/')); // Normalize slashes for assertion
+
+    entry = ais.getNextEntry();
+    assertNotNull("Should have a file entry", entry);
+    assertTrue("File entry should be marked as a file", !entry.isDirectory());
+    assertEquals("File entry name is incorrect", "ä/file.txt", entry.getName().replace('\\', '/')); // Normalize slashes for assertion
+
+    ais.close();
+}

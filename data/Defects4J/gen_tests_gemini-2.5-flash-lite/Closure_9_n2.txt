@@ -1,0 +1,66 @@
+public void testAmdModuleInSubdirectory() throws Exception {
+    // Create dummy files to simulate the project structure
+    File libDir = new File("lib");
+    libDir.mkdir();
+
+    File fooJs = new File(libDir, "Foo.js");
+    FileWriter fooWriter = new FileWriter(fooJs);
+    fooWriter.write("goog.provide('module$lib$Foo');");
+    fooWriter.close();
+
+    File barJs = new File("Bar.js");
+    FileWriter barWriter = new FileWriter(barJs);
+    barWriter.write("goog.provide('module$Bar');\n" +
+                    "goog.require('module$lib$Foo');");
+    barWriter.close();
+
+    // Compile the files
+    String[] args = {
+        "--transform_amd_modules",
+        "--process_common_js_modules",
+        "--common_js_entry_module=Bar.js",
+        "--compilation_level=ADVANCED_OPTIMIZATIONS",
+        "--js_output_file=out.js",
+        "--js=Bar.js",
+        "--js=lib/Foo.js"
+    };
+
+    ByteArrayOutputStream errStream = new ByteArrayOutputStream();
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setManageClosureDependencies(true); // Important for AMD/Goog.provide/require
+    options.setPrettyPrint(true);
+    options.setBrowserFeatureset(BrowserFeatureset.getAll());
+    options.setLanguageIn(Language.ECMASCRIPT5);
+    options.setLanguageOut(Language.ECMASCRIPT5);
+
+    List<SourceFile> externs = new ArrayList<>();
+    List<SourceFile> inputs = new ArrayList<>();
+    inputs.add(SourceFile.fromFile(barJs));
+    inputs.add(SourceFile.fromFile(fooJs));
+
+    // Redirect stderr to capture the error message
+    PrintStream originalErr = System.err;
+    System.setErr(new PrintStream(errStream));
+
+    try {
+        // Run the compiler
+        // The compiler.compile method itself doesn't directly throw an exception for this specific error,
+        // but it will print the error to stderr and return a Result with errors.
+        compiler.compile(externs, inputs, options);
+
+        // Assert that an error occurred and the specific error message is present
+        String errorOutput = errStream.toString();
+        assertTrue("Compilation should have failed with an error.", compiler.hasErrors());
+        assertTrue("Error message should indicate the module was not provided. Found: " + errorOutput,
+                   errorOutput.contains("required entry point \"module$lib$Foo\" never provided"));
+    } finally {
+        // Restore stderr
+        System.setErr(originalErr);
+        // Clean up dummy files
+        fooJs.delete();
+        libDir.delete();
+        barJs.delete();
+        new File("out.js").delete();
+    }
+}

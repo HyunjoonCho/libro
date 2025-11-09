@@ -1,0 +1,60 @@
+public void testRecursiveTypeBug() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+
+    // Define the classes as per the bug description
+    class IFace<T> {}
+    class Base implements IFace<Sub> {
+        @JsonProperty int base = 1;
+    }
+    class Sub {
+        @JsonProperty int sub = 2;
+    }
+
+    // Create an instance of the subclass
+    Sub subInstance = new Sub();
+    
+    // The serialization is expected to include properties from Base,
+    // but it currently only includes properties from Sub.
+    // This test asserts the *expected* behavior, which the bug report
+    // indicates is not happening.
+    String json = mapper.writeValueAsString(subInstance);
+
+    // Assert that the 'sub' property is present
+    assertTrue(json.contains("\"sub\":2"));
+    
+    // Assert that the 'base' property is *not* present,
+    // which is the current incorrect behavior.
+    // If the bug were fixed, this assertion would likely need to change
+    // or be removed, and a new assertion added to check for "base":1.
+    assertFalse(json.contains("\"base\":1"));
+
+    // To demonstrate the expected behavior if the bug were fixed,
+    // we would expect something like this:
+    // mapper.writeValueAsString(new BaseSubWrapper(new Base(), new Sub()));
+    // Or a combined object that exposes both. The bug description implies
+    // that when Sub is serialized, it should somehow know about Base's properties.
+    // The provided code doesn't directly serialize BaseSubWrapper, but
+    // the bug is described as "Missing properties from base class when recursive types are involved."
+    // The sample code in the github repo shows a BaseSubWrapper.
+    
+    // Let's try to replicate the BaseSubWrapper scenario from the linked repo
+    // to more accurately test the described failure.
+    class BaseSubWrapper {
+        @JsonProperty Base base = new Base();
+        @JsonProperty Sub sub = new Sub();
+        
+        BaseSubWrapper() {} // Default constructor for deserialization
+        BaseSubWrapper(Base base, Sub sub) {
+            this.base = base;
+            this.sub = sub;
+        }
+    }
+
+    BaseSubWrapper wrapperInstance = new BaseSubWrapper();
+    String wrapperJson = mapper.writeValueAsString(wrapperInstance);
+
+    // Assert the expected behavior: both base and sub properties should be present.
+    // The bug report states that the current behavior is missing 'base' properties.
+    assertTrue(wrapperJson.contains("\"base\":1"));
+    assertTrue(wrapperJson.contains("\"sub\":2"));
+}

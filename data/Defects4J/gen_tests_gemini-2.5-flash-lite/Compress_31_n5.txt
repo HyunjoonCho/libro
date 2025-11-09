@@ -1,0 +1,78 @@
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.junit.jupiter.api.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.util.zip.GZIPInputStream;
+
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.fail;
+
+public class TarArchiveInputStreamTest {
+
+    @Test
+    public void testInvalidTgzFile() {
+        // This is a minimal representation of a corrupted .tgz header that causes the issue.
+        // The original issue description mentions "Invalid byte 0 at offset 5 in '05412\u000011'".
+        // We'll create a byte array that mimics this problematic header.
+        // A valid tar header is 512 bytes. The problematic part seems to be in the name field.
+        // We'll construct a minimal GZIP stream containing a tar archive with a corrupted header.
+
+        // Example of a potentially problematic tar header part (simplified for demonstration)
+        // The actual tar format is complex, but the error message points to parsing octal values.
+        // We need to create bytes that would result in TarUtils.parseOctal failing.
+        byte[] corruptedTarHeader = new byte[512]; // A tar header is 512 bytes
+
+        // Mimic the problematic string "05412\011" which is 8 bytes.
+        // Assuming this is part of the file name field (index 0-99 in tar header).
+        // Let's place it at the beginning for simplicity in this test.
+        // '0', '5', '4', '1', '2'
+        corruptedTarHeader[0] = '0';
+        corruptedTarHeader[1] = '5';
+        corruptedTarHeader[2] = '4';
+        corruptedTarHeader[3] = '1';
+        corruptedTarHeader[4] = '2';
+        // The problematic byte 0 at offset 5. In tar, this is often a null terminator or part of an octal number.
+        // The error message "Invalid byte 0 at offset 5" suggests the byte value is 0.
+        corruptedTarHeader[5] = 0; // The null byte
+        // Following bytes that might be interpreted as part of an octal number
+        corruptedTarHeader[6] = '1';
+        corruptedTarHeader[7] = '1';
+
+        // Pad the rest of the header with zeros, as required by the tar format.
+        // Ensure the header is null-terminated correctly if needed, but the error is during parsing.
+
+        try {
+            // Wrap the corrupted header in a GZIP stream
+            ByteArrayInputStream bais = new ByteArrayInputStream(corruptedTarHeader);
+            GZIPInputStream gzipInputStream = new GZIPInputStream(bais);
+
+            TarArchiveInputStream tarIn = new TarArchiveInputStream(gzipInputStream);
+
+            // Attempt to get the next entry, which should trigger the exception
+            TarArchiveEntry entry = tarIn.getNextTarEntry();
+            
+            // If getNextTarEntry does not throw an exception, the test fails.
+            fail("Expected IOException for corrupted tar header, but no exception was thrown.");
+
+        } catch (IOException e) {
+            // Check if the exception is the expected one
+            if (e.getMessage().contains("Error detected parsing the header") ||
+                (e.getCause() != null && e.getCause() instanceof IllegalArgumentException)) {
+                // This is the expected failure
+                System.out.println("Successfully caught expected IOException: " + e.getMessage());
+                // Optionally, assert on the cause if needed
+                if (e.getCause() != null) {
+                    System.out.println("Caught expected IllegalArgumentException: " + e.getCause().getMessage());
+                }
+            } else {
+                // An unexpected IOException occurred
+                fail("Caught an unexpected IOException: " + e.getMessage());
+            }
+        } catch (Exception e) {
+            // Any other exception indicates a failure to reproduce the specific issue
+            fail("Caught an unexpected exception type: " + e.getClass().getName() + " - " + e.getMessage());
+        }
+    }
+}

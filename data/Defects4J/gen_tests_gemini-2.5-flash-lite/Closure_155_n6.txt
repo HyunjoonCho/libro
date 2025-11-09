@@ -1,0 +1,60 @@
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.mozilla.javascript.Context;
+import org.mozilla.javascript.Scriptable;
+import org.mozilla.javascript.tools.shell.Global;
+
+public class ArgumentsOptimisationTest {
+
+    @Test
+    public void testArgumentsOptimisation() throws Exception {
+        Context cx = Context.enter();
+        try {
+            Global global = new Global();
+            Scriptable scope = cx.initStandardObjects(global);
+
+            // Original JavaScript code
+            String originalJs = "function d3_call(callback) {" +
+                                " var f = callback;" +
+                                " arguments[0] = this;" +
+                                " f.apply(this, arguments);" +
+                                " return this;" +
+                                "}";
+            cx.evaluateString(scope, originalJs, "original.js", 1, null);
+
+            // Optimized JavaScript code (as described in the bug)
+            // Note: This is a simplified representation as the exact output of the optimizer
+            // might vary slightly. The key is the overwriting of the first argument.
+            String optimizedJs = "function d3_call(a){arguments[0]=this;a.apply(this,arguments);return this}";
+            cx.evaluateString(scope, optimizedJs, "optimized.js", 1, null);
+
+            // Test the optimized function
+            // We need to simulate a scenario where 'this' is not the first argument
+            // and the first argument is a function that expects arguments.
+            // Let's create a dummy object and a function to test.
+
+            // Create a function that checks its arguments
+            String testJs = "var testObj = {};" +
+                            "function testFunc(arg1, arg2) {" +
+                            "  if (arg1 !== testObj || arg2 !== 'hello') throw new Error('Arguments mismatch');" +
+                            "  return 'success';" +
+                            "}" +
+                            "var boundFunc = d3_call.bind(testObj, testFunc);" +
+                            "var result = boundFunc('hello');"; // Call with 'hello' as the second arg
+
+            // Execute the test scenario
+            Object result = cx.evaluateString(scope, testJs, "test.js", 1, null);
+
+            // The optimized version should fail because arguments[0] is overwritten
+            // and the original function 'a' (which is testFunc) receives 'this' (testObj)
+            // as its first argument instead of the intended 'testFunc'.
+            // If it passes, it means the optimization was incorrect.
+            assertTrue("Optimized function did not handle arguments correctly.", result.equals("success"));
+
+
+        } finally {
+            Context.exit();
+        }
+    }
+}

@@ -1,0 +1,78 @@
+public void testIssue519() throws Exception {
+    // The issue is about how IE handles array sorting with a large number of elements.
+    // Specifically, it seems to pass arrays by reference to the sort comparator when
+    // the number of elements is large, while other browsers pass by value.
+    // This causes problems when the Closure Compiler optimizes the code by assuming
+    // the comparator arguments are local copies and modifies them.
+
+    // We need to simulate a scenario with a large number of elements and a sort comparator
+    // that modifies its arguments, then check if the sorting result is as expected.
+    // Since we can't directly run IE from a JUnit test, we'll focus on replicating the
+    // logical flaw in the Java code that would lead to this issue if it were executed in IE.
+
+    // Let's create a large array of arrays. The exact threshold for IE is machine-dependent,
+    // but we can use a value that is likely to trigger the behavior or at least test the logic.
+    final int ARRAY_SIZE = 300; // A size likely to trigger the IE issue
+
+    // Create a list of arrays. Each inner array will contain a single element.
+    List<List<Integer>> listOfArrays = new ArrayList<>();
+    for (int i = 0; i < ARRAY_SIZE; i++) {
+        List<Integer> innerArray = new ArrayList<>();
+        innerArray.add(ARRAY_SIZE - i); // Populate with values in reverse order
+        listOfArrays.add(innerArray);
+    }
+
+    // Define a comparator that modifies its arguments.
+    // This is the core of the problem: Closure compiler assumes this is safe because
+    // in most browsers, 'a' and 'b' are copies. But in IE with large arrays, they might be references.
+    Comparator<List<Integer>> modifyingComparator = new Comparator<List<Integer>>() {
+        @Override
+        public int compare(List<Integer> a, List<Integer> b) {
+            // Simulate modification: decrement the first element
+            a.set(0, a.get(0) - 1);
+            // The actual comparison logic
+            return a.get(0).compareTo(b.get(0));
+        }
+    };
+
+    // Perform the sort. The expected outcome depends on whether the comparator modifies
+    // the original lists or copies. If it modifies copies (like most browsers), the sort
+    // should be based on the initial values. If it modifies references (like IE in this case),
+    // the sort order might be incorrect because the values being compared change mid-sort.
+
+    // Let's capture the state *before* sorting to see if modifications happen unexpectedly.
+    List<List<Integer>> originalListOfArrays = new ArrayList<>();
+    for (List<Integer> innerList : listOfArrays) {
+        originalListOfArrays.add(new ArrayList<>(innerList)); // Deep copy
+    }
+
+    // Sort the list
+    Collections.sort(listOfArrays, modifyingComparator);
+
+    // Now, assert the expected state.
+    // The problem description implies that IE's behavior leads to incorrect sorting.
+    // We'll assert that the sorting *should* have resulted in ascending order based on the *initial* values.
+    // If the comparator modified the original lists in a way that corrupted the sort, this assertion would fail.
+
+    // The original values were ARRAY_SIZE, ARRAY_SIZE-1, ..., 1.
+    // After sorting, they should be 1, 2, ..., ARRAY_SIZE.
+    for (int i = 0; i < ARRAY_SIZE; i++) {
+        List<Integer> sortedArray = listOfArrays.get(i);
+        assertNotNull("Sorted array at index " + i + " should not be null", sortedArray);
+        assertEquals("Sorted array at index " + i + " should have one element", 1, sortedArray.size());
+        // The value should be i + 1, based on the initial reverse order population.
+        // This assertion checks if the final sorted order is correct, assuming the comparator
+        // *eventually* leads to the correct order despite potential intermediate issues.
+        // The real bug is that the intermediate modifications in IE would break the final sort.
+        // We are testing the *logic* that the compiler might generate, which assumes safe modification.
+        assertEquals("Value at index " + i + " is incorrect after sort.", i + 1, sortedArray.get(0).intValue());
+    }
+
+    // Additionally, we can check if the original lists were modified in a way that's inconsistent
+    // with a pure copy-based sort. However, this is tricky because the comparator *is* designed
+    // to modify its arguments. The core issue is *which* arguments it modifies (copies vs. references).
+    // The safest way to assert the *expected* behavior (non-IE) is to check the final sorted order.
+    // If the IE behavior occurred, the final sorted order would likely be wrong.
+    // Our assertion above checks for the *correct* final sorted order. If the bug were present
+    // and triggered, this assertion would fail.
+}

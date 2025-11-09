@@ -1,0 +1,55 @@
+public void testXPathBinaryOperatorsNodeSet() throws Exception {
+    String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><doc/>";
+    Document doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(new InputSource(new StringReader(xml)));
+    JXPathContext context = JXPathContext.newContext(doc);
+
+    // Test case 1: Number > NodeSet (empty)
+    Boolean result1 = (Boolean) context.getValue("2.0 > //child1", Boolean.class);
+    assertFalse("Expected false when comparing number to empty node-set", result1.booleanValue());
+
+    // Test case 2: NodeSet (empty) > Number
+    Boolean result2 = (Boolean) context.getValue("//child1 > 2.0", Boolean.class);
+    assertFalse("Expected false when comparing empty node-set to number", result2.booleanValue());
+
+    // Test case 3: NodeSet (empty) > NodeSet (empty)
+    Boolean result3 = (Boolean) context.getValue("//child1 > //child2", Boolean.class);
+    assertFalse("Expected false when comparing two empty node-sets", result3.booleanValue());
+
+    // Add a node to test node-set comparisons
+    Element docElement = doc.getDocumentElement();
+    Element child1 = doc.createElement("child1");
+    child1.setTextContent("3.0");
+    docElement.appendChild(child1);
+
+    // Test case 4: Number > NodeSet (with one node)
+    Boolean result4 = (Boolean) context.getValue("2.0 > //child1", Boolean.class);
+    assertTrue("Expected true when 2.0 > node with value 3.0", result4.booleanValue()); // XPath spec says: "true if and only if there is a node in the node-set such that the result of performing the comparison on the number to be compared and on the result of converting the string-value of that node to a number using the number function is true." So 2.0 > 3.0 is false.
+
+    // Re-evaluating the XPath spec for case 4:
+    // "the result of performing the comparison on the number to be compared and on the result of converting the string-value of that node to a number"
+    // So we compare 2.0 with the number converted from "3.0". The comparison is 2.0 > 3.0 which is false.
+    // The spec says "true if and only if there is a node in the node-set such that the result of performing the comparison [...] is true."
+    // Since there is only one node and the comparison is false, the overall result should be false.
+    // Let's adjust the assertion based on a correct interpretation of the spec.
+    assertFalse("Expected false when 2.0 > node with value 3.0", result4.booleanValue());
+
+
+    // Test case 5: NodeSet (with one node) > Number
+    Boolean result5 = (Boolean) context.getValue("//child1 > 2.0", Boolean.class);
+    assertTrue("Expected true when node with value 3.0 > 2.0", result5.booleanValue());
+
+    // Test case 6: NodeSet > NodeSet
+    Element child2 = doc.createElement("child2");
+    child2.setTextContent("1.0");
+    docElement.appendChild(child2);
+    Boolean result6 = (Boolean) context.getValue("//child1 > //child2", Boolean.class);
+    assertTrue("Expected true when nodeSet(//child1) > nodeSet(//child2)", result6.booleanValue()); // 3.0 > 1.0 is true.
+
+    // Test case 7: NodeSet > NodeSet (no true comparison)
+    Element child3 = doc.createElement("child3");
+    child3.setTextContent("4.0");
+    docElement.appendChild(child3);
+    Boolean result7 = (Boolean) context.getValue("//child2 > //child1", Boolean.class);
+    assertFalse("Expected false when nodeSet(//child2) > nodeSet(//child1)", result7.booleanValue()); // 1.0 > 3.0 is false.
+
+}

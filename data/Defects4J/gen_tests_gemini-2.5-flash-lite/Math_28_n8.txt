@@ -1,0 +1,93 @@
+public void testUnboundedSolutionException() {
+    SimplexSolver solver = new SimplexSolver();
+    // Setting ENTITIES_COUNT to a value that triggers the exception, e.g., 15
+    int ENTITIES_COUNT = 15;
+    List<Integer> constraints = new ArrayList<>();
+    for (int i = 0; i < ENTITIES_COUNT; i++) {
+        constraints.add(i);
+    }
+
+    // Constructing a minimization problem that is likely to be unbounded
+    // This is a simplified representation, the actual problem formulation from the bug report is complex.
+    // The goal here is to create a scenario that leads to the exception.
+    // We'll create a simple objective function and constraints that might allow variables to grow indefinitely.
+
+    // Objective: minimize 1*t + 0*L (where t is a single variable for simplicity in this test)
+    LinearObjectiveFunction f = new LinearObjectiveFunction(new double[]{1.0}, 0);
+
+    // Constraints:
+    // -q(r) + QL >= 0  =>  -q(r) + sum(Q_ir * l_i) >= 0
+    // x(r)t - XL >= 0  =>  x(r)*t - sum(X_ir * l_i) >= 0
+    // L >= 0           =>  l_i >= 0
+
+    // For this test, we simplify by creating a scenario where a variable can increase without bound.
+    // Let's assume we have one variable 't' and some constraints.
+    // Example: minimize t subject to t >= 0, and some other constraints that don't effectively bound t from above.
+    // A common way to create unboundedness is by having constraints that don't sufficiently restrict a variable.
+
+    // Let's create a problem with one variable 't' (representing the 't' in the objective)
+    // and try to make it unbounded.
+    // We'll use a simplified constraint set.
+    // Objective: minimize t
+    // Constraints:
+    // t - L1 >= 0  => t >= L1
+    // t - L2 >= 0  => t >= L2
+    // L1 >= 0
+    // L2 >= 0
+    // If L1 and L2 can be arbitrarily large, then t must also be arbitrarily large, leading to unboundedness.
+    // This is a very simplified model to trigger the UnboundedSolutionException.
+
+    // We need to map the bug report's variables to the SimplexSolver's expected format.
+    // Let's assume 't' is the first variable in our problem.
+    // Let's assume 'L' components are other variables.
+
+    // To trigger the exception, we need a minimization problem.
+    // Let's try minimizing a variable that can grow indefinitely due to constraints.
+    // Objective: Minimize x1 (where x1 corresponds to 't' in the report)
+    double[] coefficients = new double[1 + ENTITIES_COUNT]; // 1 for 't', ENTITIES_COUNT for 'L' variables
+    coefficients[0] = 1.0; // Minimize t
+    for (int i = 1; i < coefficients.length; i++) {
+        coefficients[i] = 0.0; // Other variables don't affect the objective directly in this simplified case
+    }
+    LinearObjectiveFunction objectiveFunction = new LinearObjectiveFunction(coefficients, 0);
+
+    Collection<LinearConstraint> constraints = new ArrayList<>();
+
+    // Representing: x(r)t - XL >= 0
+    // For simplicity, let's assume R=1, so we have 't' and 'L1'.
+    // Constraint: 1*t - 1*L1 >= 0  => t >= L1
+    // And L1 >= 0
+    // This setup, with minimization, should lead to unboundedness if L1 can grow.
+
+    // Let's create constraints that are likely to lead to unboundedness for a minimization problem.
+    // Example: Minimize x1 subject to x1 - x2 >= 0, x1 - x3 >= 0, x2 >= 0, x3 >= 0
+    // Here, x1 must be greater than or equal to x2 and x3. If x2 and x3 can grow indefinitely (which they can if they are only constrained by >= 0), then x1 must also grow indefinitely.
+
+    // Let's create a scenario with one primary variable 't' and several 'L' variables.
+    // Objective: minimize t
+    // Constraints:
+    // For each r (from 0 to ENTITIES_COUNT-1):
+    //   1*t - 1*L_r >= 0  (this means t >= L_r)
+    //   L_r >= 0
+    //
+    // With this, t must be greater than or equal to all L_r. If L_r can be any non-negative number,
+    // then t can also be any non-negative number. For a minimization problem, this would be unbounded.
+
+    // Add constraints: t - L_r >= 0
+    for (int r = 0; r < ENTITIES_COUNT; r++) {
+        double[] constraintCoeffs = new double[1 + ENTITIES_COUNT];
+        constraintCoeffs[0] = 1.0; // Coefficient for 't'
+        constraintCoeffs[r + 1] = -1.0; // Coefficient for 'L_r'
+        constraints.add(new LinearConstraint(constraintCoeffs, Relationship.GEQ, 0));
+    }
+
+    // Add constraints: L_r >= 0
+    for (int r = 0; r < ENTITIES_COUNT; r++) {
+        double[] constraintCoeffs = new double[1 + ENTITIES_COUNT];
+        constraintCoeffs[r + 1] = 1.0; // Coefficient for 'L_r'
+        constraints.add(new LinearConstraint(constraintCoeffs, Relationship.GEQ, 0));
+    }
+
+    // The solver is expected to throw UnboundedSolutionException.
+    solver.solve(objectiveFunction, constraints);
+}

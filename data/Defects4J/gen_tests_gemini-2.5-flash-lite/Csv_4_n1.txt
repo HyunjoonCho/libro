@@ -1,0 +1,69 @@
+public void testGetHeaderMapNullPointerException() throws IOException {
+    String csvString = "a,b,c\n1,2,3";
+    StringReader reader = new StringReader(csvString);
+    CSVFormat csvFormat = CSVFormat.DEFAULT.withHeader(); // This format has a header
+    CSVParser parser = new CSVParser(reader, csvFormat);
+
+    // Now, let's create a scenario where headerMap might be null.
+    // This is a bit tricky because the provided stacktrace implies
+    // that the NPE happens *during* the creation of the new LinkedHashMap
+    // if the internal headerMap is null.
+    // The proposed fix suggests returning null if headerMap is null.
+    // To reproduce the original NPE, we need a parser that *should* have a header
+    // but somehow ends up with a null internal headerMap before getHeaderMap() is called.
+    // This is difficult to simulate directly without modifying the CSVParser class itself.
+
+    // Let's assume the bug is that getHeaderMap() itself might be called
+    // when the parser was initialized without expecting a header, but the
+    // user *tries* to get the header map.
+    // The provided description is a bit contradictory. If the format doesn't have a headerMap,
+    // then it shouldn't throw NPE in HashMap.<init>. The NPE is likely if headerMap is null
+    // *when it's expected to be populated*.
+
+    // Let's try creating a parser without explicitly defining a header,
+    // and then calling getHeaderMap(). If the CSVFormat doesn't have a header,
+    // CSVParser might initialize headerMap to null.
+    StringReader readerNoHeader = new StringReader("1,2,3\n4,5,6");
+    CSVFormat formatNoHeader = CSVFormat.DEFAULT; // No header defined
+    CSVParser parserNoHeader = new CSVParser(readerNoHeader, formatNoHeader);
+
+    // The original bug description implies that getHeaderMap() on a parser
+    // that *doesn't* have a header (or where headerMap is null) throws NPE.
+    // The stacktrace points to `new LinkedHashMap<String, Integer>(this.headerMap)`
+    // where `this.headerMap` is null.
+    // So, we need to create a parser where `this.headerMap` is null.
+    // This happens if `CSVFormat.withHeader()` is *not* used, and the first line
+    // doesn't look like a header (or there's no first line).
+
+    // Let's simulate the condition where `this.headerMap` is null inside `getHeaderMap`.
+    // The most direct way to reproduce the NPE as described in the stacktrace
+    // is to have `this.headerMap` be null when `new LinkedHashMap<>(this.headerMap)` is called.
+    // This would happen if `CSVParser` is initialized, and `headerMap` field remains null.
+    // This occurs when `CSVFormat.withHeader()` is not used.
+
+    // The description might be slightly misleading. The key is that `this.headerMap` is null
+    // when `getHeaderMap()` is invoked.
+    CSVFormat formatWithoutHeader = CSVFormat.DEFAULT; // No header mapping
+    StringReader readerWithoutHeader = new StringReader("value1,value2\nvalue3,value4");
+    CSVParser parserWithoutHeader = new CSVParser(readerWithoutHeader, formatWithoutHeader);
+
+    // If the implementation of getHeaderMap() is:
+    // return new LinkedHashMap<String, Integer>(this.headerMap);
+    // And this.headerMap is null, then HashMap.<init>(null) would be called,
+    // which is not allowed and would throw NPE. The provided fix correctly handles this.
+
+    // To trigger the NPE before the fix, we need to call getHeaderMap()
+    // on a parser instance where `headerMap` is null.
+    // This happens when the `CSVFormat` does not specify headers.
+    try {
+        Map<String, Integer> header = parserWithoutHeader.getHeaderMap();
+        // If the fix is applied, this line would return null and not throw an exception.
+        // If the bug is present, it will throw NPE.
+        assertNull("Header map should be null when no header is defined", header);
+    } catch (NullPointerException e) {
+        // This catch block is here to confirm that the NPE *does* occur without the fix.
+        // In a real test, you'd assert that the exception is thrown.
+        // For this generation, we assume the test environment will catch it.
+        fail("NPE was thrown when calling getHeaderMap() on a parser without headers.");
+    }
+}

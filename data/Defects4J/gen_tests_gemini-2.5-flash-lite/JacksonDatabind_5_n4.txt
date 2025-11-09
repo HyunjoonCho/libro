@@ -1,0 +1,54 @@
+public void testMixinAnnotationsLostWithHierarchy() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.setMixInAnnotation(Person.class, PersonMixin.class);
+    // Explicitly setting the mixin for the parent interface as a workaround
+    // module.setMixInAnnotation(Contact.class, ContactMixin.class); 
+    mapper.registerModule(module);
+
+    PersonImpl person = new PersonImpl();
+    // Setting a value that should be serialized if annotations were applied correctly
+    person.setCity("New York"); 
+
+    String json = mapper.writeValueAsString(person);
+
+    // If the city property is serialized, it means the mixin annotation was applied.
+    // The bug report indicates it's *not* serialized when the hierarchy is present without the workaround.
+    // Therefore, we assert that the "city" property is NOT present in the JSON output.
+    // If the test fails, it means the city *is* present, and the bug is fixed (or the workaround is applied).
+    assertFalse("City property should not be serialized due to the bug.", json.contains("\"city\""));
+}
+
+// --- Helper classes to replicate the structure described in the bug report ---
+
+interface Contact {
+    String getCity();
+    void setCity(String city); // Added setter for testing
+}
+
+// Dummy implementation for testing
+class ContactImpl implements Contact {
+    private String city;
+    @Override
+    public String getCity() { return city; }
+    @Override
+    public void setCity(String city) { this.city = city; }
+}
+
+// Dummy mixin class
+class ContactMixin implements Contact {
+    @JsonProperty
+    public String getCity() { return null; }
+    // No annotation on setCity, as per the implied behavior of the bug report
+}
+
+interface Person extends Contact {}
+
+// Dummy implementation class
+class PersonImpl extends ContactImpl implements Person {}
+
+// Dummy mixin class for Person
+class PersonMixin extends ContactMixin implements Person {
+    // Inherits getCity from ContactMixin, which has @JsonProperty
+    // Inherits setCity from ContactImpl (or could be defined here if needed)
+}

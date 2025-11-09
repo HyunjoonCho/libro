@@ -1,0 +1,74 @@
+public void testStringCollectionDeserializerFailsWithCustomCollection() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    // Registering a module that maps the custom collection to its immutable version
+    SimpleModule module = new SimpleModule();
+    module.addAbstractTypeMapping(CustomCollection.class, ImmutableCustomCollection.class);
+    mapper.registerModule(module);
+
+    // The CustomCollection class and its immutable counterpart would need to be defined elsewhere
+    // For reproduction, we assume they exist and ImmutableCustomCollection has a no-arg constructor.
+    // The following is a simplified representation for the test structure.
+
+    // Assuming CustomCollection is a Collection<String> and ImmutableCustomCollection is its immutable counterpart
+    // and ImmutableCustomCollection has a no-arg constructor.
+    // The actual classes would be more complex.
+
+    // Example data structure containing the custom collection
+    MyDataObject dataObject = new MyDataObject();
+    dataObject.customCollection = new CustomCollection<>();
+    dataObject.customCollection.add("test1");
+    dataObject.customCollection.add("test2");
+
+    // Serialize and then deserialize to trigger the issue
+    String json = mapper.writeValueAsString(dataObject);
+
+    // The deserialization is expected to fail here due to the StringCollectionDeserializer
+    // trying to instantiate the custom collection without a no-arg constructor if it's not handled correctly.
+    // We are testing that it *would* fail if the bug exists, but since we are writing a test
+    // that should pass *after* the fix, we assert that it succeeds.
+    // If this test fails, it means the bug is still present.
+    MyDataObject deserializedDataObject = mapper.readValue(json, MyDataObject.class);
+
+    // Assertions to verify correct deserialization
+    assertNotNull(deserializedDataObject);
+    assertNotNull(deserializedDataObject.customCollection);
+    assertEquals(2, deserializedDataObject.customCollection.size());
+    assertTrue(deserializedDataObject.customCollection.contains("test1"));
+    assertTrue(deserializedDataObject.customCollection.contains("test2"));
+}
+
+// Dummy classes to make the test compilable and represent the scenario
+// In a real scenario, these would be part of the tested code.
+static class MyDataObject {
+    public CustomCollection<String> customCollection;
+}
+
+// Assume CustomCollection is a mutable collection that doesn't have a no-arg constructor
+// or has one that is not accessible in the context where StringCollectionDeserializer is used.
+static class CustomCollection<T> extends java.util.ArrayList<T> {
+    // No explicit no-arg constructor, relies on ArrayList's.
+    // The bug report implies that StringCollectionDeserializer might not be handling this correctly
+    // for custom types, especially when mapped to an immutable version.
+}
+
+// Assume ImmutableCustomCollection is the immutable version with a no-arg constructor
+static class ImmutableCustomCollection<T> extends java.util.Collections.UnmodifiableCollection<T> {
+    // This constructor is required by the module mapping for deserialization.
+    public ImmutableCustomCollection() {
+        super(new java.util.ArrayList<>());
+    }
+
+    // Need a way to add elements during deserialization if Jackson is building it up
+    // This part is tricky and depends on how Jackson handles collection deserialization.
+    // For the sake of this test, we assume Jackson can populate it correctly IF
+    // StringCollectionDeserializer doesn't interfere wrongly.
+    // A more realistic ImmutableCustomCollection might have a builder or a factory method.
+
+    // Mocking add method for test setup, though Jackson wouldn't call this directly on the final immutable object.
+    // The deserialization process itself is what's being tested.
+    public void add(T element) {
+        // This method is here to allow MyDataObject initialization,
+        // but the core issue is during deserialization of the JSON string.
+        // The actual deserialization process by Jackson is what needs to be correct.
+    }
+}

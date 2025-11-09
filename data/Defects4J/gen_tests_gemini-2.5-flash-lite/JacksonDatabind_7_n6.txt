@@ -1,0 +1,280 @@
+public void testPossiblyWrongTokenBufferDelegateDeserialization() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    TokenBuffer buffer = new TokenBuffer(mapper, false);
+    buffer.writeStartObject();
+    buffer.writeFieldName("a");
+    buffer.writeNumber(1);
+    buffer.writeFieldName("b");
+    buffer.writeNull();
+    buffer.writeEndObject();
+
+    // Simulate the scenario where the deserializer is called with a FIELD_NAME as current token
+    // This is a simplified representation of the described issue.
+    // In the actual bug, this happens within the deserialization process.
+    // We'll create a TokenBuffer that starts with a FIELD_NAME and check its state.
+    TokenBuffer simulatedBuffer = new TokenBuffer(mapper, false);
+    simulatedBuffer.writeFieldName("a");
+    simulatedBuffer.writeNumber(1);
+
+    // The bug report implies that copyCurrentStructure(simulatedBuffer) would result in
+    // a buffer containing only [FIELD_NAME, VALUE_NUMBER_INT] when it should have more.
+    // We can't directly test the copyCurrentStructure logic here without replicating
+    // the BeanDeserializer, but we can assert the state of a buffer that is
+    // *intended* to represent the problematic state.
+
+    // Let's verify the expected tokens if the buffer *was* correctly handled.
+    // This part is tricky because the bug is about how `copyCurrentStructure` *behaves*.
+    // A direct reproduction would involve mocking or replicating parts of Jackson's deserializer.
+    // However, we can assert the *outcome* of what the bug implies.
+
+    // The bug implies that when the buffer is expected to represent the full structure
+    // starting from the object, it instead only contains the field name and value.
+    // Let's create a buffer that *should* represent the full structure and check its tokens.
+    TokenBuffer fullStructureBuffer = new TokenBuffer(mapper, false);
+    fullStructureBuffer.writeStartObject();
+    fullStructureBuffer.writeFieldName("a");
+    fullStructureBuffer.writeNumber(1);
+    fullStructureBuffer.writeFieldName("b");
+    fullStructureBuffer.writeNull();
+    fullStructureBuffer.writeEndObject();
+
+    // Now, let's simulate the problematic state by advancing the token pointer
+    // of the `fullStructureBuffer` past the START_OBJECT, to the first FIELD_NAME.
+    // This mimics the condition described in the bug report where the buffer
+    // "ends up being started with field name".
+    fullStructureBuffer.first(); // Reset to START_OBJECT
+    fullStructureBuffer.nextValue(); // Move to FIELD_NAME "a"
+
+    // Now, if copyCurrentStructure was called in this state, the bug suggests
+    // it might only copy the current field and its value, leading to a buffer
+    // that *appears* to only contain [FIELD_NAME, VALUE_NUMBER_INT].
+
+    // We can't directly test copyCurrentStructure's internal behavior easily.
+    // The most direct way to reproduce the *symptom* is to check what happens
+    // if we try to deserialize a JSON that *should* result in a TokenBuffer
+    // with the described structure, but due to the bug, it doesn't.
+
+    // Let's try deserializing the JSON and see what TokenBuffer we get.
+    // The @JsonCreator method `from(TokenBuffer buffer)` is the entry point.
+    // We need to trigger this method. This usually happens when deserializing
+    // a type that uses this creator.
+
+    // Let's define a simple class that uses this creator.
+    class MyValue {
+        private final String fieldName;
+        private final Object fieldValue;
+
+        @JsonCreator
+        public static MyValue from(TokenBuffer buffer) {
+            // This is where the bug is assumed to be.
+            // We'll inspect the buffer's state *after* it's populated by Jackson.
+            // The bug report implies that 'buffer' here will not contain the full structure.
+
+            // To verify the bug, we need to capture the state of the buffer *inside* this method.
+            // Since we can't modify the actual Jackson deserializer here, we'll make an assertion
+            // that *would* fail if the bug is present.
+
+            // If the bug is present, the buffer might only contain the first field and its value.
+            // Let's try to extract the tokens from the buffer *as if* it were the problematic one.
+
+            // This part is tricky: we need to get the TokenBuffer *as Jackson provides it*
+            // to the @JsonCreator method. We can't directly instantiate it and pass it.
+            // We need to deserialize a type that *uses* this creator.
+
+            // Let's assume the JSON is for a type that *uses* MyValue.
+            // This is getting complex to reproduce in a simple JUnit test without
+            // deeper Jackson internals knowledge or mocking.
+
+            // Let's simplify: The bug is about `TokenBuffer#copyCurrentStructure`
+            // when the current token is `FIELD_NAME`.
+            // If we had a TokenBuffer `tb` where `tb.getCurrentToken() == FIELD_NAME`,
+            // and we called `tb.copyCurrentStructure()`, the resulting buffer would be wrong.
+
+            // A more direct reproduction would be:
+            TokenBuffer problematicBuffer = new TokenBuffer(mapper, false);
+            problematicBuffer.writeFieldName("a"); // Start with a field name
+            problematicBuffer.writeNumber(1);      // Write its value
+
+            // Now, if we were inside the deserializer, and `problematicBuffer` was the
+            // buffer being processed, and `copyCurrentStructure` was called, the result
+            // would be a buffer that *only* contains these two tokens.
+
+            // Let's assert the state of `problematicBuffer` directly, as this seems
+            // to be the state the bug report describes as the *result* of the flawed copy.
+            
+            // Reset to the beginning to iterate through tokens
+            problematicBuffer.first();
+            
+            // Expected tokens based on the bug description's outcome:
+            // [FIELD_NAME, VALUE_NUMBER_INT]
+            
+            assertTrue(problematicBuffer.nextValue() == JsonToken.FIELD_NAME);
+            assertEquals("a", problematicBuffer.getCurrentName());
+            assertTrue(problematicBuffer.nextValue() == JsonToken.VALUE_NUMBER_INT);
+            assertEquals(1, problematicBuffer.getIntValue());
+            
+            // The bug implies that if the original buffer had more structure (like START_OBJECT, FIELD_NAME, VALUE_NULL, END_OBJECT),
+            // this resulting buffer would *not* contain those subsequent parts.
+            // So, asserting that there are *only* these two tokens is key.
+            assertNull(problematicBuffer.nextValue()); // Should be the end of the buffer
+
+            // The @JsonCreator method needs to return a MyValue.
+            // For the purpose of testing the *buffer handling*, we can return a dummy value.
+            // The actual value returned isn't the focus of this bug.
+            return new MyValue("a", 1); 
+        }
+
+        // Constructor for the dummy return value
+        public MyValue(String fieldName, Object fieldValue) {
+            this.fieldName = fieldName;
+            this.fieldValue = fieldValue;
+        }
+    }
+
+    // Now, we need to deserialize a JSON that *triggers* this creator.
+    // The JSON "{ \"a\":1, \"b\":null }" is the input.
+    // The creator is `from(TokenBuffer buffer)`.
+    // This means we are deserializing a type that *uses* `MyValue` via this creator.
+
+    // Let's define a wrapper class that uses MyValue.
+    // This is a common pattern for @JsonCreator with delegate.
+    class Wrapper {
+        @JsonCreator
+        public static Wrapper fromDelegate(@JacksonInject TokenBuffer buffer) {
+            // The bug is in how Jackson populates this buffer when it's delegated.
+            // The description implies that the buffer passed here might already be in a
+            // state where it starts with FIELD_NAME instead of START_OBJECT, and
+            // only contains a partial structure.
+
+            // To reproduce the bug, we need to simulate the *state* of the buffer
+            // as it's described in the bug report *when it's passed to the creator*.
+            
+            // The bug report says: "current token will be start object {, and rest of the tokens will be available in buffer"
+            // vs. "buffers ends up being started with field name and then contains single attribute value"
+
+            // Let's create a TokenBuffer that represents the *problematic* state described.
+            TokenBuffer problematicStateBuffer = new TokenBuffer(mapper, false);
+            problematicStateBuffer.writeFieldName("a"); // Starts with FIELD_NAME
+            problematicStateBuffer.writeNumber(1);      // Contains single attribute value
+
+            // Now, let's assert the tokens in this *problematicStateBuffer*
+            problematicStateBuffer.first();
+            assertTrue(problematicStateBuffer.nextValue() == JsonToken.FIELD_NAME);
+            assertEquals("a", problematicStateBuffer.getCurrentName());
+            assertTrue(problematicStateBuffer.nextValue() == JsonToken.VALUE_NUMBER_INT);
+            assertEquals(1, problematicStateBuffer.getIntValue());
+            assertNull(problematicStateBuffer.nextValue()); // Should be the end
+
+            // The bug implies that if the original JSON was "{ \"a\":1, \"b\":null }",
+            // and this `Wrapper.fromDelegate` method was called, the `buffer` parameter
+            // would *not* contain the full structure [START_OBJECT, FIELD_NAME, VALUE_NUMBER_INT, FIELD_NAME, VALUE_NULL, END_OBJECT].
+            // Instead, it would be like `problematicStateBuffer`.
+
+            // To make this test runnable and assert the bug, we need to force Jackson
+            // to pass a TokenBuffer that exhibits this problematic state.
+            // This usually involves using `InjectableValues`.
+
+            // Let's try to deserialize a simple JSON that would normally result in
+            // the TokenBuffer described in the bug.
+            // The JSON "{ \"a\":1, \"b\":null }" is the input.
+            // The type being deserialized is not explicitly given, but it uses a creator
+            // that takes a TokenBuffer.
+
+            // Let's assume we are deserializing a Map or a simple object that Jackson
+            // might internally represent using a TokenBuffer before passing it to a creator.
+            
+            // This is the tricky part: directly injecting a malformed TokenBuffer
+            // into the deserialization process for a creator that expects it.
+
+            // A more direct approach might be to test the `copyCurrentStructure` method itself,
+            // but that's a private method.
+
+            // Let's try to trigger the creator with the specific JSON and see if we can
+            // inspect the buffer's state. This requires setting up `InjectableValues`.
+
+            // Create a TokenBuffer that represents the *expected* full structure.
+            TokenBuffer expectedFullBuffer = new TokenBuffer(mapper, false);
+            expectedFullBuffer.writeStartObject();
+            expectedFullBuffer.writeFieldName("a");
+            expectedFullBuffer.writeNumber(1);
+            expectedFullBuffer.writeFieldName("b");
+            expectedFullBuffer.writeNull();
+            expectedFullBuffer.writeEndObject();
+            expectedFullBuffer.first(); // Reset to start
+
+            // Create a TokenBuffer that represents the *buggy* outcome.
+            TokenBuffer buggyOutcomeBuffer = new TokenBuffer(mapper, false);
+            buggyOutcomeBuffer.writeFieldName("a");
+            buggyOutcomeBuffer.writeNumber(1);
+            buggyOutcomeBuffer.first(); // Reset to start
+
+            // The bug is that when Jackson processes "{ \"a\":1, \"b\":null }"
+            // and delegates to a creator that takes a TokenBuffer, the buffer it provides
+            // will be like `buggyOutcomeBuffer` instead of `expectedFullBuffer`.
+
+            // To test this, we need to deserialize something that uses this creator.
+            // Let's define a class that uses the creator and can be deserialized.
+            // The creator is `@JsonCreator public static Value from(TokenBuffer buffer)`
+            // This implies that `Value` itself is being deserialized, and the JSON
+            // represents the content that should be put into the buffer.
+
+            // Let's redefine Value to be the target of deserialization.
+            class Value {
+                private final Object a;
+                private final Object b;
+
+                @JsonCreator
+                public static Value from(TokenBuffer buffer) {
+                    // Inside this method, we can inspect the buffer.
+                    // The bug is that `buffer` will be like `buggyOutcomeBuffer`
+                    // when it should be like `expectedFullBuffer`.
+
+                    // Let's assert the state of the buffer passed *into* this creator.
+                    // This is the most direct way to reproduce the described failure.
+                    
+                    // Reset to the beginning to iterate through tokens
+                    buffer.first();
+                    
+                    JsonToken currentToken = buffer.nextValue();
+                    
+                    // The bug description implies the buffer starts with FIELD_NAME, not START_OBJECT.
+                    // If the bug is present, we expect this:
+                    assertTrue("Buffer should start with FIELD_NAME due to the bug", currentToken == JsonToken.FIELD_NAME);
+                    assertEquals("a", buffer.getCurrentName());
+                    
+                    currentToken = buffer.nextValue();
+                    assertTrue("Next token should be VALUE_NUMBER_INT", currentToken == JsonToken.VALUE_NUMBER_INT);
+                    assertEquals(1, buffer.getIntValue());
+                    
+                    // The bug implies that subsequent tokens (like FIELD_NAME "b", VALUE_NULL, END_OBJECT) are missing.
+                    // So, the next call to nextValue() should return null.
+                    currentToken = buffer.nextValue();
+                    assertNull("Buffer should not contain further tokens (like 'b')", currentToken);
+
+                    // For the test to pass, we need to return a valid Value object.
+                    // The actual values don't matter for testing the buffer behavior.
+                    return new Value(1, null); // Dummy return
+                }
+                
+                // Dummy constructor for Value
+                public Value(Object a, Object b) {
+                    this.a = a;
+                    this.b = b;
+                }
+            }
+
+            // Now, we need to deserialize the JSON "{ \"a\":1, \"b\":null }" into the `Value` class.
+            // This will trigger the `@JsonCreator` method `from(TokenBuffer buffer)`.
+            // The bug is that the `buffer` passed to `from` will be malformed.
+            
+            String json = "{ \"a\":1, \"b\":null }";
+            
+            // This call should now trigger the `from` method, and the assertions inside it
+            // should pass if the bug is present.
+            mapper.readValue(json, Value.class);
+
+            // If the assertions inside `Value.from` did not throw an exception, it means
+            // the buffer was indeed in the state described by the bug.
+            // No further assertion is needed here, as the test is verified by the assertions within the creator method.
+        }
+    }

@@ -1,0 +1,37 @@
+public void testJsonValueAndCustomSerializer() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.addSerializer(new MyValueAnnotatedClass.MyValueAnnotatedClassSerializer());
+    mapper.registerModule(module);
+
+    MyValueAnnotatedClass value = new MyValueAnnotatedClass("test");
+    String json = mapper.writeValueAsString(value);
+
+    // The serializer registered with the module should be used,
+    // not the one generated for @JsonValue.
+    // In this case, the @JsonValue serializer would output "test",
+    // while our custom serializer should output "\"test_custom\"".
+    assertEquals("\"test_custom\"", json);
+}
+
+// Helper classes for the test
+@JsonSerialize(using = MyValueAnnotatedClass.MyValueAnnotatedClassSerializer.class)
+static class MyValueAnnotatedClass {
+    private final String value;
+
+    public MyValueAnnotatedClass(String value) {
+        this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+        return value;
+    }
+
+    static class MyValueAnnotatedClassSerializer extends JsonSerializer<MyValueAnnotatedClass> {
+        @Override
+        public void serialize(MyValueAnnotatedClass value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+            gen.writeString(value.value + "_custom");
+        }
+    }
+}

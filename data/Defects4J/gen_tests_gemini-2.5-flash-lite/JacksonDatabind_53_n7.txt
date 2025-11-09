@@ -1,0 +1,80 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import org.junit.Test;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.junit.Assert.assertEquals;
+
+public class JsonDeserializeTest {
+
+    // Dummy implementations for demonstration
+    interface MyCustomIdInterface {
+        UUID getId();
+    }
+
+    static class Foo implements MyCustomIdInterface {
+        private UUID id;
+        private String property;
+
+        @Override
+        public UUID getId() {
+            return id;
+        }
+
+        public void setId(UUID id) {
+            this.id = id;
+        }
+
+        public String getProperty() {
+            return property;
+        }
+
+        public void setProperty(String property) {
+            this.property = property;
+        }
+    }
+
+    // Custom HashMap that deserializes based on the 'id' property
+    static class MyHashMap<K extends UUID, V extends MyCustomIdInterface> extends HashMap<K, V> {
+        // This class is primarily for type hinting and deserialization configuration
+        // The actual deserialization logic is handled by Jackson's configuration
+    }
+
+    static class MyPojo {
+        private Map<UUID, Foo> something;
+
+        @JsonDeserialize(as = MyHashMap.class)
+        public void setSomething(Map<UUID, Foo> something) {
+            this.something = something;
+        }
+
+        public Map<UUID, Foo> getSomething() {
+            return something;
+        }
+    }
+
+    @Test
+    public void testTypeSpecializationForMaps() throws Exception {
+        String json = "{\n" +
+                "  \"something\": [\n" +
+                "        {\n" +
+                "           \"id\": \"a7b8c9d0-e1f2-3a4b-5c6d-7e8f9a0b1c2d\",\n" +
+                "           \"property\": \"value\"\n" +
+                "         }\n" +
+                "  ]\n" +
+                "}";
+
+        ObjectMapper mapper = new ObjectMapper();
+        MyPojo pojo = mapper.readValue(json, MyPojo.class);
+
+        Map<UUID, Foo> somethingMap = pojo.getSomething();
+        UUID expectedUuid = UUID.fromString("a7b8c9d0-e1f2-3a4b-5c6d-7e8f9a0b1c2d");
+        assertEquals(1, somethingMap.size());
+        assertEquals(expectedUuid, somethingMap.keySet().iterator().next());
+        assertEquals("value", somethingMap.get(expectedUuid).getProperty());
+        assertEquals(expectedUuid, somethingMap.get(expectedUuid).getId());
+    }
+}

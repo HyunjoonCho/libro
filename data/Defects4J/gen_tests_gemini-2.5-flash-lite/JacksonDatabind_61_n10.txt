@@ -1,0 +1,47 @@
+public void testPrimitiveLongFieldDeserialization() throws IOException {
+    String json = "{\n" +
+            "  \"__t\" : \"java.util.HashMap\",\n" +
+            "  \"longInMap\" : [ \"java.lang.Long\", 2 ],\n" +
+            "  \"longAsField\" : {\n" +
+            "    \"__t\" : \"com.fasterxml.jackson.databind.test.Main$Data\",\n" +
+            "    \"key\" : [ \"java.lang.Long\", 1 ]\n" +
+            "  }\n" +
+            "}";
+
+    JsonFactory factory = new JsonFactory();
+    ObjectMapper mapper = new ObjectMapper(factory);
+    StdTypeResolverBuilder resolver = new StdTypeResolverBuilder();
+    resolver.init(JsonTypeInfo.Id.CLASS, null);
+    resolver.inclusion(JsonTypeInfo.As.PROPERTY);
+    resolver.typeProperty("__t");
+    mapper.setDefaultTyping(resolver);
+
+    try {
+        Map deserializedData = mapper.readValue(json, Map.class);
+        // If no exception is thrown, the test passes.
+        // We can add assertions here to check the deserialized content if needed.
+        assertNotNull(deserializedData);
+        Map longAsFieldMap = (Map) deserializedData.get("longAsField");
+        assertNotNull(longAsFieldMap);
+        // Jackson might deserialize the primitive long as an Integer if it fits.
+        // The key point is that it should not throw an exception.
+        // If it's deserialized as Long, assert that. Otherwise, check for Integer and its value.
+        Object keyObject = longAsFieldMap.get("key");
+        assertTrue(keyObject instanceof Long || keyObject instanceof Integer);
+        if (keyObject instanceof Long) {
+            assertEquals(1L, ((Long) keyObject).longValue());
+        } else {
+            assertEquals(1, ((Integer) keyObject).intValue());
+        }
+
+        Object longInMapObject = deserializedData.get("longInMap");
+        assertNotNull(longInMapObject);
+        assertTrue(longInMapObject instanceof Long);
+        assertEquals(2L, ((Long) longInMapObject).longValue());
+
+    } catch (JsonMappingException e) {
+        fail("Deserialization failed with JsonMappingException: " + e.getMessage());
+    } catch (IOException e) {
+        fail("Deserialization failed with IOException: " + e.getMessage());
+    }
+}

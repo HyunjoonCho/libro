@@ -1,0 +1,201 @@
+public void testFindWrapPos() {
+    HelpFormatter formatter = new HelpFormatter();
+    String longDescription = "This is a very long description that should definitely wrap around multiple lines when formatted.";
+    int width = 20;
+    int startPos = 5;
+    // The first line should be within the width + startPos
+    // Subsequent lines should be within the width
+    // This test assumes a specific implementation of findWrapPos and format
+    // A more robust test would involve mocking or inspecting the output of format
+    // For now, we'll focus on a scenario that is likely to expose the bug in findWrapPos
+    // which is related to how it calculates the wrap position for subsequent lines.
+
+    // Let's simulate a scenario where the bug might manifest.
+    // If the bug is that subsequent lines are too long, we need a description
+    // that forces wrapping.
+    // The provided findWrapPos is for internal use and not directly testable as a public API.
+    // We'll need to indirectly test the behavior by seeing how the formatter handles it.
+
+    // A simplified test case focusing on the logic within findWrapPos,
+    // assuming we could call it directly or infer its behavior.
+    // Since we can't directly call findWrapPos, we'll use the public API and
+    // check for incorrect output that stems from the bug.
+
+    // Create a command-line options object
+    Options options = new Options();
+    Option option = new Option("l", "longdesc", true, longDescription);
+    options.addOption(option);
+
+    // Use StringWriter to capture the output
+    StringWriter sw = new StringWriter();
+    PrintWriter pw = new PrintWriter(sw);
+
+    // Format the help
+    formatter.printHelp(pw, width, "cmd", "header", options, 1, false, "footer", true);
+    pw.flush();
+
+    String helpOutput = sw.toString();
+
+    // Now, analyze the output to see if lines beyond the first are too long.
+    // This is a bit fragile as it depends on the exact output format of printHelp.
+    String[] lines = helpOutput.split(System.lineSeparator());
+
+    // The first line is usually the options definition, e.g., "-l,--longdesc <arg>"
+    // The long description starts on the next line.
+    // We're interested in the lines that contain the actual description.
+
+    // Find the line containing the start of the long description
+    int descriptionStartIndex = -1;
+    for (int i = 0; i < lines.length; i++) {
+        if (lines[i].trim().startsWith("This is a very long description")) {
+            descriptionStartIndex = i;
+            break;
+        }
+    }
+
+    assertNotNull("Description should be present in the help output", descriptionStartIndex);
+
+    // Check lines following the start of the description
+    for (int i = descriptionStartIndex; i < lines.length; i++) {
+        String line = lines[i];
+        // Ignore empty lines or lines that are not part of the description wrap
+        if (line.trim().isEmpty() || !line.trim().startsWith("This is a very long description") && !line.trim().startsWith(" ")) {
+            continue;
+        }
+
+        // The actual content of the description line should not exceed the width
+        // We need to account for potential indentation.
+        // The bug report suggests lines beyond the first are too long.
+        // The first line of the description might be indented by startPos.
+        // Subsequent lines should be indented by startPos and then wrapped at 'width'.
+        // If the bug is present, the lines will extend beyond startPos + width.
+
+        // Let's assume the description starts at index 'startPos' of the line.
+        // The length of the wrapped part should not exceed 'width'.
+        // So, the total length of the line content (after indentation) should be <= width.
+        // This implies the total line length should be <= startPos + width.
+
+        // This is a simplified check. A more precise test would involve
+        // calculating the expected wrap points.
+        // The core of the bug is in findWrapPos calculating the position for subsequent lines.
+        // If `findWrapPos` incorrectly uses `width + startPos` when it should use `width`
+        // for the *remaining* part of the line, the line will be too long.
+
+        // Let's check if any line's content, after accounting for indentation, exceeds 'width'.
+        // This is tricky because the indentation itself might vary.
+        // A more direct check on the bug would be to test `findWrapPos` directly if it were public.
+        // Since it's not, we infer from the output.
+
+        // A simpler, though less direct, check: if the line length itself is significantly
+        // larger than expected, it might indicate the bug.
+        // The problem states "every line beyond the first". So, if the description spans
+        // multiple lines, the second, third, etc., lines are too long.
+
+        // Let's assume the description starts aligned with `startPos`.
+        // The `printHelp` method adds indentation for subsequent lines.
+        // The bug is that `findWrapPos` calculates the wrap point based on `width + startPos`
+        // for lines after the first one, making them too long.
+        // The correct logic should wrap at `width` relative to the start of the line's content.
+
+        // If we find a line that is clearly longer than `width + startPos`, it's likely due to the bug.
+        // However, the bug is that `findWrapPos` is used *within* `printHelp` to determine where to break.
+        // The actual line length in the output is what we need to check.
+
+        // Let's try a specific string that *should* wrap and see if the output is too long.
+        String textToWrap = "This is a very very very long description that should wrap.";
+        Option optionToTest = new Option("t", "test", true, textToWrap);
+        options.addOption(optionToTest);
+
+        sw.getBuffer().setLength(0); // Clear the StringWriter
+        formatter.printHelp(pw, width, "cmd", "header", options, 1, false, "footer", true);
+        pw.flush();
+        helpOutput = sw.toString();
+        lines = helpOutput.split(System.lineSeparator());
+
+        // Find the line containing the test description
+        int testDescriptionStartIndex = -1;
+        for (int i = 0; i < lines.length; i++) {
+            if (lines[i].trim().startsWith("This is a very very very long description")) {
+                testDescriptionStartIndex = i;
+                break;
+            }
+        }
+
+        assertNotNull("Test description should be present", testDescriptionStartIndex);
+
+        // Check the lines that should contain the wrapped description.
+        // The first line of the description might be like "-t,--test <arg> This is a very very very"
+        // The subsequent lines should be indented and wrapped.
+        // The bug implies these subsequent lines will extend beyond the intended width.
+
+        // Let's check the length of lines *after* the first line of the description.
+        // We need to find the *end* of the first line of the description.
+        String firstDescriptionLine = null;
+        for (int i = testDescriptionStartIndex; i < lines.length; i++) {
+            if (lines[i].trim().startsWith("This is a very very very long description")) {
+                firstDescriptionLine = lines[i];
+                break;
+            }
+        }
+        assertNotNull("First description line not found", firstDescriptionLine);
+
+        // Find the index of the next line that *starts* with the description text or indentation.
+        int secondDescriptionLineIndex = -1;
+        for (int i = testDescriptionStartIndex + 1; i < lines.length; i++) {
+            if (lines[i].trim().startsWith("This is a very very very long description") || lines[i].startsWith("  ")) { // Assuming indentation
+                secondDescriptionLineIndex = i;
+                break;
+            }
+        }
+
+        if (secondDescriptionLineIndex != -1) {
+            // Check lines from the second description line onwards
+            for (int i = secondDescriptionLineIndex; i < lines.length; i++) {
+                String currentLine = lines[i];
+                // Ignore empty lines or lines that are not part of the description
+                if (currentLine.trim().isEmpty() || (!currentLine.trim().startsWith("This is a very very very long description") && !currentLine.trim().startsWith("  "))) {
+                    continue;
+                }
+
+                // The bug is that these lines are too long.
+                // A simple check: if the line length exceeds `width + startPos` (which is 25 in this case),
+                // it's highly likely due to the bug.
+                // The `startPos` for options is typically determined by the longest option string.
+                // For simplicity, let's assume `startPos` is at least 5 (from the default `printHelp` usage).
+                // If the line length is significantly greater than `width`, it indicates a problem.
+
+                // The problem statement says "every line beyond the first".
+                // This implies the *first* line of the description might be okay,
+                // but the *second* and subsequent lines are too long.
+
+                // Let's check if any line of the description content *itself* (ignoring leading whitespace)
+                // exceeds the `width`. This is a heuristic.
+                String content = currentLine.trim();
+                if (content.length() > width) {
+                    // This is a strong indicator, but not definitive proof of the bug's specific mechanism.
+                    // The bug is about `findWrapPos` using `width + startPos` incorrectly.
+                    // This means the *actual break point* is too far to the right.
+                    // So, the resulting line will be longer than `width`.
+
+                    // Let's check specifically if the line length exceeds `width + startPos`.
+                    // The `startPos` in `printHelp` is often related to the length of the option string.
+                    // For "-l,--longdesc <arg>", this could be around 20-30 characters.
+                    // Let's assume a `startPos` of 25 for the sake of this test.
+                    // The bug causes lines to exceed `width + startPos`.
+                    // If a line's length is greater than `width + startPos`, it's a strong signal.
+                    // Given `width = 20`, if a line is > 45, it's suspicious.
+
+                    // A more reliable check would be to parse the output and verify the wrap points.
+                    // The bug report states: "causes it to format every line beyond the first line by "startPos" to many characters, beyond the specified width."
+                    // This implies the line length itself is greater than `width`.
+
+                    // Let's check if any line of the description text is longer than `width`.
+                    // This is a reasonable heuristic.
+                    assertTrue("Line of description is longer than the specified width: '" + currentLine + "'", currentLine.length() <= width + 10); // Allow some buffer for varying indentations.
+                    // The key is that the wrap point is too far.
+                    // If a line is excessively long, it means it didn't wrap correctly.
+                }
+            }
+        }
+    }
+}

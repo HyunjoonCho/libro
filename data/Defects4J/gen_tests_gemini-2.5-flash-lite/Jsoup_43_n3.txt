@@ -1,0 +1,81 @@
+public void testElementSiblingIndex() {
+    String html = "<html><body>" +
+                  "<div><p>1</p><p>2</p><p>3</p></div>" +
+                  "<div><p>4</p><p>5</p><p>6</p></div>" +
+                  "</body></html>";
+    Document doc = Jsoup.parse(html);
+    Elements paragraphs = doc.select("p");
+    Element firstP = paragraphs.get(0);
+    Element secondP = paragraphs.get(1);
+    Element fourthP = paragraphs.get(3);
+
+    // Ensure the elements are indeed siblings within the same parent
+    assertTrue(firstP.parent().equals(secondP.parent()));
+    assertTrue(firstP.parent().equals(fourthP.parent()));
+
+    // Demonstrate the bug: elements with the same content and parent
+    // will have the same sibling index, which is not what the documentation implies.
+    // In this specific case, the first two <p> tags have the same index.
+    int index1 = firstP.elementSiblingIndex();
+    int index2 = secondP.elementSiblingIndex();
+
+    // The bug report states that the documentation implies myElem.parent().children().get(n) == myElem
+    // but what is guaranteed is myElem.parent().children().get(n).equals(myElem).
+    // The example given is about duplicate content leading to duplicate indices.
+    // Let's simulate that by creating a similar structure where indices might collide if not handled properly.
+
+    // Create a structure where the second and third <p> tags are identical in structure and content
+    // and belong to the same parent.
+    String htmlWithDuplicates = "<html><body>" +
+                                "<div><p>A</p><p>B</p><p>B</p><p>C</p></div>" +
+                                "</body></html>";
+    Document docWithDuplicates = Jsoup.parse(htmlWithDuplicates);
+    Elements duplicateParagraphs = docWithDuplicates.select("p");
+    Element pB1 = duplicateParagraphs.get(1);
+    Element pB2 = duplicateParagraphs.get(2);
+
+    // Assert that the text content is the same
+    assertEquals(pB1.text(), pB2.text());
+    // Assert that they have the same parent
+    assertTrue(pB1.parent().equals(pB2.parent()));
+
+    // The bug is that elementSiblingIndex() might return the same index for distinct elements
+    // if their structure/content causes a collision in how the index is determined.
+    // The documentation implies a unique index for each sibling position.
+    // The example suggests that identical siblings can lead to identical indices.
+    // We need to show that the index returned is not necessarily the *position* in the children list.
+
+    // Let's verify the documented behavior that .equals() works, but == might not.
+    // The core issue is that the index is not unique if content is duplicated.
+    // The test should reflect that calling elementSiblingIndex() on two different
+    // elements that happen to have the same content and are siblings might yield the same index.
+    // This violates the implied uniqueness of the index as a position identifier.
+
+    int indexPB1 = pB1.elementSiblingIndex();
+    int indexPB2 = pB2.elementSiblingIndex();
+
+    // The bug report implies that elementSiblingIndex() is not robust against duplicate siblings.
+    // If elementSiblingIndex() returns the same value for two different elements,
+    // then `myElem.parent().children().get(n)` will not necessarily return `myElem`.
+    // It *will* return an element that `.equals(myElem)`.
+    // The test should show that `indexPB1` and `indexPB2` are the same.
+
+    assertEquals("elementSiblingIndex() should return the same index for identical sibling elements", indexPB1, indexPB2);
+
+    // Now, let's check the parent's children list.
+    Elements siblings = pB1.parent().children();
+
+    // If the indices are the same, getting the element at that index might return the wrong element
+    // if we were expecting a unique position.
+    // The documentation is misleading by implying `myElem.parent().children().get(n) == myElem`.
+    // The actual guarantee is `myElem.parent().children().get(n).equals(myElem)`.
+
+    // Verify that getting the element at the returned index returns *an* element equal to the original.
+    Element elementAtIndex1 = siblings.get(indexPB1);
+    assertTrue("Element at index should be equal to the original element", elementAtIndex1.equals(pB1));
+
+    // Crucially, because indexPB1 == indexPB2, siblings.get(indexPB1) will return pB1.
+    // If we were to use indexPB2 to retrieve an element, it would also be siblings.get(indexPB1).
+    // This highlights the problem: the index is not a reliable positional identifier when duplicates exist.
+    // The bug is that the index is not unique.
+}

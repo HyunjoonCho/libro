@@ -1,0 +1,148 @@
+public void testBase64VariantIgnored() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    ObjectNode rootNode = mapper.createObjectNode();
+    String base64Encoded = "SGVsbG8gV29ybGQ="; // "Hello World"
+    rootNode.put("binary", base64Encoded);
+
+    // Use a non-default Base64Variant (e.g., a URL-safe one)
+    Base64Variant urlSafeVariant = new Base64Variant(Base64Variants.getDefault(), "URL_SAFE", '-', '_', '=');
+
+    // Create a parser that explicitly tries to use the URL-safe variant
+    // The bug is that TreeTraversingParser ignores the variant passed to its constructor
+    // and TextNode#binaryValue will use the default variant.
+    JsonParser parser = new TreeTraversingParser(rootNode, null, urlSafeVariant);
+
+    // Advance parser to the "binary" field
+    parser.nextToken();
+    parser.nextToken();
+
+    // Get the binary value. This should use the URL_SAFE variant, but due to the bug, it uses the default.
+    // If the base64 string were only valid with the URL_SAFE variant (e.g., using '-' or '_'),
+    // this test would fail. For "Hello World", both default and URL_SAFE work, so we need
+    // to check the *behavior* of the parser.
+    // The actual failure is that the variant passed to TreeTraversingParser is ignored.
+    // To demonstrate this, we can check if the node's binaryValue() method would have used the correct variant.
+    // Since the bug is in TreeTraversingParser, we need to simulate its path.
+
+    JsonNode binaryNode = rootNode.get("binary");
+    byte[] decodedBytes = binaryNode.binaryValue(); // This internally uses the default variant because TreeTraversingParser ignores the provided one.
+
+    // To truly test the bug, we need to ensure that if the input WAS different and required the URL_SAFE variant, it would fail.
+    // However, the description implies the `binaryValue()` call *within* `TreeTraversingParser` is the issue.
+    // Let's re-read: "The call to `n.binaryValue()`, when `n` is a `TextNode`, then uses the default Base64 variant instead of what's specified."
+    // This means the `TreeTraversingParser` should *pass* the `Base64Variant` it received to the `TextNode`'s `binaryValue()` method.
+
+    // Let's mock the TextNode to verify this. This is a bit indirect for a direct reproduction test,
+    // but it isolates the interaction. A more direct test would require modifying Jackson to expose
+    // the TextNode call path more granularly or relying on specific base64 inputs that differ.
+
+    // A simpler reproduction: Use a Base64 string that's valid in one variant but not the other.
+    // Standard Base64 alphabet: ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/
+    // URL-safe Base64 alphabet: ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_
+    // Let's try encoding something with '-' or '_'
+
+    // Encode "a-b" using URL-safe
+    String urlSafeEncoded = new Base64Variant(Base64Variants.getDefault(), "URL_SAFE", '-', '_', '=').encode("a-b".getBytes());
+    // urlSafeEncoded might be something like "YS1i" or similar depending on padding. Let's assume it's valid.
+
+    // Now, try to parse this using the default variant. It should fail.
+    // If TreeTraversingParser uses the default variant when it should use URL_SAFE, it will succeed incorrectly.
+
+    rootNode.put("binaryUrlSafe", urlSafeEncoded);
+    JsonParser parserWithUrlSafe = new TreeTraversingParser(rootNode, null, urlSafeVariant);
+    parserWithUrlSafe.nextToken();
+    parserWithUrlSafe.nextToken(); // Skip object start and field name "binaryUrlSafe"
+
+    JsonNode binaryUrlSafeNode = rootNode.get("binaryUrlSafe");
+
+    // The bug: TreeTraversingParser is passed `urlSafeVariant`, but when it calls `binaryNode.binaryValue()`,
+    // it *should* pass `urlSafeVariant` to `TextNode.binaryValue()`, but it doesn't.
+    // So, `binaryUrlSafeNode.binaryValue()` will use the default variant.
+    // If `urlSafeEncoded` is ONLY valid with the URL_SAFE variant, the default variant will fail to decode it.
+    // This would cause an IllegalArgumentException or similar.
+
+    // Let's craft an input that fails with default but works with URL_SAFE.
+    // Example: Base64 encoding of "a-b" is "YS1i". This uses '-'.
+    // If we put "YS1i" into the JSON and expect it to be decoded using the default variant, it should fail.
+    // If TreeTraversingParser correctly passes the URL_SAFE variant, it should succeed.
+
+    String failingBase64 = "YS1i"; // Base64 encoding of "a-b" using URL-safe variant
+
+    rootNode.put("potentiallyFailingBinary", failingBase64);
+    JsonParser parserToTestBug = new TreeTraversingParser(rootNode, null, urlSafeVariant);
+
+    // Manually advance the parser to the value of "potentiallyFailingBinary"
+    parserToTestBug.nextToken(); // START_OBJECT
+    parserToTestBug.nextToken(); // FIELD_NAME ("potentiallyFailingBinary")
+    parserToTestBug.nextToken(); // VALUE (the string "YS1i")
+
+    // Now, simulate what TreeTraversingParser does internally.
+    // It gets the TextNode for "potentiallyFailingBinary".
+    // It calls `textNode.getBinaryValue(this.base64Variant)`.
+    // The bug is that `this.base64Variant` is IGNORED and `textNode.getBinaryValue()` uses its own default.
+
+    // To reproduce the failure, we need to show that calling `binaryValue()` on the TextNode
+    // using the *default* variant fails, but if the *correct* variant was used, it would succeed.
+    // And the bug is that the correct variant IS NOT USED.
+
+    // Let's confirm the TextNode's binaryValue() method with the default variant throws an exception for "YS1i"
+    try {
+        // Get the TextNode corresponding to "potentiallyFailingBinary"
+        TextNode textNode = (TextNode) rootNode.get("potentiallyFailingBinary");
+        // Attempt to decode using the default Base64Variant. This should fail.
+        textNode.binaryValue(); // This uses Base64Variants.getDefault() internally
+        fail("Decoding 'YS1i' with default Base64Variant should fail.");
+    } catch (IllegalArgumentException e) {
+        // Expected exception because '-' is not in the default Base64 alphabet.
+        // This confirms that the input string requires a non-default variant.
+    }
+
+    // Now, we need to show that TreeTraversingParser DOES NOT throw this exception,
+    // implying it incorrectly used the default variant instead of the provided one.
+    // This part is tricky to assert directly without modifying TreeTraversingParser or mocking deeply.
+
+    // A simpler approach: Verify that when TreeTraversingParser *is given* a URL-safe variant,
+    // and the input string *requires* that variant, it *does not throw* the IllegalArgumentException.
+    // This implies it successfully used the URL-safe variant.
+    // The bug IS that it FAILS to use the variant.
+
+    // Let's re-test the scenario:
+    // 1. Create JSON with a Base64 string that requires URL-safe variant ("YS1i").
+    // 2. Create TreeTraversingParser with a URL-safe variant.
+    // 3. Parse the binary value.
+    // 4. Assert that no IllegalArgumentException is thrown.
+    // This proves that the variant *was* used correctly by TreeTraversingParser.
+    // The bug is the OPPOSITE: the variant is *ignored*, leading to failure when it shouldn't.
+
+    // Okay, the description says: "The call to n.binaryValue(), when n is a TextNode, then uses the default Base64 variant instead of what's specified."
+    // This means the `TreeTraversingParser` receives a `Base64Variant` but fails to pass it down.
+    // So, if we pass a `TreeTraversingParser` with a `URL_SAFE` variant, and the JSON value is "YS1i",
+    // the parser should SUCCEED because it *should* use the `URL_SAFE` variant.
+    // The bug means it will FAIL because it uses the *default* variant.
+
+    // So, the test should attempt to parse "YS1i" using TreeTraversingParser with URL_SAFE variant,
+    // and assert that it THROWS an IllegalArgumentException. This indicates the default variant was used.
+
+    rootNode.put("binaryThatNeedsUrlSafe", "YS1i"); // Base64 for "a-b"
+    JsonParser parserWithUrlSafeVariant = new TreeTraversingParser(rootNode, null, urlSafeVariant);
+
+    try {
+        parserWithUrlSafeVariant.nextToken(); // START_OBJECT
+        parserWithUrlSafeVariant.nextToken(); // FIELD_NAME ("binaryThatNeedsUrlSafe")
+        parserWithUrlSafeVariant.nextToken(); // VALUE ("YS1i")
+
+        // When TreeTraversingParser processes this VALUE, it should call
+        // textNode.getBinaryValue(urlSafeVariant).
+        // The bug is that it calls textNode.getBinaryValue(Base64Variants.getDefault()).
+        // Since "YS1i" is invalid for the default variant, this call should throw.
+        parserWithUrlSafeVariant.getValueAsBytes(); // This is the operation that triggers the bug.
+
+        fail("Expected IllegalArgumentException because the default Base64 variant was used instead of URL_SAFE.");
+    } catch (IllegalArgumentException e) {
+        // This is the expected failure. The default variant was used, and it couldn't decode "YS1i".
+        // This confirms the Base64Variant passed to TreeTraversingParser was ignored.
+        assertTrue(e.getMessage().contains("Invalid Base64 string"));
+    } catch (IOException e) {
+        fail("Unexpected IOException: " + e.getMessage());
+    }
+}

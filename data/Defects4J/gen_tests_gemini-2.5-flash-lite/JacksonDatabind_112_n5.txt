@@ -1,0 +1,90 @@
+public void testStringCollectionDeserializerFailsWithCustomCollection() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    // Configure mapper to use immutable collections for deserialization
+    mapper.registerModule(new SimpleModule() {
+        @Override
+        public void setupModule(SetupContext context) {
+            context.addDeserializers(new Deserializers.Base() {
+                @Override
+                public JsonDeserializer<?> findCollectionDeserializer(
+                        CollectionType type,
+                        DeserializationConfig config,
+                        BeanDescription beanDesc,
+                        TypeDeserializer elementTypeDeserializer,
+                        CollectionSuperClassFactory collectionSuperClassFactory) {
+                    if (type.getContentType().getRawClass().equals(String.class)) {
+                        // Return a deserializer for an immutable string collection
+                        return new ImmutableStringCollectionDeserializer();
+                    }
+                    return super.findCollectionDeserializer(type, config, beanDesc, elementTypeDeserializer, collectionSuperClassFactory);
+                }
+            });
+        }
+    });
+
+    // A simple POJO with a property of the custom immutable string collection type
+    class CustomImmutableStringList extends java.util.AbstractList<String> implements java.io.Serializable {
+        private final java.util.List<String> delegate;
+
+        public CustomImmutableStringList() {
+            this.delegate = java.util.Collections.emptyList();
+        }
+
+        private CustomImmutableStringList(java.util.List<String> delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public String get(int index) {
+            return delegate.get(index);
+        }
+
+        @Override
+        public int size() {
+            return delegate.size();
+        }
+
+        // Add a constructor that Jackson can use for deserialization
+        public static CustomImmutableStringList valueOf(java.util.List<String> values) {
+            return new CustomImmutableStringList(values);
+        }
+    }
+
+    class ImmutableStringCollectionDeserializer extends com.fasterxml.jackson.databind.deser.std.StringCollectionDeserializer {
+        // This constructor is needed for Jackson 2.9.8 and later
+        protected ImmutableStringCollectionDeserializer(JavaType collectionType, TypeDeserializer elementTypeDeserializer, Object valueInstantiator, JsonDeserializer<?> elementValueDeser) {
+            super(collectionType, elementTypeDeserializer, valueInstantiator, elementValueDeser);
+        }
+
+        // Default constructor to satisfy the no-args constructor requirement if StringCollectionDeserializer were to be instantiated directly
+        public ImmutableStringCollectionDeserializer() {
+            super(null, null, null, null); // This will likely cause issues if called directly without proper setup
+        }
+
+
+        @Override
+        public java.util.Collection<String> deserialize(JsonParser p, DeserializationContext ctxt) throws java.io.IOException {
+            // Delegate to a method that can construct our custom collection
+            java.util.List<String> stringList = super.deserialize(p, ctxt);
+            return CustomImmutableStringList.valueOf(stringList);
+        }
+    }
+
+    class Container {
+        public CustomImmutableStringList strings;
+    }
+
+    String json = "{\"strings\":[\"a\",\"b\",\"c\"]}";
+
+    // This line is expected to throw an exception due to the lack of a no-args constructor in CustomImmutableStringList
+    // when StringCollectionDeserializer is invoked.
+    Container container = mapper.readValue(json, Container.class);
+
+    // Assertions to verify successful deserialization if the bug were fixed
+    assertNotNull(container);
+    assertNotNull(container.strings);
+    assertEquals(3, container.strings.size());
+    assertEquals("a", container.strings.get(0));
+    assertEquals("b", container.strings.get(1));
+    assertEquals("c", container.strings.get(2));
+}

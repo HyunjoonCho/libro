@@ -1,0 +1,29 @@
+public void testTarArchiveOutputStream_getBytesWritten_returnsInvalidValue() throws Exception {
+    File tempFile = File.createTempFile("test", ".tar");
+    tempFile.deleteOnExit();
+    FileOutputStream fos = new FileOutputStream(tempFile);
+    ArchiveOutputStream taos = new ArchiveStreamFactory().createArchiveOutputStream(ArchiveStreamFactory.TAR, fos);
+    File sourceFile = File.createTempFile("source", ".txt");
+    sourceFile.deleteOnExit();
+    try (FileOutputStream sourceFos = new FileOutputStream(sourceFile);
+         FileInputStream sourceFis = new FileInputStream(sourceFile)) {
+        // Write some data to the source file to ensure it's not empty
+        sourceFos.write("This is a test file.".getBytes());
+        sourceFos.flush();
+        TarArchiveEntry entry = new TarArchiveEntry(sourceFile);
+        taos.putArchiveEntry(entry);
+        byte[] buffer = new byte[1024];
+        int bytesRead;
+        while ((bytesRead = sourceFis.read(buffer)) > 0) {
+            taos.write(buffer, 0, bytesRead);
+        }
+        taos.closeArchiveEntry();
+    }
+    taos.close();
+    fos.close();
+    // The bug report indicates getBytesWritten() returns 0 or an invalid value.
+    // We'll assert that it's not zero, as the fix should make it return a non-zero value.
+    // A more precise assertion would require knowing the exact expected value,
+    // which includes header sizes. For reproduction, checking non-zero is sufficient.
+    assertTrue(taos.getBytesWritten() > 0);
+}

@@ -1,0 +1,39 @@
+public void testSkipDoesNotWorkAsAdvertised() throws IOException {
+    byte[] data = new byte[1024];
+    Arrays.fill(data, (byte) 'A');
+    InputStream plainStream = new ByteArrayInputStream(data);
+    // Using a dummy CipherInputStream that will return 0 on skip after a small amount
+    InputStream cipherStream = new FilterInputStream(plainStream) {
+        private int skipCount = 0;
+        private static final int MAX_SKIP = 500;
+
+        @Override
+        public long skip(long n) throws IOException {
+            if (skipCount >= MAX_SKIP) {
+                return 0;
+            }
+            long skipped = super.skip(n);
+            skipCount += skipped;
+            return skipped;
+        }
+    };
+    
+    long totalBytesToSkip = 1000;
+    long bytesSkipped = 0;
+    while (bytesSkipped < totalBytesToSkip) {
+        long skipped = IOUtils.skip(cipherStream, totalBytesToSkip - bytesSkipped);
+        if (skipped == 0) {
+            // This is the condition that the bug report states is problematic
+            // because it breaks the loop prematurely if skip returns 0
+            // even if the end of the stream hasn't been reached.
+            break; 
+        }
+        bytesSkipped += skipped;
+    }
+
+    // Assert that not all bytes were skipped due to the premature break
+    // This implicitly tests that skip() returned 0 before the end of the stream
+    // was actually reached in a way that would prevent further skipping.
+    assertTrue("Expected to skip more bytes, but IOUtils.skip returned 0 prematurely.", bytesSkipped < totalBytesToSkip);
+    assertTrue("Expected to have skipped some bytes, but skipped " + bytesSkipped, bytesSkipped > 0);
+}

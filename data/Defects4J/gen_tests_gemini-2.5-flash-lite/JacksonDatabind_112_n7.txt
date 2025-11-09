@@ -1,0 +1,113 @@
+public void testStringCollectionDeserializerFailsWithCustomCollection() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    // Assuming XXX is a custom collection class like MyStringList
+    // and it has an immutable version that is used for deserialization.
+    // For the purpose of this test, we'll mock this behavior.
+    // In a real scenario, you would register your custom deserializer here
+    // or ensure your collection is configured correctly.
+
+    // Mocking a custom collection that doesn't have a no-arg constructor
+    // but has a builder or factory method.
+    class MyStringList extends java.util.AbstractList<String> {
+        private final java.util.List<String> delegate;
+        private MyStringList(java.util.List<String> delegate) { this.delegate = delegate; }
+        public static MyStringList create(java.util.Collection<String> c) { return new MyStringList(new java.util.ArrayList<>(c)); }
+        @Override public String get(int index) { return delegate.get(index); }
+        @Override public int size() { return delegate.size(); }
+    }
+
+    // Mocking an object that contains this custom collection
+    class Container {
+        public MyStringList strings;
+    }
+
+    // The problematic scenario is when StringCollectionDeserializer is invoked.
+    // We need to simulate the conditions that lead to this.
+    // The bug report implies StringCollectionDeserializer is used for custom collections of strings.
+    // Let's assume Jackson's default StringCollectionDeserializer is the culprit.
+    // If you had a custom deserializer for MyStringList, you would register it here.
+    // For this reproduction, we rely on Jackson's default behavior for collections of strings.
+
+    // If Jackson tries to use StringCollectionDeserializer for MyStringList, it will fail.
+    // The workaround mentioned in the bug is to ensure the collection can be constructed.
+    // If MyStringList had a default constructor, it would work.
+    // The bug is that StringCollectionDeserializer might be too aggressive.
+
+    // To reproduce the error "Cannot construct instance of XXX... no default no-arguments constructor found"
+    // we need to make sure Jackson attempts to deserialize MyStringList without a proper constructor.
+    // The default ObjectMapper might not automatically know how to create MyStringList.
+
+    // If the issue is specifically with StringCollectionDeserializer,
+    // and not just general collection deserialization, it's harder to
+    // isolate without digging into Jackson's internals or providing a specific
+    // problematic StringCollectionDeserializer implementation.
+
+    // However, the core of the problem described is the lack of a no-arg constructor
+    // when Jackson tries to instantiate a custom collection type.
+    // Let's simulate this by trying to deserialize a JSON that expects MyStringList.
+
+    String json = "{\"strings\": [\"a\", \"b\", \"c\"]}";
+
+    // If MyStringList did NOT have a static factory method like `create`,
+    // and only had constructors requiring arguments, or no default constructor,
+    // then deserialization would fail if Jackson tried to instantiate it directly.
+    // The bug report suggests StringCollectionDeserializer is involved.
+    // This implies that for String collections, a specific deserializer might be used
+    // that doesn't handle custom collection types gracefully.
+
+    // Let's try to deserialize, expecting it to fail because MyStringList
+    // doesn't have a no-arg constructor.
+    try {
+        mapper.readValue(json, Container.class);
+        fail("Should have failed due to missing no-arg constructor for MyStringList");
+    } catch (com.fasterxml.jackson.databind.JsonMappingException e) {
+        // Check if the exception message is related to the constructor issue.
+        assertTrue(e.getMessage().contains("Cannot construct instance of") &&
+                   e.getMessage().contains("no default no-arguments constructor found"));
+        // The exact type name in the message will depend on how Jackson infers it.
+        // If it correctly identifies MyStringList, the message will reflect that.
+        // If it's a generic message about collections, this check might need adjustment.
+    }
+
+    // The workaround mentioned is to make the collection deserializable.
+    // This could mean:
+    // 1. Adding a no-arg constructor to MyStringList.
+    // 2. Registering a custom deserializer for MyStringList that knows how to create it.
+    // 3. Using Jackson annotations like @JsonCreator.
+
+    // To demonstrate the fix, let's assume we've added a way to construct it.
+    // The bug report implies the issue is with StringCollectionDeserializer specifically.
+    // If we were to register a custom deserializer for MyStringList, it would bypass
+    // the problematic StringCollectionDeserializer.
+
+    // Example using a custom deserializer (if StringCollectionDeserializer was indeed the problem):
+    class MyStringListDeserializer extends com.fasterxml.jackson.databind.JsonDeserializer<MyStringList> {
+        @Override
+        public MyStringList deserialize(com.fasterxml.jackson.core.JsonParser p, com.fasterxml.jackson.databind.DeserializationContext ctxt) throws java.io.IOException {
+            java.util.List<String> list = p.readValuesAs(String.class).readAll(new java.util.ArrayList<>());
+            return MyStringList.create(list); // Uses the factory method
+        }
+    }
+
+    SimpleModule fixedModule = new SimpleModule();
+    fixedModule.addDeserializer(MyStringList.class, new MyStringListDeserializer());
+    ObjectMapper fixedMapper = new ObjectMapper();
+    fixedMapper.registerModule(fixedModule);
+
+    Container container = fixedMapper.readValue(json, Container.class);
+    assertNotNull(container);
+    assertNotNull(container.strings);
+    assertEquals(3, container.strings.size());
+    assertTrue(container.strings.contains("a"));
+    assertTrue(container.strings.contains("b"));
+    assertTrue(container.strings.contains("c"));
+
+    // The original bug report suggests that the StringCollectionDeserializer itself might be the issue,
+    // not just the lack of a default constructor in general.
+    // If StringCollectionDeserializer is incorrectly invoked or implemented for custom collection types,
+    // this test setup should highlight that. The failure occurs because Jackson's default behavior
+    // for collections of strings might be trying to instantiate the custom collection type directly
+    // without using its factory method or a proper constructor, and StringCollectionDeserializer
+    // is involved in that process.
+}

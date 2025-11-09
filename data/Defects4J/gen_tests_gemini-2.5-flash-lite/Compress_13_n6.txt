@@ -1,0 +1,112 @@
+public void testUmlautDirectoryInWinZip() throws Exception {
+    // Create a temporary zip file with a directory containing an umlaut
+    // This requires creating a ZipArchiveOutputStream and adding entries manually
+    // to simulate the WinZip behavior described in the bug report.
+
+    File tempZipFile = File.createTempFile("umlaut_test", ".zip");
+    tempZipFile.deleteOnExit();
+
+    ArchiveOutputStream out = null;
+    try {
+        out = new ArchiveStreamFactory().createArchiveOutputStream(
+                ArchiveStreamFactory.ZIP, new FileOutputStream(tempZipFile));
+
+        // Simulate WinZip creating a directory with an umlaut.
+        // The key here is how WinZip might represent this entry,
+        // potentially using backslashes and not setting the directory flag correctly
+        // if not handled properly by the library.
+        // For this test, we will create an entry that *should* be recognized as a directory
+        // but might be misinterpreted due to the umlaut and WinZip's specific encoding/structure.
+        // We'll use a name that includes an umlaut and ends with a slash to *try* and indicate it's a directory.
+        // The bug suggests WinZip might not set the directory flag correctly or mangle the name.
+        // Let's simulate a name that might be problematic: "ä-directory/"
+        // The actual issue might be in how the entry name is parsed or how the directory flag is determined.
+
+        // Create a directory entry. The name needs to be carefully crafted to potentially trigger the bug.
+        // Let's assume WinZip might create an entry like "dir\u00e4/" or similar problematic representation.
+        // For the sake of testing, we'll create an entry with a name that includes the umlaut
+        // and ensure it's treated as a directory by the underlying zip creation.
+        // The bug report states the entry is NOT marked as a directory, so we'll test that scenario.
+        // We'll create a directory entry with a name like "umlautädir/" and then check if it's recognized as a directory.
+
+        String dirName = "umlaut\u00e4dir/";
+        ZipArchiveEntry dirEntry = new ZipArchiveEntry(dirName);
+        // The bug implies the directory flag might not be set correctly by WinZip or interpreted correctly.
+        // However, ArchiveEntry.isDirectory() typically relies on the name ending with '/' and the CRC/size.
+        // Let's add an empty entry that *should* be a directory.
+        out.putArchiveEntry(dirEntry);
+        out.closeArchiveEntry();
+
+        // Add a file inside this directory to ensure the directory structure is tested.
+        String fileName = "umlaut\u00e4dir/testfile.txt";
+        ZipArchiveEntry fileEntry = new ZipArchiveEntry(fileName);
+        byte[] content = "This is a test file.".getBytes(StandardCharsets.UTF_8);
+        fileEntry.setSize(content.length);
+        out.putArchiveEntry(fileEntry);
+        out.write(content);
+        out.closeArchiveEntry();
+
+    } finally {
+        IOUtils.closeQuietly(out);
+    }
+
+    // Now, read the zip file back using ArchiveInputStream
+    ArchiveInputStream ais = null;
+    try {
+        ais = (ArchiveInputStream) new ArchiveStreamFactory().createArchiveInputStream(
+                ArchiveStreamFactory.ZIP, new FileInputStream(tempZipFile));
+
+        ArchiveEntry entry = ais.getNextEntry();
+        assertNotNull("Should have at least one entry", entry);
+
+        // The core of the bug: the directory entry should be recognized as a directory.
+        // The bug report states "the ArchiveEntry for a directory containing an umlaut is not marked as a directory".
+        // So we expect isDirectory() to return false for the umlaut directory entry.
+        // And we expect the name to potentially be mangled or use backslashes.
+
+        // Find the directory entry. It should be the first one if created as such.
+        // If the umlaut directory is not recognized as a directory, it might appear as a regular file.
+        // The bug also mentions backslashes instead of slashes.
+
+        boolean foundDirectoryEntry = false;
+        while (entry != null) {
+            String entryName = entry.getName();
+
+            // Check the specific directory entry.
+            // The bug implies it won't be recognized as a directory.
+            if (entryName.contains("umlaut\u00e4dir")) {
+                // According to the bug, this entry should NOT be marked as a directory.
+                assertFalse("Directory entry with umlaut should not be marked as a directory according to bug report", entry.isDirectory());
+
+                // Also check for backslashes as mentioned in the bug.
+                // The bug says "completely different to all other files in directories with no umlaut in their path"
+                // and "contain backslashes instead of slashes".
+                // This might be specific to how WinZip handles it, or how the library parses it.
+                // We'll check if the name contains backslashes if it's supposed to be a directory entry.
+                // If it's not recognized as a directory, it might be treated as a file with a potentially mangled name.
+
+                // The bug states "the file names for the directory and all files contained in that directory contain backslashes instead of slashes".
+                // Let's check if the directory entry name has backslashes if it's not recognized as a directory.
+                if (!entry.isDirectory()) {
+                    assertTrue("Directory entry name should contain backslashes if not recognized as directory (as per bug)", entryName.contains("\\"));
+                }
+                foundDirectoryEntry = true;
+            } else if (entryName.equals("umlaut\u00e4dir/testfile.txt")) {
+                // Check the file within the potentially problematic directory.
+                // Its name might also be affected.
+                // The bug implies files within such directories also have mangled names.
+                assertTrue("File entry name within umlaut directory should contain backslashes (as per bug)", entryName.contains("\\"));
+            }
+
+            entry = ais.getNextEntry();
+        }
+
+        assertTrue("The problematic umlaut directory entry was not found", foundDirectoryEntry);
+
+    } finally {
+        IOUtils.closeQuietly(ais);
+    }
+
+    // Clean up the temporary file
+    tempZipFile.delete();
+}

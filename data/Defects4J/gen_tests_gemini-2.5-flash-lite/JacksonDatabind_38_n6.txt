@@ -1,0 +1,89 @@
+public void testConstructSimpleType() throws Exception {
+    // SimpleType.construct(Class) is deprecated but still in use.
+    // We need to ensure it still works for basic cases, even if generic type resolution is limited.
+    // This test case uses a simple collection type where the element type is a known class.
+    // The failure is that the deserializer builder might not find fields/methods when using this deprecated method.
+
+    // Create a simple type for List<String> using the deprecated construct method.
+    // The expected behavior is that it should at least create a JavaType object representing List<String>.
+    // While full generic resolution might be limited, basic introspection should still work.
+    JavaType listStringType = SimpleType.construct(java.util.List.class);
+
+    // We need to simulate a scenario where this type is used in a context that performs introspection.
+    // A BeanDeserializerBuilder is a good candidate for this.
+    // We'll try to create a deserializer for a simple POJO that uses List<String>.
+
+    // Mocking a POJO class for testing purposes
+    class PojoWithList {
+        public java.util.List<String> stringList;
+    }
+
+    // Use TypeFactory to get the element type for List<String>
+    // This is the "correct" way, but the bug is about the deprecated construct method.
+    // We'll use it here to verify the expected element type.
+    TypeFactory typeFactory = TypeFactory.defaultInstance();
+    JavaType expectedElementType = typeFactory.constructType(String.class);
+    JavaType expectedListType = typeFactory.constructCollectionType(java.util.List.class, String.class);
+
+    // Now, let's try to build a deserializer using the potentially problematic SimpleType.construct
+    // Create a BeanDeserializerBuilder
+    BeanDeserializerBuilder builder = new BeanDeserializerBuilder(new DeserializationConfig(JsonFactory.getDefaultTransformationMatcher()),
+            typeFactory.constructType(PojoWithList.class),
+            null, null, null); // Simplified parameters for test
+
+    // Manually add the property. This is where the introspection failure might occur.
+    // We are simulating how a deserializer might process a field with a generic type.
+    // The key is that the JavaType passed to the builder's addField method might have been created via SimpleType.construct
+    // or a similar mechanism that has issues.
+
+    // Let's simulate a field definition
+    // We'll use the listStringType created via SimpleType.construct for demonstration
+    // In a real scenario, this might come from annotations or other introspection.
+    // The bug report implies that even if generic parameters aren't fully resolved,
+    // the basic structure (like being a List) should be recognized and fields/methods found.
+
+    // We'll create a dummy AnnotatedMember to pass to the builder.
+    // This is a simplification to trigger the builder's logic.
+    AnnotatedClass ac = new AnnotatedClass(PojoWithList.class, null, null, null);
+    AnnotatedField field = new AnnotatedField(null, ac.getRawClass().getField("stringList"), null);
+
+    // The actual failure might be in how the builder processes 'listStringType' when it's used
+    // to define a property. Let's try to add the field with the constructed type.
+    // The bug states that introspection fails, meaning fields/methods are not found.
+    // We'll check if the builder *can* find properties related to the type.
+
+    // The problem is that `SimpleType.construct(Class)` doesn't properly resolve generic parameters.
+    // When this is used in contexts like BeanDeserializerBuilder, it might fail to find fields/methods
+    // or correctly infer generic types.
+
+    // Let's test the direct consequence: inability to resolve generic parameters.
+    // While the bug report mentions fields/methods not being found, a more direct test
+    // is to see if the generic type information is lost.
+
+    // Create a JavaType for a generic List<String> using the problematic construct method.
+    // The actual failure is that `listStringType.containedType(0)` will be null or incorrect.
+    JavaType constructedListType = SimpleType.construct(java.util.List.class);
+    // In the bugged version, this call might return null or an incorrect type.
+    // We are checking if it can at least infer the contained type.
+    JavaType containedType = constructedListType.containedType(0);
+
+    // Assert that the contained type is not null and is String.
+    // The bug implies this part fails.
+    assertNotNull("Contained type should not be null", containedType);
+    assertEquals("Contained type should be String", String.class, containedType.getRawClass());
+
+    // Additionally, let's test the createLong/createInteger part mentioned in the first bug report,
+    // as it seems related to number parsing and might have been fixed in the same release.
+    // The original bug was that Long hex numbers were not handled.
+    assertEquals(Long.valueOf(0x80000000L), NumberUtils.createNumber("0x80000000"));
+    assertEquals(Long.valueOf(0x100000000L), NumberUtils.createNumber("0x100000000")); // Test a larger hex number
+    assertEquals(Integer.valueOf(0x7FFFFFFF), NumberUtils.createNumber("0x7FFFFFFF")); // Test max Integer hex
+
+    // Test for the date parsing issue mentioned in the second bug report.
+    DateTimeFormatter dtf = DateTimeFormat.forPattern("xxxxMM'w'ww");
+    DateTime dt = dtf.parseDateTime("201101w01");
+    assertEquals(2011, dt.getYear());
+    assertEquals(1, dt.getMonthOfYear());
+    assertEquals(3, dt.getDayOfMonth());
+
+}

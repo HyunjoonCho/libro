@@ -1,0 +1,91 @@
+import org.junit.Test;
+import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+public class MockitoAbstractClassTest {
+
+    interface UserAccount {
+        List<String> getEmails();
+        void addEmail(String email);
+    }
+
+    abstract class FakeUserAccount implements UserAccount {
+        private final List<String> emails = new ArrayList<>();
+
+        @Override
+        public void addEmail(String email) {
+            emails.add(email);
+        }
+
+        @Override
+        public List<String> getEmails() {
+            return new ArrayList<>(emails); // Return a copy to prevent modification
+        }
+    }
+
+    @Test
+    public void testAbstractClassMocking() {
+        // Mocking the abstract class directly to provide implementations for abstract methods
+        // and allow overriding concrete methods if needed.
+        UserAccount mockUserAccount = mock(UserAccount.class, Mockito.CALLS_REAL_METHODS);
+
+        // Program the behavior for the concrete method that we want to test
+        String email1 = "test1@example.com";
+        String email2 = "test2@example.com";
+        mockUserAccount.addEmail(email1);
+        mockUserAccount.addEmail(email2);
+
+        // Verify that the concrete method correctly updated the state
+        List<String> actualEmails = mockUserAccount.getEmails();
+        assertEquals(2, actualEmails.size());
+        assertTrue(actualEmails.contains(email1));
+        assertTrue(actualEmails.contains(email2));
+
+        // Demonstrate overriding a concrete method if needed (though not strictly necessary for this bug)
+        UserAccount mockUserAccountOverride = mock(UserAccount.class, new Answer<Object>() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                if ("getEmails".equals(invocation.getMethod().getName())) {
+                    return new ArrayList<String>() {{
+                        add("overridden@example.com");
+                    }};
+                }
+                // Default behavior for other methods
+                return Mockito.CALLS_REAL_METHODS.answer(invocation);
+            }
+        });
+        mockUserAccountOverride.addEmail("some@email.com"); // This would call the real addEmail if not overridden
+        assertEquals(1, mockUserAccountOverride.getEmails().size());
+        assertEquals("overridden@example.com", mockUserAccountOverride.getEmails().get(0));
+    }
+
+    // This test is more about the proposed solution in the bug report,
+    // demonstrating how a custom mock maker or annotation processor would work.
+    // Since we can't directly implement that here, we simulate the behavior.
+    @Test
+    public void testSimulatedAbstractClassMocking() {
+        // Simulate the behavior described in the bug report's proposal for Example 1
+        // by using Mockito.CALLS_REAL_METHODS on an abstract class.
+        FakeUserAccount fakeUserAccount = mock(FakeUserAccount.class, Mockito.CALLS_REAL_METHODS);
+
+        String email1 = "test1@example.com";
+        String email2 = "test2@example.com";
+        fakeUserAccount.addEmail(email1);
+        fakeUserAccount.addEmail(email2);
+
+        List<String> actualEmails = fakeUserAccount.getEmails();
+        assertEquals(2, actualEmails.size());
+        assertTrue(actualEmails.contains(email1));
+        assertTrue(actualEmails.contains(email2));
+    }
+}

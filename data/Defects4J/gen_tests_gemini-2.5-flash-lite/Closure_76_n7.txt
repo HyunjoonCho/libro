@@ -1,0 +1,166 @@
+public void testAssignmentsWithinConditions() {
+    // This test aims to reproduce the behavior described in the bug report.
+    // The original bug report discusses Closure Compiler's behavior with JavaScript,
+    // specifically how assignments within conditional expressions might be
+    // incorrectly removed or altered during compilation, leading to unexpected results.
+    //
+    // Since this is a Java test suite, we need to simulate the scenario
+    // using Java constructs that might exhibit similar logical flaws or
+    // to test a Java utility that might be affected by such issues.
+    //
+    // The core issue in the bug report is the loss or incorrect handling of
+    // side effects (assignments) within logical OR (||) operations in conditions.
+    //
+    // Let's assume there's a Java utility class, say 'ConditionEvaluator',
+    // that is supposed to mimic this behavior or has a similar bug.
+    // If no such Java utility exists, this test would be testing a hypothetical scenario.
+    //
+    // For the purpose of this test, we'll create a scenario that mirrors the
+    // logical structure of the problematic JavaScript. We'll use mock objects
+    // or simple boolean variables to represent the 'echo' function and the
+    // assignment side effects.
+
+    // Scenario: We have a variable 'b' and we want to assign a value to it
+    // within a conditional expression, and then use the potentially updated
+    // value of 'b'. The condition uses a logical OR.
+
+    // Let's define a helper method or lambda to simulate the 'echo' function
+    // which also performs an assignment and returns a boolean.
+    // In the original JS, echo(b = true) would set b to true and return true.
+    // echo(b = false) would set b to false and return false.
+
+    // We need to capture the state of 'b' across these calls.
+    // A simple mutable holder like an array or a custom class can work.
+    class MutableBoolean {
+        boolean value;
+    }
+
+    MutableBoolean bHolder = new MutableBoolean();
+    boolean resultA; // Corresponds to 'a' in the original JS
+
+    // Simulating the condition: if (echo(b = true) || echo(b = false)) a = b;
+    // The first part 'echo(b = true)' should execute, set bHolder.value to true,
+    // and return true. Due to short-circuiting of ||, the second part
+    // 'echo(b = false)' should NOT execute.
+    // So, bHolder.value should remain true, and the condition should evaluate to true.
+    // Then, 'a' should be assigned the value of 'b', which is true.
+
+    // Let's simulate the evaluation.
+    boolean conditionResult1 = evaluateFirstPart(bHolder); // Simulates echo(b = true)
+
+    if (conditionResult1) {
+        // Short-circuiting occurred. bHolder.value is true.
+        resultA = bHolder.value; // a = b
+    } else {
+        // First part was false, so evaluate the second part.
+        boolean conditionResult2 = evaluateSecondPart(bHolder); // Simulates echo(b = false)
+        if (conditionResult2) {
+            resultA = bHolder.value; // a = b
+        } else {
+            resultA = false; // Simulating 'a = null;' if both parts false (though not directly applicable here)
+        }
+    }
+
+    // Assert that 'resultA' is true and 'bHolder.value' is true.
+    // This test is designed to verify that the side effect of the first
+    // assignment (b = true) is preserved and correctly influences the outcome,
+    // and that the second assignment (b = false) is NOT executed due to short-circuiting.
+    // If the bug were present in a Java equivalent, 'bHolder.value' might end up
+    // being false (if the second part was evaluated incorrectly), or 'resultA'
+    // might be assigned an incorrect value.
+
+    assertTrue("The final result should be true.", resultA);
+    assertTrue("The variable 'b' should be true due to short-circuiting.", bHolder.value);
+
+    // Add another test case to cover the scenario where the first part might be false
+    // and the second part needs to be evaluated.
+
+    MutableBoolean bHolder2 = new MutableBoolean();
+    boolean resultB;
+
+    // Simulate a scenario where the first part would return false if it were possible.
+    // For instance, if the "echo" function returned false based on some input.
+    // However, the bug report specifically uses assignments that result in true/false.
+    // The core issue is the removal of the assignment itself or incorrect evaluation order.
+    // Let's stick to the original structure to highlight the potential for error.
+
+    // If we were to test the compiled version's logic:
+    // function reduction() {
+    //  var a;
+    //  return echo(true) || echo(a = false) ? a: null
+    // }
+    // This compiled version seems to imply that 'a' is assigned within the condition,
+    // which is different from the original where 'a' is assigned *after* the condition.
+    // The bug report states "Assignments within conditions are sometimes incorrectly removed".
+    // This implies the assignment *itself* might be removed or its effect lost.
+
+    // Let's refine the test to focus on the side effect preservation.
+    // We'll use a simple wrapper to track if a specific assignment happened.
+
+    class AssignmentTracker {
+        boolean assignedTrue = false;
+        boolean assignedFalse = false;
+        boolean currentValue = false; // Default value
+
+        boolean assignTrue() {
+            assignedTrue = true;
+            currentValue = true;
+            return true; // Mimics echo(b = true) returning true
+        }
+
+        boolean assignFalse() {
+            assignedFalse = true;
+            currentValue = false;
+            return false; // Mimics echo(b = false) returning false
+        }
+    }
+
+    AssignmentTracker tracker = new AssignmentTracker();
+    boolean finalA;
+
+    // Simulating the logic:
+    // if (assignTrue() || assignFalse()) {
+    //    finalA = tracker.currentValue;
+    // } else {
+    //    finalA = false; // Or null equivalent in JS context
+    // }
+
+    boolean conditionOutcome = tracker.assignTrue(); // Should set assignedTrue = true, currentValue = true, return true
+
+    if (conditionOutcome) {
+        // Due to short-circuiting, assignFalse() should NOT be called.
+        finalA = tracker.currentValue; // Should be true
+    } else {
+        // This part should not be reached in this specific test case.
+        conditionOutcome = tracker.assignFalse(); // This call should be skipped.
+        if (conditionOutcome) {
+            finalA = tracker.currentValue;
+        } else {
+            finalA = false;
+        }
+    }
+
+    // Assertions for this refined test:
+    // 1. The final result 'finalA' should be true.
+    // 2. The assignment 'assignTrue()' should have occurred.
+    // 3. The assignment 'assignFalse()' should NOT have occurred due to short-circuiting.
+    // 4. The 'currentValue' should be true.
+
+    assertTrue("Final result 'finalA' should be true.", finalA);
+    assertTrue("Assignment of true should have occurred.", tracker.assignedTrue);
+    assertFalse("Assignment of false should NOT have occurred due to short-circuiting.", tracker.assignedFalse);
+    assertTrue("The current value should be true.", tracker.currentValue);
+}
+
+// Helper method to simulate the first part of the condition: echo(b = true)
+// In a real Java scenario, this might be a method call that modifies a shared state.
+private boolean evaluateFirstPart(MutableBoolean holder) {
+    holder.value = true; // Assignment
+    return true; // Return value of the expression
+}
+
+// Helper method to simulate the second part of the condition: echo(b = false)
+private boolean evaluateSecondPart(MutableBoolean holder) {
+    holder.value = false; // Assignment
+    return false; // Return value of the expression
+}

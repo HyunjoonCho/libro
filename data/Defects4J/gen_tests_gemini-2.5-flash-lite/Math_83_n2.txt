@@ -1,0 +1,40 @@
+public void testSimplexSolverBug() {
+    LinearObjectiveFunction f = new LinearObjectiveFunction(new double[]{0.8, 0.2, 0.7, 0.3, 0.6, 0.4}, 0);
+    Collection<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+    constraints.add(new LinearConstraint(new double[]{1, 0, 1, 0, 1, 0}, Relationship.EQ, 23.0));
+    constraints.add(new LinearConstraint(new double[]{0, 1, 0, 1, 0, 1}, Relationship.EQ, 23.0));
+    constraints.add(new LinearConstraint(new double[]{1, 0, 0, 0, 0, 0}, Relationship.GEQ, 10.0));
+    constraints.add(new LinearConstraint(new double[]{0, 0, 1, 0, 0, 0}, Relationship.GEQ, 8.0));
+    constraints.add(new LinearConstraint(new double[]{0, 0, 0, 0, 1, 0}, Relationship.GEQ, 5.0));
+
+    SimplexSolver solver = new SimplexSolver();
+    RealPointValuePair solution = solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+
+    // Based on the bug report, the expected value is 25.8
+    // The bug description mentions that the provided solution is 22.20 and violates x4 >= 5.0
+    // We will assert that the solution is NOT the one described as buggy,
+    // and we will assert the expected optimal value from the bug report.
+    // Note: If the bug is fixed, this test might need to be adjusted to assert the *correct* solution.
+    assertNotEquals(22.20, solution.getValue(), 1e-9);
+    assertEquals(25.8, solution.getValue(), 1e-9);
+
+    // Also check if the constraints are satisfied with the expected solution
+    // The bug report implies the solver might not satisfy constraints.
+    // Let's check the solution that yields 25.8 (derived from LPSolve in the bug report)
+    // x0 = 10.0, x1 = 0.0, x2 = 8.0, x3 = 0.0, x4 = 5.0, x5 = 23.0
+    double[] expectedSolutionValues = {10.0, 0.0, 8.0, 0.0, 5.0, 23.0};
+    assertArrayEquals(expectedSolutionValues, solution.getPoint(), 1e-9);
+
+    // Verify constraints with the expected solution
+    double[] point = solution.getPoint();
+    // r1: x0 + x2 + x4 = 23.0
+    assertEquals(23.0, point[0] + point[2] + point[4], 1e-9);
+    // r2: x1 + x3 + x5 = 23.0
+    assertEquals(23.0, point[1] + point[3] + point[5], 1e-9);
+    // r3: x0 >= 10.0
+    assertTrue(point[0] >= 10.0 - 1e-9);
+    // r4: x2 >= 8.0
+    assertTrue(point[2] >= 8.0 - 1e-9);
+    // r5: x4 >= 5.0
+    assertTrue(point[4] >= 5.0 - 1e-9);
+}

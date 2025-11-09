@@ -1,0 +1,69 @@
+public void testBase64InputStreamZeroBytes() throws IOException {
+    byte[] inputBytes = new byte[] { 0, 1, 2, 3, 4, 5 }; // Multiple of 3 bytes
+    InputStream in = new ByteArrayInputStream(inputBytes);
+    Base64InputStream bais = new Base64InputStream(in, true);
+    InputStreamReader isr = new InputStreamReader(bais);
+    char[] buffer = new char[1024];
+    int bytesRead = isr.read(buffer, 0, buffer.length);
+    // The issue is that read() returns 0 at the end of a stream that's a multiple of 3 bytes long.
+    // This causes subsequent reads (or operations that expect actual data) to fail.
+    // We expect a non-zero return value if there's data, or -1 if the stream is fully exhausted.
+    // The bug causes it to return 0 prematurely.
+    // To reproduce, we need to read until the end and check that it doesn't incorrectly return 0.
+    // A simple read might not hit the bug if it doesn't try to read past the "incorrectly zero" point.
+    // We'll try to read more data after the initial read.
+    int secondRead = isr.read(buffer, 0, buffer.length);
+    // If the stream is truly at its end, the next read should return -1.
+    // If the bug is present, the secondRead might be 0, indicating an issue.
+    // The exact behavior depends on how the reader consumes the stream, but a subsequent read
+    // that *should* return -1 might incorrectly return 0.
+    // A more direct test is to read all available data and check the last return value.
+    bais.close(); // Ensure the stream is processed
+    in.close();
+
+    // This is a simplified reproduction. The actual failure might occur in a loop.
+    // A more robust test would consume the entire stream and check for premature 0.
+    // For this specific bug, if the stream is a multiple of 3, the last `read` call
+    // that *should* return -1 might return 0.
+    // We can simulate this by trying to read past the expected end.
+    InputStream testIn = new ByteArrayInputStream(inputBytes);
+    Base64InputStream base64TestStream = new Base64InputStream(testIn, true);
+    byte[] readBuffer = new byte[1024];
+    int readCount = 0;
+    int lastRead = 0;
+    while ((lastRead = base64TestStream.read(readBuffer)) != -1) {
+        readCount += lastRead;
+    }
+    // The bug is that `lastRead` could be 0 instead of -1 at the end of a 3-byte multiple stream.
+    // So, we assert that the last read was not 0 if the stream was supposed to be exhausted.
+    // However, the description states "incorrectly returns 0 at end". This means a read *before* -1 might be 0.
+    // Let's try to read exactly the size of the input and see what happens.
+    testIn = new ByteArrayInputStream(inputBytes);
+    base64TestStream = new Base64InputStream(testIn, true);
+    byte[] readAgain = new byte[inputBytes.length];
+    int result = base64TestStream.read(readAgain);
+    // The problem is that `read(byte[])` might return 0 even if there's more data conceptually
+    // or if it's at the end and should return -1.
+    // The test needs to trigger the condition where `read(byte[])` returns 0 when it shouldn't.
+    // This typically happens when the internal buffer processing leads to a state where
+    // `available()` might return 0 or the internal logic for returning bytes incorrectly exits early.
+
+    // A better reproduction: read in small chunks and specifically test the point where the bug manifests.
+    // The bug is triggered when the internal buffer is processed and the remaining input stream
+    // is a multiple of 3 bytes.
+    testIn = new ByteArrayInputStream(inputBytes);
+    base64TestStream = new Base64InputStream(testIn, true);
+    byte[] chunk = new byte[1];
+    int readResult;
+    int totalBytesRead = 0;
+    // Read until the stream is exhausted, checking for premature 0s.
+    while ((readResult = base64TestStream.read(chunk)) != -1) {
+        if (readResult == 0) {
+            // This is the condition we are testing for. If we ever get a 0 here, it's a failure.
+            fail("Base64InputStream#read(byte[]) incorrectly returned 0.");
+        }
+        totalBytesRead += readResult;
+    }
+    // Ensure the entire stream was consumed.
+    assertTrue("Expected to read " + inputBytes.length + " bytes, but read " + totalBytesRead, totalBytesRead == inputBytes.length);
+}

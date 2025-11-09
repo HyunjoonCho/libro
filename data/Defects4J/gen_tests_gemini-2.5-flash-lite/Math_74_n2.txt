@@ -1,0 +1,282 @@
+public void testDormandPrince853StepSizeGuess() throws DimensionMismatchException, NumberIsTooSmallException, MaxCountExceededException {
+    // Test case designed to trigger the incorrect step size guess in DormandPrince853Integrator
+    // by providing initial conditions and parameters that would lead to a large,
+    // incorrect initial step size guess if the bug is present.
+
+    // Define a simple ODE system: dy/dt = -y
+    FirstOrderDifferentialEquations equations = new FirstOrderDifferentialEquations() {
+        @Override
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = -y[0];
+        }
+
+        @Override
+        public int getDimension() {
+            return 1;
+        }
+    };
+
+    // Initial conditions and parameters
+    double[] y0 = {10.0}; // Initial value of y
+    double t0 = 0.0;      // Initial time
+    double hExpected = 1.0; // A reasonable expected initial step size for this scenario
+    double hActual = 100.0; // Set an artificially large initial guess to see if it gets corrected properly
+
+    // Use DormandPrince853Integrator
+    DormandPrince853Integrator integrator = new DormandPrince853Integrator(1.0e-8, 1.0e6, 1.0e-8, 1.0e-8);
+    integrator.setInitialStepSize(hActual); // Set a large initial step size guess
+
+    // Set tolerances
+    double vecAbsoluteTolerance = 1.0e-8;
+    double vecRelativeTolerance = 1.0e-8;
+    integrator.setVetAbsoluteTolerance(new double[]{vecAbsoluteTolerance});
+    integrator.setVetRelativeTolerance(new double[]{vecRelativeTolerance});
+
+    // Attempt to integrate a very small step to observe the initial step size calculation
+    integrator.integrate(equations, t0, y0, t0 + 0.1, y0); // Integrate a small duration
+
+    // The bug lies in the initializeStep method where the scale is calculated.
+    // If the bug is present, the initial step size (hNew in initializeStep) will be
+    // significantly larger than it should be, potentially leading to divergence
+    // or exceeding the step size limit.
+
+    // We check if the actual step taken is closer to a reasonable value than the
+    // artificially large initial guess, implying the scaling was corrected.
+    // This is a qualitative check. A more robust test might involve inspecting
+    // the internal state of the integrator or checking the step size chosen
+    // immediately after the initialization.
+
+    // Here, we'll assume that if the integrator completes without an exception
+    // and the step size wasn't excessively large (which would be a symptom of the bug),
+    // the test passes. A more direct check would be to mock initializeStep or
+    // inspect its return value.
+
+    // A more direct way to test this would be to verify the value of 'hNew'
+    // returned by initializeStep. However, initializeStep is protected.
+    // We can infer the behavior by checking the first step taken by the integrator.
+
+    // If the bug is present, the first step taken by the integrator (after the
+    // potentially flawed initialization) might be excessively large, leading to
+    // an exception or a very large value in the internal step history.
+    // For this test, we'll check if the integrator completes successfully for a short duration,
+    // which implies the initial step size wasn't so catastrophically wrong as to
+    // immediately cause an exception in this specific ODE.
+
+    // A more precise test would require access to the 'scale' array calculation
+    // within initializeStep, or to check the value of the step size *after*
+    // initializeStep but *before* the first step is actually performed.
+
+    // Given the constraints, we'll assert that the integration completes, and
+    // if the bug were present, it might have caused an exception or a very
+    // large step that could be problematic in a real scenario.
+    // The provided bug description implies that the step size 'h' calculated
+    // is wrong. A wrong 'h' here would likely be much larger than 'hExpected'.
+
+    // For a truly deterministic test of the bug, one would need to either:
+    // 1. Make initializeStep public for testing.
+    // 2. Subclass DormandPrince853Integrator to expose the scale calculation or hNew.
+    // 3. Use reflection to inspect the private state.
+
+    // As a proxy, we can check if the integration proceeds for a very short duration
+    // without throwing an exception, and assume that if the bug were severe, it would.
+    // This is not ideal but is a common approach when internal methods are not accessible.
+
+    // Let's try to make the test more specific by checking the *first* step size used.
+    // This is still tricky as the integrator might adjust it.
+    // The bug report mentions "wrong step size h used to perform an Euler step".
+
+    // A simplified approach: Let's assume the bug would lead to an initial step
+    // that is much larger than what is reasonable for the given tolerances and ODE.
+    // The DormandPrince853Integrator's integrate method will internally call initializeStep.
+    // If initializeStep returns a drastically wrong (too large) step, the integration
+    // might proceed with that step.
+
+    // The most direct way to test this without reflection is to ensure that
+    // the *resulting* step size is not unreasonably large.
+    // The problem is that the integrator *itself* might correct a bad initial guess.
+
+    // Let's re-examine the bug description: "the error leads to a wrong step size h used to perform an Euler step."
+    // This implies that the value *returned* by initializeStep is the problem.
+
+    // Let's simulate a scenario where the bug would be most apparent.
+    // If y0 is large, and Atol is small, the term |y0i| * Rtoli should be significant.
+    // If it's ignored (as per the bug), the scale will be smaller, leading to a larger h.
+
+    // We can't directly access 'hNew' from initializeStep.
+    // However, the integrate method uses this 'hNew' to perform the first step.
+    // If 'hNew' is too large, the first step taken might be larger than expected.
+
+    // Let's try a scenario where the initial guess is set to something very small,
+    // and rely on the integrator to calculate the initial step size.
+    integrator.setInitialStepSize(1.0e-12); // Set a very small initial step size
+    integrator.integrate(equations, t0, y0, t0 + 0.1, y0);
+
+    // The key is that the 'scale' array is computed *before* the initial step.
+    // If 'scale' is computed incorrectly, the initial step size ('hNew') will be wrong.
+    // The bug states: "sci = Atoli" instead of "sci = Atol i + |y0i| \* Rtoli".
+
+    // Consider the formula for h: h is roughly proportional to sqrt(epsilon / max(scale_i / y_i^2)).
+    // If scale_i is too small, h becomes too large.
+
+    // Let's try to assert something about the *first step size actually taken*.
+    // This is still indirect.
+
+    // A better approach: The bug description mentions that the fix involves using
+    // `scale[i] = vecAbsoluteTolerance[i] + vecRelativeTolerance[i] * yi;`
+    // Let's try to construct parameters where this difference is significant.
+    // Let Atol be very small, and Rtoli be significant, and y0 be large.
+
+    // Example:
+    // y0 = {1e6}
+    // Atol = 1e-8
+    // Rtoli = 1e-6
+    // Correct scale[0] = 1e-8 + |1e6| * 1e-6 = 1e-8 + 1 = ~1
+    // Buggy scale[0] = 1e-8 (very small)
+
+    // This large difference in 'scale' would lead to a drastically different 'hNew'.
+    // Let's try to integrate for a short duration and see if it works.
+    // The bug report implies that the issue might lead to exceptions in specific applications.
+    // We are aiming to reproduce the *condition* that leads to the bug.
+
+    // The most direct way to test this would be to mock the `initializeStep` method
+    // or to use reflection to inspect the `scale` array calculation within
+    // `DormandPrince853Integrator` or its superclass `EmbeddedRungeKuttaIntegrator`.
+
+    // Since we cannot do that easily in a standard JUnit test without helper methods or reflection,
+    // let's focus on creating a scenario where the difference in the `scale` calculation
+    // would be most pronounced and *hope* that the integration proceeds differently
+    // or fails in a way that indicates the large step.
+
+    // Let's try a large initial value and small tolerances.
+    double[] largeY0 = {1.0e6};
+    double smallAbsTol = 1.0e-8;
+    double smallRelTol = 1.0e-8; // Let's make relative tolerance small too to see the effect
+
+    DormandPrince853Integrator integratorForBug = new DormandPrince853Integrator(smallAbsTol, 1.0e6, smallAbsTol, smallRelTol);
+    integratorForBug.setVetAbsoluteTolerance(new double[]{smallAbsTol});
+    integratorForBug.setVetRelativeTolerance(new double[]{smallRelTol});
+    integratorForBug.setInitialStepSize(1.0); // Let the integrator determine the initial step
+
+    // The bug is in the `initializeStep` method of `EmbeddedRungeKuttaIntegrator`.
+    // The `scale` array is computed there.
+    // If `vecAbsoluteTolerance` is null (meaning scalar tolerances are used),
+    // the `scale` is computed as `scalAbsoluteTolerance` in the buggy version.
+    // The correct version should be `scalAbsoluteTolerance + scalRelativeTolerance * yi`.
+
+    // Let's try to trigger the scalar tolerance path.
+    integratorForBug.clearSetVetAbsoluteTolerance();
+    integratorForBug.clearSetVetRelativeTolerance();
+    integratorForBug.setAbsoluteTolerance(smallAbsTol);
+    integratorForBug.setRelativeTolerance(smallRelTol);
+
+    // Integrate for a very short duration to observe the initial step.
+    // If the bug is present, the initial step size might be excessively large.
+    // This could lead to a large change in `y`, potentially exceeding limits or causing errors.
+    try {
+        integratorForBug.integrate(equations, t0, largeY0, t0 + 1.0e-4, largeY0);
+        // If the integration completes without error, it doesn't *prove* the bug isn't there,
+        // but it means that for this specific ODE and parameters, the bug didn't lead to an
+        // immediate failure that we can easily detect.
+        // The bug report mentions "my satellite hits the ground...", implying a physical consequence.
+
+        // A more robust test would involve checking the *actual* step size taken
+        // immediately after initialization. This requires access to internal state.
+
+        // Let's assume for the purpose of this test that if the integration completes
+        // for a small duration, the initial step was not catastrophically wrong.
+        // The actual reproduction of the failure might depend on the specific ODE system
+        // and the exact values leading to a divergence or exception.
+
+        // This test aims to create the *conditions* described in the bug report.
+        // The failure itself (e.g., satellite hitting the ground) is application-specific.
+        // We are testing the library's internal calculation.
+
+        // To make this test more meaningful, let's consider what would happen if
+        // the step size was indeed too large.
+        // If h is too large, the change in y could be >> expected.
+        // For dy/dt = -y, if y(0) = 1e6, and h is large, y(h) would be y(0) * exp(-h).
+        // A large h means y(h) becomes very small.
+
+        // Let's try to assert that the value of `y` after a short integration
+        // is not "unreasonably" small, which might indicate an excessively large step.
+        // This is still heuristic.
+
+        // The best way to reproduce the failure is to trigger an exception that
+        // would occur *because* of the wrong step size.
+        // The bug report implies that the wrong step size can cause an exception.
+        // We need an ODE where a large initial step would cause a problem.
+
+        // Let's use an ODE where the state needs to be maintained within certain bounds.
+        // For example, a constraint that `y` must be positive.
+        FirstOrderDifferentialEquations boundedEquations = new FirstOrderDifferentialEquations() {
+            @Override
+            public void computeDerivatives(double t, double[] y, double[] yDot) {
+                if (y[0] <= 0) {
+                    // Simulate an error condition if y goes non-positive
+                    throw new IllegalStateException("Constraint violated: y must be positive.");
+                }
+                yDot[0] = -y[0] * 0.1; // Slow decay
+            }
+
+            @Override
+            public int getDimension() {
+                return 1;
+            }
+        };
+
+        double[] initialYBounded = {10.0};
+        double absTolBounded = 1.0e-8;
+        double relTolBounded = 1.0e-8;
+
+        DormandPrince853Integrator integratorBounded = new DormandPrince853Integrator(absTolBounded, 1.0e6, absTolBounded, relTolBounded);
+        integratorBounded.setAbsoluteTolerance(absTolBounded);
+        integratorBounded.setRelativeTolerance(relTolBounded);
+        integratorBounded.setInitialStepSize(1.0); // Let it calculate the initial step
+
+        // Integrate for a short duration. If the initial step is too large,
+        // it might cause y to become non-positive, triggering the exception.
+        // The bug is in `scale = Atoli` vs `scale = Atol + Rtol * y`.
+        // If y is large and Atol is small, the correct scale is dominated by Rtol*y.
+        // The buggy scale is just Atol, which is very small.
+        // A small scale leads to a large initial step.
+
+        // Let's try y0 = 10.0, Atol = 1e-8, Rtol = 1e-4.
+        // Correct scale = 1e-8 + 10.0 * 1e-4 = 1e-8 + 1e-3 = ~1e-3
+        // Buggy scale = 1e-8 (very small)
+        // This difference in scale will lead to a large difference in initial h.
+
+        // Let's set parameters that highlight this difference.
+        double[] yToTrigger = {10.0};
+        double absTolTrigger = 1.0e-10; // Very small absolute tolerance
+        double relTolTrigger = 1.0e-4;  // Significant relative tolerance
+
+        DormandPrince853Integrator triggerIntegrator = new DormandPrince853Integrator(absTolTrigger, 1.0e6, absTolTrigger, relTolTrigger);
+        triggerIntegrator.setAbsoluteTolerance(absTolTrigger);
+        triggerIntegrator.setRelativeTolerance(relTolTrigger);
+        triggerIntegrator.setInitialStepSize(1.0); // Let it determine the initial step
+
+        // Now, integrate for a very short time. The bug should manifest as a large first step.
+        // If this large step causes `y` to drop below zero (or some other constraint violation),
+        // the `boundedEquations` will throw an exception.
+
+        try {
+            triggerIntegrator.integrate(boundedEquations, t0, yToTrigger, t0 + 1.0, yToTrigger); // Integrate for a duration
+            // If we reach here, the bug did not cause an exception for this specific ODE and parameters.
+            // This might mean the test needs more specific ODE or parameters, or the bug fix is already in place.
+            // However, the *intent* is to create the scenario.
+            fail("Expected an exception due to incorrect initial step size, but integration completed.");
+        } catch (IllegalStateException e) {
+            // This is the expected outcome if the bug causes a large step that violates the constraint.
+            assertTrue(e.getMessage().contains("Constraint violated: y must be positive."));
+            // The presence of this exception indicates the bug *could* have manifested.
+        } catch (Exception e) {
+            // Catch other potential exceptions, though IllegalStateException is expected for this specific setup.
+            fail("An unexpected exception occurred: " + e.getMessage());
+        }
+
+    } catch (DimensionMismatchException | NumberIsTooSmallException | MaxCountExceededException e) {
+        // These are exceptions from the integrator itself, not directly related to the bug's mechanism.
+        // We re-throw them or fail the test if they occur unexpectedly.
+        throw e;
+    }
+}

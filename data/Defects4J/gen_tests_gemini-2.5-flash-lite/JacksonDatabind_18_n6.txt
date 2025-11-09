@@ -1,0 +1,33 @@
+public void testObjectReaderReadValuesErrorRecovery() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    String json = "[{\"name\":\"foo\"}, {\"value\":123}, {\"name\":\"bar\"}]";
+    ObjectReader reader = mapper.reader(Map.class);
+    MappingIterator<Map> iterator = reader.readValues(json);
+
+    assertTrue(iterator.hasNextValue());
+    Map map1 = iterator.nextValue();
+    assertEquals("foo", map1.get("name"));
+
+    assertTrue(iterator.hasNextValue());
+    // Introduce an error: the next element is invalid for Map.class
+    String invalidJson = "[{\"name\":\"foo\"}, {\"value\":123}, {\"name\":\"bar\"}]";
+    ObjectReader readerWithError = mapper.reader(Map.class);
+    MappingIterator<Map> iteratorWithError = readerWithError.readValues(new StringReader(invalidJson.replaceFirst("\\{\"value\":123\\}", "\\{\"value\":123, \"extra\": true\\}")));
+
+    assertTrue(iteratorWithError.hasNextValue());
+    iteratorWithError.nextValue(); // This should succeed for the first element
+
+    // The issue is that after an exception, the iterator might not be in a clean state
+    // to continue or to be closed properly.
+    // We expect that even after an error, calling hasNextValue() or nextValue()
+    // should not throw unexpected exceptions, and that the iterator can be closed.
+    try {
+        assertTrue(iteratorWithError.hasNextValue()); // This might fail or behave unexpectedly
+        iteratorWithError.nextValue(); // This is expected to throw an exception
+    } catch (JsonProcessingException e) {
+        // Expected exception
+    } finally {
+        // Ensure close() can be called without issues, even after an error
+        iteratorWithError.close();
+    }
+}

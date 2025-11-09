@@ -1,0 +1,54 @@
+public void testTarArchiveOutputStream_getBytesWritten_returnsInvalidValue() throws Exception {
+    File tempFile = File.createTempFile("test", ".tar");
+    tempFile.deleteOnExit();
+    FileOutputStream myOutputStream = new FileOutputStream(tempFile);
+    ArchiveOutputStream sTarOut = null;
+    FileInputStream sInput = null;
+    try {
+        sTarOut = new ArchiveStreamFactory().createArchiveOutputStream(ArchiveStreamFactory.TAR, myOutputStream);
+        File sourceFile = File.createTempFile("source", ".txt");
+        sourceFile.deleteOnExit();
+        try (java.io.OutputStream os = new java.io.FileOutputStream(sourceFile)) {
+            byte[] data = new byte[8192];
+            for (int i = 0; i < data.length; i++) {
+                data[i] = (byte) (i % 256);
+            }
+            os.write(data);
+        }
+        TarArchiveEntry sEntry = new TarArchiveEntry(sourceFile);
+        sTarOut.putArchiveEntry(sEntry);
+        sInput = new FileInputStream(sourceFile);
+        byte[] cpRead = new byte[8192];
+        int iRead;
+        while ((iRead = sInput.read(cpRead)) > 0) {
+            sTarOut.write(cpRead, 0, iRead);
+        }
+        long bytesWrittenBeforeClose = sTarOut.getBytesWritten();
+        sTarOut.closeArchiveEntry();
+        sTarOut.close();
+        long bytesWrittenAfterClose = sTarOut.getBytesWritten();
+        assertNotEquals("Bytes written should not be zero before close", 0, bytesWrittenBeforeClose);
+        assertNotEquals("Bytes written should not be zero after close", 0, bytesWrittenAfterClose);
+        assertTrue("Bytes written after close should be greater than or equal to bytes written before close", bytesWrittenAfterClose >= bytesWrittenBeforeClose);
+        assertTrue("Bytes written should be at least the size of the file content", bytesWrittenAfterClose >= sourceFile.length());
+    } finally {
+        if (sInput != null) {
+            try {
+                sInput.close();
+            } catch (IOException ignored) {
+            }
+        }
+        if (sTarOut != null) {
+            try {
+                sTarOut.close();
+            } catch (IOException ignored) {
+            }
+        }
+        if (myOutputStream != null) {
+            try {
+                myOutputStream.close();
+            } catch (IOException ignored) {
+            }
+        }
+    }
+}

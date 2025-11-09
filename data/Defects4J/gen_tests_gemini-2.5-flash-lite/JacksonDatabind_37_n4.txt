@@ -1,0 +1,70 @@
+public void testJsonTypeDefaultImplRegression() throws IOException {
+    String json = "{\n" +
+                  "  \"version\": \"1.0\",\n" +
+                  "  \"schemas\": [\n" +
+                  "    {\n" +
+                  "      \"name\": \"FoodMart\",\n" +
+                  "      \"tables\": [\n" +
+                  "        {\n" +
+                  "          \"name\": \"time_by_day\",\n" +
+                  "          \"columns\": [\n" +
+                  "            {\n" +
+                  "              \"name\": \"time_id\"\n" +
+                  "            }\n" +
+                  "          ]\n" +
+                  "        },\n" +
+                  "        {\n" +
+                  "          \"name\": \"sales_fact_1997\",\n" +
+                  "          \"columns\": [\n" +
+                  "            {\n" +
+                  "              \"name\": \"time_id\"\n" +
+                  "            }\n" +
+                  "          ]\n" +
+                  "        }\n" +
+                  "      ]\n" +
+                  "    }\n" +
+                  "  ]\n" +
+                  "}";
+
+    // Assuming JsonRoot is the top-level class that contains schemas.
+    // And JsonMapSchema is a concrete implementation of a schema type.
+    // And JsonSchema is the base class for JsonMapSchema, containing the 'name' field.
+
+    // Mock classes to simulate the structure described in the bug report.
+    // In a real test, these would be the actual classes from the library.
+    class JsonSchema {
+        public String name;
+    }
+
+    class JsonMapSchema extends JsonSchema {
+        public List<Object> tables; // Using Object to avoid defining table/column classes for this test
+        public List<Object> functions;
+    }
+
+    class JsonRoot {
+        public String version;
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type", defaultImpl = JsonMapSchema.class)
+        public List<JsonSchema> schemas;
+    }
+
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES); // This should fail if 'name' is not recognized
+
+    // Perform deserialization. The test will fail with UnrecognizedPropertyException
+    // if the bug is present. If it passes, the bug is fixed.
+    try {
+        JsonRoot root = mapper.readValue(json, JsonRoot.class);
+        // Add assertions here to verify the deserialized object if needed.
+        // For example, check if schemas is not null and contains expected data.
+        assertNotNull(root);
+        assertNotNull(root.schemas);
+        assertFalse(root.schemas.isEmpty());
+        assertTrue(root.schemas.get(0) instanceof JsonMapSchema);
+        assertEquals("FoodMart", ((JsonMapSchema) root.schemas.get(0)).name);
+
+    } catch (UnrecognizedPropertyException e) {
+        // This exception indicates the bug is reproducible.
+        // Re-throw or assert to fail the test.
+        throw e;
+    }
+}

@@ -1,0 +1,103 @@
+import com.google.javascript.jscomp.CompilationLevel;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testTypedCoverage() {
+        String code = "/*global window*/\n" +
+                      "/*jslint sub: true*/\n" +
+                      "/**\n" +
+                      " * @constructor\n" +
+                      " * @param {!Element} element\n" +
+                      " */\n" +
+                      "function Example(element) {\n" +
+                      " /**\n" +
+                      " * @param {!string} ns\n" +
+                      " * @param {!string} name\n" +
+                      " * @return {undefined}\n" +
+                      " */\n" +
+                      " this.appendElement = function appendElement(ns, name) {\n" +
+                      " var e = element.ownerDocument.createElementNS(ns, name);\n" +
+                      " element.appendChild(e);\n" +
+                      " };\n" +
+                      "}\n" +
+                      "window[\"Example\"] = Example;";
+
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setLanguageIn(com.google.javascript.jscomp.CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setLanguageOut(com.google.javascript.jscomp.CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setCheckTypes(true);
+        options.setSummaryDetailLevel(3);
+        options.setPrettyPrint(true);
+        options.setClosurePass(true);
+        options.setManageClosureDependencies(true);
+        options.setInferTypes(true);
+
+        CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+        SourceFile input = SourceFile.fromCode("v.js", code);
+        compiler.compile(SourceFile.NO_SOURCE, input, options);
+
+        assertEquals(0, compiler.getErrors().size());
+        assertEquals(0, compiler.getWarnings().size());
+        // The original bug report states 73.7% typed coverage.
+        // We are asserting that it should be 100% typed.
+        // However, reproducing the exact percentage might be fragile.
+        // A better approach is to check if the *issue* is present, which is
+        // that the coverage is *not* 100%.
+        // For the purpose of this exercise, we'll assert that it's not 100%
+        // and if the fix is applied, this test would fail if it becomes 100%.
+        // Or, if we assume the bug is fixed, we'd assert for 100%.
+        // Given the prompt is to "reproduce the failure", we should assert
+        // a condition that indicates failure.
+        // Let's check for a specific *low* percentage that indicates the problem.
+        // The exact value 73.7 is hard to assert reliably across compiler versions.
+        // A more robust check for the *failure* is to see if the type inference
+        // did NOT achieve 100%.
+        // For this specific bug, the issue was that it wasn't 100%.
+        // If the bug is fixed, it *would* be 100%.
+        // To *reproduce the failure*, we need to assert a condition that is true
+        // *when the bug exists*.
+        // The bug exists if typed coverage is LESS THAN 100%.
+
+        // This test will fail if the bug is fixed and coverage becomes 100%.
+        // It passes if the bug is present and coverage is less than 100%.
+        // The exact percentage is not asserted here to avoid fragility.
+        // If a specific percentage needs to be asserted, it would require
+        // inspecting the compiler's internal report structure which is not
+        // directly exposed as a simple double for coverage.
+        // The summary detail level 3 provides some output, but parsing it
+        // within a JUnit test is complex.
+
+        // A simpler approach for this specific bug is to check that the
+        // 'typed' property in the output summary is not 100%.
+        // The output of summary_detail_level 3 is a String.
+        // We'll look for the string "typed" and check its value.
+        String output = compiler.generateReport().toString();
+        assertTrue(output.contains("typed"));
+        // The exact percentage is hard to assert reliably.
+        // The core of the bug is that it's *not* 100%.
+        // If the fix is applied, this assertion would fail.
+        // To reproduce the *failure*, we need an assertion that is true
+        // *when the bug is present*.
+        // The bug is present if typed coverage is < 100%.
+        // The simplest way to represent this without parsing the string
+        // is to rely on the fact that the original bug report stated a specific
+        // low percentage. If we can't get that exact percentage, we must
+        // acknowledge that reproducing the failure precisely might involve
+        // inspecting the output string.
+
+        // Given the constraint to reproduce the *failure*, and not necessarily
+        // assert the *fixed* state, we should look for the state of failure.
+        // The failure is that the typed coverage is NOT 100%.
+        // The string "73.7% typed" was observed.
+        // It's brittle, but to reproduce the failure:
+        assertTrue(output.contains("73.7% typed") || output.contains("73.7 % typed")); // accounts for potential space variations
+    }
+}

@@ -1,0 +1,38 @@
+public void testDependencySortingWithClosurePassFalse() throws Exception {
+    Compiler compiler = new Compiler();
+    CompilerOptions compilerOptions = new CompilerOptions();
+    compilerOptions.setClosurePass(false); // Prevent goog.require/goog.provide removal
+
+    DependencyOptions dependencyOptions = new DependencyOptions();
+    dependencyOptions.setDependencySorting(true); // Turn on dependency sorting
+
+    // Mock the JS files with dependencies
+    SourceFile file1 = SourceFile.fromCode("file1.js", "var a = 1;");
+    SourceFile file2 = SourceFile.fromCode("file2.js", "goog.require('file1'); var b = a + 1;");
+    SourceFile file3 = SourceFile.fromCode("file3.js", "goog.require('file2'); var c = b + 1;");
+
+    // Set up the compiler input
+    compilerOptions.inputDelimiter = "CLOSURE_BASE_PATH_PLACEHOLDER"; // A placeholder that won't be found
+    compilerOptions.setManageClosureDependencies(true);
+    compilerOptions.setDependencyOptions(dependencyOptions);
+
+    // Compile the code
+    compiler.compile(ImmutableList.of(file1, file2, file3), ImmutableList.of(), compilerOptions);
+
+    // Get the compiled code
+    String compiledCode = compiler.toSource();
+
+    // Assert that the files are not sorted in the expected order
+    // The exact assertion depends on how the output is structured, but we expect
+    // file1 to appear before file2, and file2 before file3 if sorting worked.
+    // If it fails, the order will be different.
+    // For this test, we'll assume a simple concatenation order and check that
+    // it's NOT the dependent order. A more robust test would involve checking
+    // the actual order of the original source file content within the compiled output.
+    // Given the bug description, the core issue is that sorting is disabled when closurePass is false.
+    // So, we expect the files to appear in the order they were provided or some other non-dependent order.
+    // A simple check for the presence of file3 before file2 would indicate failure.
+    assertTrue("Dependency sorting failed when closurePass is false.",
+               compiledCode.indexOf("var a = 1;") < compiledCode.indexOf("var b = a + 1;") &&
+               compiledCode.indexOf("var b = a + 1;") < compiledCode.indexOf("var c = b + 1;"));
+}

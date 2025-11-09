@@ -1,0 +1,80 @@
+public void testStringUtilsEqualsCharSequence() {
+    // Mocking the Name interface to simulate the scenario described in the bug report.
+    // This requires a mocking framework like Mockito. Since we can't include imports,
+    // this test assumes a mocking framework is available and configured.
+    // If no mocking framework is available, a concrete implementation of Name would be needed.
+
+    // Example using Mockito (assuming it's available):
+    // Name mockName = Mockito.mock(Name.class);
+    // Mockito.when(mockName.toString()).thenReturn("test");
+    // Mockito.when(mockName.equals(Mockito.any())).thenCallRealMethod(); // Or simulate specific behavior
+
+    // For demonstration without a mocking framework, we'll use a simple approach
+    // that might not perfectly replicate the Name interface's equals behavior
+    // but illustrates the underlying issue with CharSequence.equals().
+
+    // A concrete implementation that might not equal a String with the same content
+    class NonStringCharSequence implements CharSequence {
+        private final String delegate;
+
+        NonStringCharSequence(String delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public int length() {
+            return delegate.length();
+        }
+
+        @Override
+        public char charAt(int index) {
+            return delegate.charAt(index);
+        }
+
+        @Override
+        public CharSequence subSequence(int start, int end) {
+            return new NonStringCharSequence(delegate.subSequence(start, end).toString());
+        }
+
+        @Override
+        public String toString() {
+            return delegate;
+        }
+
+        // This equals method is crucial for the bug. If it doesn't correctly
+        // compare against a String, StringUtils.equals(CharSequence, CharSequence)
+        // will fail. For this example, we'll make it *not* equal to a String.
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == this) {
+                return true;
+            }
+            if (obj instanceof NonStringCharSequence) {
+                return delegate.equals(((NonStringCharSequence) obj).delegate);
+            }
+            // This is the key part that causes the failure in the bug report:
+            // It doesn't handle String comparison correctly, or relies on String's equals
+            // which might not be the case for all CharSequence implementations.
+            // For this test, we'll explicitly return false if it's not another
+            // NonStringCharSequence, even if the content is the same.
+            return false;
+        }
+
+        @Override
+        public int hashCode() {
+            return delegate.hashCode();
+        }
+    }
+
+    CharSequence seq1 = "test";
+    CharSequence seq2 = new NonStringCharSequence("test");
+
+    // The StringUtils.equals(CharSequence, CharSequence) method, as per the bug,
+    // would call seq1.equals(seq2) or seq2.equals(seq1).
+    // If seq2.equals(seq1) is called, it will return false due to our custom equals.
+    // The expected behavior for a utility method like StringUtils.equals should be true.
+
+    // Assert that StringUtils.equals returns false, reproducing the bug.
+    // This assertion would fail if the bug were fixed.
+    assertFalse(StringUtils.equals(seq1, seq2));
+}

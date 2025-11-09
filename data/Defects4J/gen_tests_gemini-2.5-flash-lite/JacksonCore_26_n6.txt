@@ -1,0 +1,24 @@
+public void testNonBlockingParserOffsetLeak() throws Exception {
+    JsonFactory jsonFactory = new JsonFactory();
+    JsonParser parser = jsonFactory.createNonBlockingByteArrayParser();
+    ByteArrayFeeder feeder = (ByteArrayFeeder) parser.getNonBlockingInputFeeder();
+
+    byte[] input = "[[[".getBytes(UTF_8);
+
+    feeder.feedInput(input, 2, 3); // Feed " [" starting at offset 2
+    assertEquals(JsonToken.START_ARRAY, parser.nextToken());
+    assertEquals(0, parser.getCurrentLocation().getByteOffset()); // Expected 0, actual 2
+    assertEquals(0, parser.getTokenLocation().getByteOffset());   // Expected 0, actual 2
+
+    // Feed the next "[" starting at offset 0, but parser should still be aware of the previous offset
+    feeder.feedInput(input, 0, 1); // Feed "[" starting at offset 0
+    assertEquals(JsonToken.START_ARRAY, parser.nextToken());
+    assertEquals(1, parser.getCurrentLocation().getByteOffset()); // Expected 1, actual 3
+    assertEquals(1, parser.getTokenLocation().getByteOffset());   // Expected 1, actual 3
+
+    // Feed the last "[" starting at offset 1
+    feeder.feedInput(input, 1, 1); // Feed "[" starting at offset 1
+    assertEquals(JsonToken.START_ARRAY, parser.nextToken());
+    assertEquals(2, parser.getCurrentLocation().getByteOffset()); // Expected 2, actual 4
+    assertEquals(2, parser.getTokenLocation().getByteOffset());   // Expected 2, actual 4
+}

@@ -1,0 +1,92 @@
+public void testImmutableMapWithEnumKeyDeserializerModifier() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(new SimpleModule() {
+        @Override
+        public void setupModule(SetupContext context) {
+            context.addDeserializers(new Deserializers.Base() {
+                @Override
+                public JsonDeserializer<?> findMapDeserializer(MapType type,
+                                                              DeserializationConfig config, BeanDescription beanDesc,
+                                                              TypeDeserializer keyTypeDeserializer, TypeDeserializer elementTypeDeserializer,
+                                                              JsonDeserializer<?> elementValueDeserializer) {
+                    // This is a simplified version to trigger the issue with ImmutableMapDeserializer
+                    // In a real scenario, this would be more complex.
+                    return new ImmutableMapDeserializer(type, keyTypeDeserializer, elementValueDeserializer);
+                }
+            });
+            context.addDeserializerModifier(new BeanDeserializerModifier() {
+                @Override
+                @SuppressWarnings("unchecked")
+                public JsonDeserializer<Enum> modifyEnumDeserializer(
+                        DeserializationConfig config,
+                        final JavaType type,
+                        BeanDescription beanDesc,
+                        final JsonDeserializer<?> deserializer) {
+                    return new JsonDeserializer<Enum>() {
+                        @Override
+                        public Enum deserialize(JsonParser jp, DeserializationContext ctxt) throws IOException {
+                            Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                            return Enum.valueOf(rawClass, jp.getValueAsString().toUpperCase());
+                        }
+                    };
+                }
+
+                @Override
+                public KeyDeserializer modifyKeyDeserializer(
+                        DeserializationConfig config,
+                        JavaType type,
+                        KeyDeserializer deserializer) {
+                    if (!type.isEnumType()) {
+                        return super.modifyKeyDeserializer(config, type, deserializer);
+                    }
+                    return new KeyDeserializer() {
+                        @Override
+                        @SuppressWarnings("unchecked")
+                        public Object deserializeKey(String key, DeserializationContext ctxt)
+                                throws IOException, JsonProcessingException {
+                            Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                            return Enum.valueOf(rawClass, key.toUpperCase());
+                        }
+                    };
+                }
+            });
+        }
+    });
+
+    // Define an enum for testing
+    enum TestEnum {
+        VALUE1, VALUE2
+    }
+
+    // Define a class that uses an ImmutableMap with the enum as a key
+    // Using a simple Map here for demonstration, the actual issue is with ImmutableMapDeserializer
+    // which is not directly exposed for modification in this manner without more complex setup.
+    // The test simulates the scenario where the KeyDeserializer modifier is ignored for enum keys.
+    class MyMapHolder {
+        public Map<TestEnum, String> map;
+    }
+
+    // The problematic input where the key is in lowercase
+    String jsonInput = "{\"map\": {\"value1\": \"someValue\"}}";
+
+    // Expecting this to fail because the key deserializer modifier is ignored
+    // and Enum.valueOf will throw an IllegalArgumentException for lowercase input.
+    try {
+        mapper.readValue(jsonInput, MyMapHolder.class);
+        fail("Should have thrown an exception because the key deserializer modifier was ignored.");
+    } catch (IllegalArgumentException e) {
+        // This is the expected outcome if the modifier is ignored.
+        assertTrue(e.getMessage().contains("No enum constant"));
+    }
+
+    // If the modifier were working, the following would succeed:
+    String jsonInputWorking = "{\"map\": {\"VALUE1\": \"someValue\"}}";
+    try {
+        MyMapHolder result = mapper.readValue(jsonInputWorking, MyMapHolder.class);
+        assertNotNull(result);
+        assertNotNull(result.map);
+        assertEquals("someValue", result.map.get(TestEnum.VALUE1));
+    } catch (Exception e) {
+        fail("This should have worked if the modifier correctly handled uppercase conversion.");
+    }
+}

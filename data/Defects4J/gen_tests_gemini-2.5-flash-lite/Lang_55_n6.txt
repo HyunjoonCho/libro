@@ -1,0 +1,95 @@
+public void testStopWatchSuspendResume() throws InterruptedException {
+    StopWatch sw = new StopWatch();
+    sw.start();
+    Thread.sleep(100); // Short sleep to ensure time passes
+    sw.suspend();
+    long time1 = sw.getTime();
+    Thread.sleep(100); // Sleep while suspended
+    long time1Again = sw.getTime();
+    assertEquals(time1, time1Again); // Time should not advance while suspended
+
+    sw.resume();
+    Thread.sleep(100); // Sleep while resumed
+    long time2 = sw.getTime();
+    assertTrue(time2 > time1); // Time should advance after resume
+
+    sw.suspend();
+    long time2Again = sw.getTime();
+    assertEquals(time2, time2Again); // Time should not advance while suspended
+
+    sw.resume();
+    Thread.sleep(100); // Sleep while resumed
+    long time3 = sw.getTime();
+    assertTrue(time3 > time2); // Time should advance after resume
+
+    sw.stop();
+    long finalTime = sw.getTime();
+    // The bug description implies that stop() after a suspend/resume cycle
+    // incorrectly includes the time that passed *after* the last resume.
+    // We expect the final time to be roughly time3 + the last sleep period.
+    // The key is that it should be greater than time3.
+    assertTrue(finalTime > time3);
+
+    // To specifically test the reported bug:
+    // The bug states that after suspend(), if followed by stop(), it acts as split().
+    // This means the time measured by stop() would include the time from the last resume
+    // *plus* the time that passed between the last suspend() and stop().
+    // The test below will verify that the time measured after stop() includes the
+    // time that passed *after* the last suspend() call.
+    // If suspend() acted like a split, then stop() would measure the time from the last resume.
+    // However, the bug report indicates it measures the total time including the time
+    // after the last suspend() call up to the stop() call.
+    // Let's re-verify the behavior described.
+    // The description is a bit contradictory. Let's focus on the final `sw.getTime()` after `sw.stop()`.
+    // The crucial part is that the time reported *after* stop() should reflect the total elapsed time
+    // since start(), considering the suspend/resume periods.
+    // The description says "Time 2 (should be, but is Time 3 => NOT ok)"
+    // This implies that the time measured after stop() is *longer* than the time measured
+    // before the last suspend() call, and it *should not* be.
+    // Let's re-read: "suspend/resume is like a pause, where time counter doesn't continue.
+    // So a following stop()-call shouldn't increase the time counter, should it?"
+    // This suggests that if you suspend, then stop, the stop time should be the same as the suspend time.
+    // This is counter-intuitive to how stopwatches usually work.
+    // Let's assume the test should verify the *current* (buggy) behavior.
+    // The buggy behavior is: stop() *does* include time after the last suspend.
+
+    // Let's re-implement the logic based on the description's example to pinpoint the failure.
+    StopWatch swBug = new StopWatch();
+    swBug.start();
+    Thread.sleep(100);
+    swBug.suspend(); // Pause 1
+    long timeAtSuspend1 = swBug.getTime();
+    Thread.sleep(100); // Time passes, but stopwatch is suspended
+    long timeAfterSuspend1 = swBug.getTime();
+    assertEquals(timeAtSuspend1, timeAfterSuspend1); // Verify suspension works
+
+    swBug.resume();
+    Thread.sleep(100); // Time passes
+    long timeAfterResume1 = swBug.getTime();
+    assertTrue(timeAfterResume1 > timeAtSuspend1); // Verify time advances after resume
+
+    swBug.suspend(); // Pause 2
+    long timeAtSuspend2 = swBug.getTime();
+    Thread.sleep(100); // Time passes, but stopwatch is suspended
+    long timeAfterSuspend2 = swBug.getTime();
+    assertEquals(timeAtSuspend2, timeAfterSuspend2); // Verify suspension works
+
+    // According to the bug description, the following stop() should *not* increase the time.
+    // It implies that stop() should report the time *at the moment of the last suspend*.
+    // However, the description also says "Time 2 (should be, but is Time 3 => NOT ok)"
+    // This implies the time reported by stop() is *greater* than the time at the last suspend.
+    // And it should *not* be greater.
+    // Let's test for this "should not be greater" condition.
+
+    swBug.stop(); // This is where the bug is reported to manifest.
+    long timeAfterStop = swBug.getTime();
+
+    // The bug report states: "Time 2 (should be, but is Time 3 => NOT ok)".
+    // "Time 2" refers to the time measured *before* the last suspend.
+    // "Time 3" refers to the time measured *after* stop().
+    // The bug is that `timeAfterStop` is greater than `timeAtSuspend2`.
+    // So, to reproduce the failure, we assert that `timeAfterStop` is indeed greater than `timeAtSuspend2`.
+    // The *fix* would be to assert `timeAfterStop == timeAtSuspend2`.
+    // For reproduction, we assert the opposite of the fix.
+    assertTrue(timeAfterStop > timeAtSuspend2);
+}

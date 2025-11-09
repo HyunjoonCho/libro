@@ -1,0 +1,73 @@
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Comparator;
+
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.ArchiveOutputStream;
+import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry;
+import org.apache.commons.compress.archivers.sevenz.SevenZFile;
+import org.apache.commons.compress.archivers.sevenz.SevenZMethod;
+
+public class SevenZEmptyEntriesTest {
+
+    @Test
+    public void testSevenZEmptyEntries() throws IOException {
+        Path tempDir = null;
+        Path archiveFile = null;
+        try {
+            tempDir = Files.createTempDirectory("sevenz_test");
+            
+            // Scenario 3: 8 empty files
+            for (int i = 0; i < 8; i++) {
+                Files.createFile(tempDir.resolve("empty_file_" + i + ".txt"));
+            }
+
+            archiveFile = tempDir.resolve("test_archive.7z");
+
+            // Use SevenZArchiveOutputStream for writing
+            try (ArchiveOutputStream<?> out = new org.apache.commons.compress.archivers.sevenz.SevenZArchiveOutputStream(Files.newOutputStream(archiveFile))) {
+                for (int i = 0; i < 8; i++) {
+                    SevenZArchiveEntry entry = new SevenZArchiveEntry();
+                    entry.setName("empty_file_" + i + ".txt");
+                    entry.setSize(0); // Explicitly set size to 0 for empty files
+                    out.putArchiveEntry(entry);
+                    out.closeArchiveEntry();
+                }
+            }
+
+            // Attempt to read the archive to check for corruption
+            try (SevenZFile sevenZFile = new SevenZFile(archiveFile.toFile())) {
+                SevenZArchiveEntry entry;
+                while ((entry = sevenZFile.getNextEntry()) != null) {
+                    // Just iterating through entries is enough to trigger potential corruption issues
+                    // No need to assert specific content as the issue is with archive integrity
+                }
+            } catch (IOException e) {
+                // This catch block is intended to confirm the corruption as described in the bug report
+                // If an IOException occurs here, it indicates the archive is likely corrupt.
+                // We can assert that an exception is thrown if that's the desired test outcome.
+                // For now, let's just re-throw to fail the test if it's not corrupt as expected.
+                throw new IOException("Archive is corrupt as expected.", e);
+            }
+
+        } finally {
+            // Clean up temporary directory
+            if (tempDir != null && Files.exists(tempDir)) {
+                Files.walk(tempDir)
+                     .sorted(Comparator.reverseOrder())
+                     .forEach(path -> {
+                         try {
+                             Files.delete(path);
+                         } catch (IOException e) {
+                             // Ignore cleanup errors
+                         }
+                     });
+            }
+        }
+    }
+}

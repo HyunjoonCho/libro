@@ -1,0 +1,35 @@
+public void testGetBytesWrittenReturnsInvalidValue() throws Exception {
+    File tempFile = File.createTempFile("test", ".tar");
+    tempFile.deleteOnExit();
+    FileOutputStream fos = new FileOutputStream(tempFile);
+    ArchiveOutputStream taos = new ArchiveStreamFactory().createArchiveOutputStream(ArchiveStreamFactory.TAR, fos);
+    File sourceFile = File.createTempFile("source", ".txt");
+    sourceFile.deleteOnExit();
+    // Create a dummy file with some content
+    try (FileOutputStream sourceFos = new FileOutputStream(sourceFile)) {
+        sourceFos.write(new byte[1024]); // 1KB of data
+    }
+    TarArchiveEntry entry = new TarArchiveEntry(sourceFile.getName());
+    taos.putArchiveEntry(entry);
+    try (FileInputStream fis = new FileInputStream(sourceFile)) {
+        byte[] buffer = new byte[4096];
+        int bytesRead;
+        while ((bytesRead = fis.read(buffer)) != -1) {
+            taos.write(buffer, 0, bytesRead);
+        }
+    }
+    taos.closeArchiveEntry();
+    long bytesWrittenBeforeClose = taos.getBytesWritten();
+    taos.close();
+    long bytesWrittenAfterClose = taos.getBytesWritten();
+    // The getBytesWritten() should return a value greater than 0
+    // and it should be consistent before and after closing the stream
+    // (though the exact value might differ depending on the implementation detail
+    // of when the count is updated. The bug report implies it's 0).
+    // We are asserting it's not 0 and that it's consistent.
+    assertTrue("Bytes written should be greater than 0 before closing", bytesWrittenBeforeClose > 0);
+    assertEquals("Bytes written should be consistent before and after closing", bytesWrittenBeforeClose, bytesWrittenAfterClose);
+    // Additionally, check if the value is at least the size of the file content written
+    // This is a weaker assertion as it doesn't account for headers, but it's a start.
+    assertEquals("Bytes written should be at least the size of the file content", sourceFile.length(), bytesWrittenBeforeClose);
+}

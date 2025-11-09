@@ -1,0 +1,179 @@
+import org.junit.Test;
+import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+public class MockitoAbstractClassTest {
+
+    // --- Interfaces and Abstract Classes from the Bug Report ---
+
+    interface UserAccount {
+        List<String> getEmails();
+        void addEmail(String email);
+    }
+
+    abstract static class FakeUserAccount implements UserAccount {
+        private final List<String> emails = new ArrayList<>();
+
+        @Override
+        public void addEmail(String email) {
+            emails.add(email);
+        }
+
+        @Override
+        public List<String> getEmails() {
+            return new ArrayList<>(emails); // Return a copy to prevent external modification
+        }
+    }
+
+    interface AccountService {
+        void getAccount(String id, AsyncCallback<UserAccount> callback);
+    }
+
+    interface AsyncCallback<T> {
+        void onSuccess(T result);
+        void onFailure(Throwable t);
+    }
+
+    abstract static class MockAccountService implements AccountService {
+        @Override
+        public void getAccount(String id, AsyncCallback<UserAccount> callback) {
+            callback.onSuccess(getAccount(id));
+        }
+        abstract UserAccount getAccount(String id);
+    }
+
+    interface AccountRpcService {
+        FutureAccount getAccount(RpcContext context, String id);
+    }
+
+    static class RpcContext {}
+    static class FutureAccount {
+        private final String accountId;
+        FutureAccount(String accountId) { this.accountId = accountId; }
+        public String getId() { return accountId; }
+    }
+
+    abstract static class MockAccountRpcService implements AccountRpcService {
+        @Override
+        public FutureAccount getAccount(RpcContext context, String id) {
+            // A common sanity test that would be repeated in every test if not handled here
+            if (context == null) {
+                throw new IllegalArgumentException("RpcContext cannot be null");
+            }
+            return getAccount(id);
+        }
+        abstract FutureAccount getAccount(String id);
+    }
+
+    // --- JUnit Test Method ---
+
+    @Test
+    public void testAbstractClassMocking() {
+        // Example 1: Fake with trivial Logic
+        // We simulate the desired behavior by manually creating an instance
+        // and then using Mockito to mock it. The "bug" here is that Mockito
+        // doesn't directly support creating mocks of abstract classes with
+        // concrete method implementations out-of-the-box as proposed.
+        // However, we can achieve the desired outcome using Mockito's features.
+        UserAccount userAccount = Mockito.mock(UserAccount.class, Mockito.CALLS_REAL_METHODS);
+        userAccount.addEmail("test@example.com");
+        assertEquals("test@example.com", userAccount.getEmails().get(0));
+
+        // Example 2: Callback-style API
+        // Mocking the abstract class directly would be cleaner if supported.
+        // Here, we use Mockito's capabilities to stub the abstract method.
+        AccountService mockService = Mockito.mock(MockAccountService.class, Mockito.CALLS_REAL_METHODS);
+        UserAccount dummyAccount = new FakeUserAccount() {}; // Anonymous inner class for a concrete instance
+        when(((MockAccountService)mockService).getAccount("123")).thenReturn(dummyAccount);
+
+        AsyncCallback<UserAccount> callback = Mockito.mock(AsyncCallback.class);
+        mockService.getAccount("123", callback);
+
+        // Verify that the callback was called with the expected account
+        verify(callback).onSuccess(dummyAccount);
+
+
+        // Example 3: Uninteresting parameters
+        // Mockito's 'any' or 'isA' is needed here without the proposed feature.
+        // The proposed feature would avoid needing to stub the context.
+        AccountRpcService mockRpcService = Mockito.mock(MockAccountRpcService.class, Mockito.CALLS_REAL_METHODS);
+        FutureAccount expectedAccount = new FutureAccount("acc456");
+        when(((MockAccountRpcService)mockRpcService).getAccount("acc456")).thenReturn(expectedAccount);
+
+        RpcContext dummyContext = new RpcContext();
+        FutureAccount result = mockRpcService.getAccount(dummyContext, "acc456");
+        assertEquals(expectedAccount.getId(), result.getId());
+
+        // Demonstrating the issue with uninteresting parameters without the proposed feature
+        // If we were mocking AccountRpcService directly, we'd need to be explicit about context:
+        AccountRpcService directMock = Mockito.mock(AccountRpcService.class);
+        when(directMock.getAccount(any(RpcContext.class), eq("acc456"))).thenReturn(expectedAccount);
+        FutureAccount directResult = directMock.getAccount(new RpcContext(), "acc456");
+        assertEquals(expectedAccount.getId(), directResult.getId());
+
+        // The core of the bug is that Mockito doesn't directly instantiate abstract classes
+        // with CALLS_REAL_METHODS to fill in abstract method bodies. The user's proposal
+        // aims to automate this. The tests above show how one might work around it or
+        // demonstrate the need for the proposed feature by showing the current verbose way.
+        // A direct reproduction of the "failure" would be trying to mock an abstract class
+        // with CALLS_REAL_METHODS and expecting it to magically work without defining
+        // stubbing for abstract methods, which it doesn't.
+        // For example, this would fail if you tried to use it without stubbing the abstract method:
+        // AbstractClassWithAbstractMethod testMock = Mockito.mock(AbstractClassWithAbstractMethod.class, Mockito.CALLS_REAL_METHODS);
+        // testMock.concreteMethod(); // This would likely throw NullPointerException or similar if abstract method isn't stubbed.
+    }
+
+    // Helper abstract class for demonstrating the failure scenario more directly
+    // if the proposed feature were missing.
+    abstract static class AbstractClassWithAbstractMethod {
+        abstract String abstractMethod();
+
+        public String concreteMethod() {
+            return "Concrete called, abstract returned: " + abstractMethod();
+        }
+    }
+
+    @Test
+    public void testAbstractClassWithMissingAbstractMethodStubbing() {
+        // This test demonstrates the problem if Mockito.CALLS_REAL_METHODS doesn't
+        // handle abstract methods by default (which it doesn't, as per the bug report).
+        // The user's proposal aims to fix this by providing a default behavior.
+
+        // Mockito.mock(AbstractClassWithAbstractMethod.class, Mockito.CALLS_REAL_METHODS)
+        // will instantiate the abstract class, but it doesn't know how to implement
+        // the abstractMethod(). If we call a concrete method that relies on it,
+        // it will typically result in a NullPointerException or an UnfinishedStubbingException.
+
+        // To make this test pass *without* the proposed feature, we *must* stub the abstract method:
+        AbstractClassWithAbstractMethod mockWithStubbing = Mockito.mock(AbstractClassWithAbstractMethod.class, Mockito.CALLS_REAL_METHODS);
+        when(mockWithStubbing.abstractMethod()).thenReturn("stubbed value");
+        assertEquals("Concrete called, abstract returned: stubbed value", mockWithStubbing.concreteMethod());
+
+        // The *failure* scenario described in the bug report is that the user *expects*
+        // Mockito to handle this automatically, similar to how their internal solution works.
+        // If we try to call concreteMethod without stubbing abstractMethod, it fails:
+        try {
+            AbstractClassWithAbstractMethod mockWithoutStubbing = Mockito.mock(AbstractClassWithAbstractMethod.class, Mockito.CALLS_REAL_METHODS);
+            // Calling concreteMethod() here will attempt to call abstractMethod()
+            // which is not defined by Mockito's default CALLS_REAL_METHODS for abstract methods.
+            mockWithoutStubbing.concreteMethod();
+            // If the line above *doesn't* throw an exception, then the bug is not reproduced.
+            // It *should* throw an exception because abstractMethod() is not implemented.
+            // The specific exception might vary, often NullPointerException or UnfinishedStubbingException.
+            org.junit.Assert.fail("Expected an exception because the abstract method was not stubbed.");
+        } catch (NullPointerException | org.mockito.exceptions.base.MockitoException e) {
+            // This is the expected behavior demonstrating the limitation.
+            // The user's proposal aims to avoid this explicit stubbing for abstract methods.
+            assertTrue(true); // Test passes because the expected failure occurred.
+        }
+    }
+}

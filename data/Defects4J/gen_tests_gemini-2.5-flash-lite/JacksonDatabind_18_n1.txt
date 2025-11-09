@@ -1,0 +1,30 @@
+public void testReadValuesErrorRecovery() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    String json = "[{\"name\":\"A\"}, {\"nam\":\"B\"}, {\"name\":\"C\"}]"; // "nam" instead of "name"
+    ObjectReader reader = mapper.readerFor(Map.class);
+    try (MappingIterator<Object> it = reader.readValues(new StringReader(json))) {
+        assertTrue(it.hasNextValue());
+        Map<String, Object> first = (Map<String, Object>) it.nextValue();
+        assertEquals("A", first.get("name"));
+
+        // The second element has a parsing error ("nam" instead of "name")
+        // The original bug description implies that readValues would leave the iterator
+        // in an inconsistent state, potentially causing issues with subsequent calls
+        // like hasNextValue() or nextValue().
+        // A successful recovery would mean we can at least attempt to read more,
+        // even if the problematic element is skipped or an exception is thrown gracefully.
+
+        // We expect an exception when trying to read the second element due to the malformed JSON.
+        // The error recovery should ideally allow us to continue or at least not corrupt the iterator.
+        try {
+            it.nextValue(); // This is where the exception is expected
+            fail("Expected JsonProcessingException for malformed JSON");
+        } catch (JsonProcessingException e) {
+            // Expected exception, check if the iterator is still usable
+            assertTrue(it.hasNextValue()); // Check if iterator is somewhat usable after exception
+            Map<String, Object> third = (Map<String, Object>) it.nextValue();
+            assertEquals("C", third.get("name"));
+            assertFalse(it.hasNextValue());
+        }
+    }
+}

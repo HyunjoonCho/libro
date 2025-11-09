@@ -1,0 +1,148 @@
+import org.jsoup.Jsoup;
+import org.jsoup.helper.DataUtil;
+import org.jsoup.nodes.Document;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.UnsupportedCharsetException;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class JsoupIssueInvalidCharsetTest {
+
+    @Test
+    public void testInvalidHttpCharset() throws IOException {
+        // Simulate an invalid HTTP header with "UFT8" instead of "UTF-8"
+        String invalidCharsetHeader = "Content-Type: text/html; charset=UFT8";
+        String htmlContent = "<!DOCTYPE html><html><head><title>Test Page</title></head><body>Hello World!</body></html>";
+
+        // Create a ByteBuffer with the HTML content
+        ByteBuffer byteData = ByteBuffer.wrap(htmlContent.getBytes("UTF-8")); // Use a known encoding for the byte buffer
+
+        // Manually call the problematic part of DataUtil.parseByteData
+        // We expect an UnsupportedCharsetException to be thrown and handled
+        // The fix involves falling back to null charset detection.
+        // Since we don't have direct access to the internal parsing logic that would catch this,
+        // we'll simulate the scenario where DataUtil is called with an invalid charset.
+        // The provided description implies the exception happens within DataUtil.parseByteData
+        // when it tries to use Charset.forName(charsetName).
+
+        // To reproduce the exception, we need to call a method that uses Charset.forName with "UFT8".
+        // Jsoup.parse(byteData, baseUri, parser) eventually calls DataUtil.parseByteData.
+        // We need to force the invalid charset into the parsing process.
+        // The original bug description is a bit vague on how the invalid charset is passed.
+        // It seems to be from an HTTP response header. Jsoup.parse(String, String) or
+        // Jsoup.parse(File, String, String) might not directly expose this.
+        // However, DataUtil.parseByteData is the core method.
+
+        // Let's mock or create a situation that calls DataUtil.parseByteData with an invalid charset.
+        // The method signature is:
+        // parseByteData(ByteBuffer byteData, String charsetName, String baseUri, Parser parser)
+
+        // We'll create a dummy Document and then try to parse it with the invalid charset.
+        // This is a bit indirect, but the goal is to trigger the exception within DataUtil.
+
+        // Let's assume Jsoup.parse(InputStream, String, Parser) is used and the charset is derived from headers.
+        // Since we are testing DataUtil directly, we can call it.
+
+        String invalidCharsetName = "UFT8";
+        String baseUri = "http://example.com";
+        org.jsoup.parser.Parser parser = org.jsoup.parser.Parser.htmlParser();
+
+        try {
+            // This is the line that will throw UnsupportedCharsetException
+            DataUtil.parseByteData(byteData, invalidCharsetName, baseUri, parser);
+            // If we reach here, the exception was NOT thrown, which is unexpected based on the bug.
+            // This test would fail if the exception isn't thrown.
+            assertTrue("UnsupportedCharsetException was expected but not thrown", false);
+        } catch (UnsupportedCharsetException e) {
+            // This is the expected path. The exception is caught.
+            // The bug report suggests a fallback mechanism.
+            // We can't directly test the fallback *within* this method if it's implemented
+            // within DataUtil itself and modifies its behavior.
+            // However, we can confirm the exception is thrown as described.
+            assertEquals("UFT8", e.getCharsetName()); // Ensure it's the expected invalid charset
+            System.out.println("Successfully caught expected UnsupportedCharsetException for charset: " + e.getCharsetName());
+        }
+
+        // To *fully* test the fix, one would need to ensure that if the exception is caught,
+        // the fallback `parseByteData(byteData, null, baseUri, parser)` works correctly.
+        // This would require a separate test or a more integrated test using Jsoup.parse
+        // where the charset can be explicitly controlled or simulated.
+
+        // For the purpose of *reproducing the failure*, catching the exception is sufficient.
+    }
+
+    // Helper method to simulate the fallback scenario if we were to test the fix itself
+    // This is not strictly required by the prompt to reproduce the *failure*,
+    // but illustrates what the fix would address.
+    private Document parseWithFallback(ByteBuffer byteData, String invalidCharsetName, String baseUri, org.jsoup.parser.Parser parser) throws IOException {
+        try {
+            return DataUtil.parseByteData(byteData, invalidCharsetName, baseUri, parser);
+        } catch (UnsupportedCharsetException e) {
+            System.out.println("Caught: " + e.getMessage() + ". Falling back to auto-detection.");
+            return DataUtil.parseByteData(byteData, null, baseUri, parser); // Fallback to null charset
+        }
+    }
+
+    // A more integrated test that might implicitly test the fix if Jsoup handles it
+    @Test
+    public void testJsoupParseWithInvalidCharsetHeaderSimulation() throws IOException {
+        // This test simulates how Jsoup might encounter an invalid charset from a header.
+        // Note: Jsoup's default behavior might already handle this gracefully or use a different detection mechanism.
+        // The bug report suggests a specific line of code causing the issue.
+
+        // We can't directly inject an invalid charset into Jsoup.parse(String) or Jsoup.parse(File)
+        // without mocking or modifying Jsoup's internal HTTP fetching.
+        // The most direct way to reproduce the *failure* is to call the problematic code path.
+
+        // Let's re-use the byte buffer from the previous test.
+        String htmlContent = "<!DOCTYPE html><html><head><title>Test Page</title></head><body>Hello World!</body></html>";
+        ByteBuffer byteData = ByteBuffer.wrap(htmlContent.getBytes("UTF-8"));
+        String invalidCharsetName = "UFT8";
+        String baseUri = "http://example.com";
+        org.jsoup.parser.Parser parser = org.jsoup.parser.Parser.htmlParser();
+
+        // If the fix is applied, this call should NOT throw an exception and return a Document.
+        // If the fix is NOT applied, this call SHOULD throw an UnsupportedCharsetException.
+        try {
+            // Calling the method that is expected to fail without the fix
+            Document doc = DataUtil.parseByteData(byteData, invalidCharsetName, baseUri, parser);
+            // If we reach here, the exception was NOT thrown. This means the test environment
+            // (or a pre-applied fix) prevented the failure.
+            // For the purpose of *reproducing the failure*, this test should ideally fail
+            // if run against code *without* the fix.
+            // If run against code *with* the fix, it should pass.
+
+            // To make this test pass *if the failure occurs*, we assert that the exception IS thrown.
+            // This is counter-intuitive for a typical "passing" test, but it's how we demonstrate
+            // the *reproduction* of a failure.
+
+            // Let's assert that the exception *is* thrown.
+            // If the code *without* the fix is run, this assertion will be reached after the exception is caught.
+            // If the code *with* the fix is run, the exception won't be thrown, and the test will fail here.
+
+            // This setup is tricky. The prompt is to "reproduce the failure".
+            // This means the test should *fail* when run against the buggy code.
+
+            // Let's re-structure to *expect* the failure.
+            boolean exceptionThrown = false;
+            try {
+                // Reset ByteBuffer as it's consumed by read operations
+                byteData.rewind();
+                DataUtil.parseByteData(byteData, invalidCharsetName, baseUri, parser);
+            } catch (UnsupportedCharsetException e) {
+                exceptionThrown = true;
+                assertEquals("UFT8", e.getCharsetName());
+            }
+            assertTrue("The test should fail with UnsupportedCharsetException when running against the buggy code.", exceptionThrown);
+
+        } catch (Exception e) {
+            // Catch any other unexpected exceptions during the process
+            e.printStackTrace();
+            assertTrue("An unexpected exception occurred: " + e.getMessage(), false);
+        }
+    }
+}

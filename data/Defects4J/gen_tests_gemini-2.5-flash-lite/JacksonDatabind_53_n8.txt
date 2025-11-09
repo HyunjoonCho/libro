@@ -1,0 +1,101 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import org.junit.Test;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.junit.Assert.assertEquals;
+
+public class JsonDeserializeBugTest {
+
+    // Define the necessary interfaces and classes as described in the bug report
+    interface MyCustomIdInterface {
+        UUID getId();
+    }
+
+    static class Foo implements MyCustomIdInterface {
+        private UUID id;
+        private String property;
+
+        @Override
+        public UUID getId() {
+            return id;
+        }
+
+        public void setId(UUID id) {
+            this.id = id;
+        }
+
+        public String getProperty() {
+            return property;
+        }
+
+        public void setProperty(String property) {
+            this.property = property;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Foo foo = (Foo) o;
+            if (id != null ? !id.equals(foo.id) : foo.id != null) return false;
+            return property != null ? property.equals(foo.property) : foo.property == null;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = id != null ? id.hashCode() : 0;
+            result = 31 * result + (property != null ? property.hashCode() : 0);
+            return result;
+        }
+    }
+
+    // Custom HashMap that deserializes based on the 'id' property
+    static class MyHashMap<K, V extends MyCustomIdInterface> extends HashMap<K, V> {
+        @JsonDeserialize(contentAs = Foo.class) // This is the key part for deserializing the content
+        @Override
+        public V put(K key, V value) {
+            return super.put(key, value);
+        }
+    }
+
+    static class MyPojo {
+        private Map<UUID, Foo> something;
+
+        @JsonDeserialize(as = MyHashMap.class)
+        public void setSomething(Map<UUID, Foo> incomingValue) {
+            this.something = incomingValue;
+        }
+
+        public Map<UUID, Foo> getSomething() {
+            return something;
+        }
+    }
+
+    @Test
+    public void testTypeSpecializationForMaps() throws Exception {
+        String json = "{\n" +
+                "  \"something\": [\n" +
+                "        {\n" +
+                "           \"id\": \"a1b2c3d4-e5f6-7890-1234-567890abcdef\",\n" +
+                "           \"property\": \"value\"\n" +
+                "         }\n" +
+                "  ]\n" +
+                "}";
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        MyPojo pojo = objectMapper.readValue(json, MyPojo.class);
+
+        Map<UUID, Foo> somethingMap = pojo.getSomething();
+        UUID expectedUuid = UUID.fromString("a1b2c3d4-e5f6-7890-1234-567890abcdef");
+        Foo expectedFoo = new Foo();
+        expectedFoo.setId(expectedUuid);
+        expectedFoo.setProperty("value");
+
+        assertEquals(1, somethingMap.size());
+        assertEquals(expectedFoo, somethingMap.get(expectedUuid));
+    }
+}

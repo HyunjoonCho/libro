@@ -1,0 +1,214 @@
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testCommandLineJarVsRestApi() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setPrettyPrint(true); // Mimic web UI pretty printing for comparison
+        options.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setCodingConvention(new com.google.javascript.jscomp.GoogleCodingConvention());
+        options.setVariableRenaming(CompilerOptions.VariableRenaming.LOCAL);
+        options.setCollapseVariableDeclarations(true);
+
+        String jsCode = "var foreignObject = gfx.parentNode.parentNode; var parentContainer = foreignObject.parentNode.parentNode;";
+        SourceFile sourceFile = SourceFile.fromCode("test.js", jsCode);
+
+        // Simulate command line compilation (which is what the bug describes as incorrect)
+        // The key difference is how variables are handled and potentially collapsed.
+        // The web UI/REST API might have slightly different default options or processing.
+        // For this test, we'll focus on replicating the observed output difference.
+
+        // The bug report implies that the command line jar produces:
+        // "var b=a=a.parentNode.parentNode;"
+        // And the web UI produces something closer to:
+        // "if(b){if(a=b.parentNode.parentNode,b=a.parentNode.parentNode,null!==b)" (This seems like it might be from a different optimization level or context, but we'll focus on the variable assignment part).
+
+        // Let's try to get the command-line-like output by disabling some optimizations
+        // that might be enabled by default in the web UI or lead to the "correct" output.
+        // Specifically, the bug points to variable collapsing.
+
+        // Resetting options to be closer to a default command-line compilation scenario might be needed.
+        // The provided bug report doesn't give exact command-line flags that lead to the difference,
+        // but the core issue is the variable assignment and collapsing.
+
+        // Let's assume the "incorrect" output is achieved with simpler variable renaming and collapsing.
+        // The "correct" output might involve preserving distinct variable names or not collapsing as aggressively.
+
+        // The simplest way to reproduce the *reported difference* is to compile with options that
+        // lead to the described "incorrect" output. The bug report states the command line output is:
+        // "var b=a=a.parentNode.parentNode;"
+        // This suggests that 'gfx' is being replaced by 'a', and the two assignments are collapsed.
+
+        // Let's compile with minimal options and see what we get.
+        CompilerOptions minimalOptions = new CompilerOptions();
+        minimalOptions.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        minimalOptions.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        minimalOptions.setVariableRenaming(CompilerOptions.VariableRenaming.OFF); // Turn off renaming to see original behavior
+        minimalOptions.setCollapseVariableDeclarations(false); // Explicitly disable collapse
+
+        compiler.compile(SourceFile.builder().build(), new SourceFile[]{sourceFile}, minimalOptions);
+        String outputMinimal = compiler.toSource();
+
+        // The description states the command line produces: "var b=a=a.parentNode.parentNode;"
+        // This implies 'gfx' was replaced by 'a', and then 'a' was used in the second assignment.
+        // This is a very specific type of variable collapsing and renaming.
+
+        // Let's try with SIMPLE_OPTIMIZATIONS which is mentioned for the web UI.
+        // The bug implies the difference happens *despite* using SIMPLE_OPTIMIZATIONS on the web UI.
+        // This is confusing. The core issue is how the assignments are handled.
+
+        // Let's focus on replicating the "var b=a=a.parentNode.parentNode;" output.
+        // This output is achieved when 'gfx' is renamed to 'a', and then the assignments are merged.
+
+        Compiler compilerForTest = new Compiler();
+        CompilerOptions optionsForTest = new CompilerOptions();
+        optionsForTest.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        optionsForTest.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        optionsForTest.setVariableRenaming(CompilerOptions.VariableRenaming.LOCAL); // Local renaming is on
+        optionsForTest.setCollapseVariableDeclarations(true); // Collapse declarations
+
+        compilerForTest.compile(SourceFile.builder().build(), new SourceFile[]{sourceFile}, optionsForTest);
+        String actualOutput = compilerForTest.toSource();
+
+        // The bug report explicitly states the command line output is:
+        // "var b=a=a.parentNode.parentNode;"
+        // This indicates that 'gfx' was renamed to 'a', and then the assignments were collapsed.
+        // The web UI output "if(b){if(a=b.parentNode.parentNode,b=a.parentNode.parentNode,null!==b)"
+        // is more complex and seems to involve conditional checks, which might be a result of
+        // different optimization levels or input code.
+        // For the purpose of reproducing the failure, we need to capture the specific output
+        // described for the command line.
+
+        // Let's assume the command line compilation (v20130411-90-g4e19b4e) with default settings
+        // or simple optimizations produced "var b=a=a.parentNode.parentNode;".
+        // The provided code snippet is simple enough that it might be heavily optimized.
+
+        // The core issue is that the compiler, when run from the command line jar,
+        // incorrectly collapses these two assignments into one, leading to 'a' being assigned
+        // twice and potentially losing the original 'gfx' reference.
+
+        // The expected output from the command line jar, as per the bug report, is:
+        // "var b=a=a.parentNode.parentNode;"
+
+        // Let's verify this. If the compiler produces this, the test should pass.
+        // If it produces something else, it means the bug might have been fixed, or
+        // the reproduction steps are slightly off.
+
+        // The bug report is about the *difference* in output.
+        // Web UI output: "if(b){if(a=b.parentNode.parentNode,b=a.parentNode.parentNode,null!==b)"
+        // Command line output: "var b=a=a.parentNode.parentNode;"
+
+        // The problematic part is the command line output: "var b=a=a.parentNode.parentNode;"
+        // This means the original code:
+        // var foreignObject = gfx.parentNode.parentNode;
+        // var parentContainer = foreignObject.parentNode.parentNode;
+        // Was compiled to:
+        // var b = a = a.parentNode.parentNode;
+        // This is incorrect because 'a' is not defined before being assigned to itself.
+        // It seems like it's trying to rename 'gfx' to 'a' and then collapse the assignments,
+        // but the order of operations or variable scope is messed up.
+
+        // The fix suggested in the bug report implies that the compiler should not collapse
+        // these two assignments in such a way, or it should handle the renaming and assignment
+        // correctly.
+
+        // Let's try to get the exact output that the bug reports as incorrect from the command line.
+        // This requires setting up the compiler to mimic the command line behavior.
+        // The bug report implies that the default settings for the jar lead to this.
+
+        // Let's re-initialize compiler and options to be as close to command-line defaults as possible.
+        compiler = new Compiler();
+        options = new CompilerOptions();
+        options.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        // The bug report mentions SIMPLE_OPTIMIZATIONS for the web UI, suggesting the command line
+        // might use different defaults or a specific set of flags.
+        // The output "var b=a=a.parentNode.parentNode;" is very aggressive variable collapsing.
+        // Let's try with aggressive renaming and collapsing.
+        options.setVariableRenaming(CompilerOptions.VariableRenaming.ALL);
+        options.setCollapseVariableDeclarations(true);
+        options.setInlineVariables(CompilerOptions.InlineVariables.ALL); // Potentially relevant for collapsing
+        options.setDeadAssignmentElimination(true); // Might play a role
+
+        compiler.compile(SourceFile.builder().build(), new SourceFile[]{sourceFile}, options);
+        String commandLineOutput = compiler.toSource();
+
+        // The bug report states the command line output is:
+        // "var b=a=a.parentNode.parentNode;"
+        // This specific output implies that 'gfx' was renamed to 'a', and then the assignments were collapsed.
+        // The bug is that this collapsed assignment is invalid because 'a' is not defined before it's assigned to itself.
+        // It seems the compiler is trying to do:
+        // var a = gfx.parentNode.parentNode; // Renamed gfx to a
+        // var b = a.parentNode.parentNode; // Then assigned to b
+        // But it collapses it incorrectly.
+
+        // The test should assert that the output matches the *incorrect* output described in the bug report.
+        // This way, if the bug is fixed, this test will fail, indicating the fix worked.
+
+        // Let's assume the compiler with default settings (or SIMPLE_OPTIMIZATIONS if that's what the jar uses)
+        // produces the incorrect output.
+        // The most direct way to reproduce the failure is to expect the incorrect output.
+
+        // The bug report states:
+        // "The command line converts it into: var b=a=a.parentNode.parentNode;"
+        // This is the output we need to assert against.
+
+        // Let's re-run with options that are likely to produce this aggressive collapsing.
+        compiler = new Compiler();
+        options = new CompilerOptions();
+        options.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setVariableRenaming(CompilerOptions.VariableRenaming.ALL);
+        options.setCollapseVariableDeclarations(true);
+        options.setInlineVariables(CompilerOptions.InlineVariables.ALL);
+
+        compiler.compile(SourceFile.builder().build(), new SourceFile[]{sourceFile}, options);
+        String observedCommandLineOutput = compiler.toSource();
+
+        // The bug report implies this output is wrong. The test should reproduce this "wrong" output.
+        // If the bug is fixed, the output will change, and this test will fail.
+        // The exact output string "var b=a=a.parentNode.parentNode;" is critical.
+
+        // Let's try to get a cleaner compilation output that isolates the issue.
+        // The bug mentions "var b=a=a.parentNode.parentNode;". This is a single statement.
+        // It's possible the original code was slightly different, or the compiler aggressively
+        // combined things.
+
+        // Let's focus on the core problematic transformation:
+        // Original:
+        // var foreignObject = gfx.parentNode.parentNode;
+        // var parentContainer = foreignObject.parentNode.parentNode;
+        // Incorrect output:
+        // var b=a=a.parentNode.parentNode;
+
+        // This implies 'gfx' was renamed to 'a', and then 'a' was assigned to itself multiple times.
+        // The variable 'b' is also introduced.
+
+        // Let's compile the original snippet with options that are likely to trigger this behavior.
+        compiler = new Compiler();
+        options = new CompilerOptions();
+        options.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setVariableRenaming(CompilerOptions.VariableRenaming.ALL); // Aggressive renaming
+        options.setCollapseVariableDeclarations(true); // Collapse declarations
+        options.setInlineVariables(CompilerOptions.InlineVariables.ALL); // Inline variables, might lead to collapsing
+
+        compiler.compile(SourceFile.builder().build(), new SourceFile[]{sourceFile}, options);
+        String output = compiler.toSource();
+
+        // The bug report states the command line output is:
+        // "var b=a=a.parentNode.parentNode;"
+        // This is what we need to assert. If the compiler produces this, the test passes,
+        // indicating we've reproduced the described failure.
+        // If the bug is fixed, the output will change, and the test will fail.
+
+        assertEquals("var b=a=a.parentNode.parentNode;", output.trim());
+    }
+}

@@ -1,0 +1,45 @@
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertNotNull;
+
+public class JacksonBugReproducer {
+
+    // Mock classes to replicate the Spring security structure for testing
+    public static class Authentication {
+        private List<GrantedAuthority> authorities = new ArrayList<GrantedAuthority>();
+
+        public List<GrantedAuthority> getAuthorities() {
+            return this.authorities;
+        }
+
+        public void setAuthorities(List<GrantedAuthority> authorities) {
+            this.authorities = authorities;
+        }
+    }
+
+    public interface GrantedAuthority {
+        String getAuthority();
+    }
+
+    @Test
+    public void testNpeInSubTypeValidator() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
+
+        // This JSON structure, when deserialized with default typing enabled,
+        // triggers the bug because it tries to deserialize a List of a Spring interface.
+        String json = "{\"@class\":\"org.springframework.security.core.Authentication\",\"authorities\":[\"java.util.ArrayList\",[]]}";
+
+        Authentication authentication = mapper.readValue(json, Authentication.class);
+
+        // Assert that the deserialization did not throw a NullPointerException
+        // and that the object was created (though its contents might be empty/default).
+        assertNotNull(authentication);
+        assertNotNull(authentication.getAuthorities());
+    }
+}

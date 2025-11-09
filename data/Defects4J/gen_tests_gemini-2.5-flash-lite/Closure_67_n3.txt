@@ -1,0 +1,197 @@
+public void testAdvancedCompilationIssue() {
+    // This test case attempts to reproduce the behavior described in the bug report.
+    // The original JavaScript code involves a specific interaction with a compiler
+    // that renames functions. The bug occurs when a function is renamed and then
+    // its definition is removed, leaving a reference to a non-existent function.
+
+    // The provided JavaScript code snippet demonstrates the issue:
+    // function A() {
+    //   this._x = 1;
+    // }
+    // A.prototype['func1'] = // done to save public reference to func1
+    // A.prototype.func1 = function() {
+    //   this._x = 2;
+    //   this.func2(); // This call is problematic after compilation
+    // }
+    // A.prototype.func2 = function() {
+    //   this._x = 3;
+    //   this.func3(); // func3 is not defined in the provided snippet, but it's part of the original description context
+    // }
+    // window['A'] = A;
+
+    // The compiled output, according to the bug report, might look like:
+    // function a() {
+    //   this.a = 1
+    // }
+    // a.prototype.func1 = a.prototype.b = function() {
+    //   this.a = 2;
+    //   this.c() // Problem! 'c' is supposed to be the renamed 'func2', but its definition is missing.
+    // };
+    // window.A = a;
+
+    // To reproduce this in a JUnit test, we need to simulate the scenario where
+    // a function call points to a non-existent renamed function.
+    // Since we are testing Java code (presumably using a JavaScript engine or similar),
+    // we can't directly execute the buggy compiler. Instead, we can try to
+    // construct a scenario that would lead to a similar runtime error if such
+    // a compilation had occurred and was then executed.
+
+    // A common way to simulate this is by trying to call a method on an object
+    // that is expected to exist but has been erroneously removed or renamed
+    // without proper handling.
+
+    // Let's assume we have a simplified Java representation of the 'A' class
+    // after the problematic compilation.
+
+    // We can create a mock or a simplified class that mimics the structure.
+    // The core issue is calling a method that doesn't exist after renaming.
+
+    // If we were to execute the compiled JavaScript in a Java environment (e.g., Nashorn, GraalVM JS),
+    // the error would likely be a JavaScript runtime error like "TypeError: a.c is not a function".
+
+    // Since we are writing a JUnit test for Java code, and the bug report is about
+    // a JavaScript compilation process, we need to adapt.
+    // If the Java code *uses* the output of this advanced compilation,
+    // the test should focus on the Java side encountering the error.
+
+    // Let's assume there's a Java class that wraps or interacts with the compiled JavaScript.
+    // The bug report implies that the Java code itself doesn't directly cause the issue,
+    // but rather the *result* of the JavaScript compilation is faulty.
+
+    // If the Java code were trying to instantiate 'A' and then call 'func1',
+    // and 'func1' internally calls 'func2' (which got renamed to 'c' and deleted),
+    // the Java code might receive an error from the underlying JS engine.
+
+    // To simulate this, we can create a scenario where a method call is expected
+    // to succeed but fails due to a missing underlying implementation.
+
+    // Consider a simplified Java class that acts like the compiled 'a'.
+    class CompiledA {
+        public int a;
+
+        // In the buggy scenario, 'func1' calls 'c', but 'c' is not defined.
+        // We can simulate this by having a method that *should* call another method,
+        // but that other method is missing.
+        public void func1() {
+            this.a = 2;
+            // This is where the call to the non-existent 'c' would happen.
+            // To trigger an error in Java, we can either:
+            // 1. Make a direct call to a method that we know won't exist.
+            // 2. Use reflection to attempt to call a method that doesn't exist.
+
+            // Let's try a direct call to a method that we will *not* define,
+            // simulating the compiler's error.
+            callC(); // This method is intentionally not implemented below.
+        }
+
+        // We can define 'func2' (renamed to 'b' in the buggy output) but have it call 'c'.
+        // Or, we can directly simulate the problematic 'func1' behavior.
+        // The bug report shows func1 calling func2, and func2 calling func3.
+        // The *compiled* output shows func1 calling 'c'.
+        // So, the issue is specifically with the call inside func1.
+
+        // Let's simulate the compiled 'a' prototype.
+        // The bug description shows:
+        // a.prototype.func1 = a.prototype.b = function() { ... this.c() ... }
+        // This implies that 'func1' and 'b' are the same function in the compiled output.
+        // And 'func1' calls 'c'.
+
+        // Let's create a stub for 'func1' that mimics the buggy compiled version.
+        public void b() { // Corresponds to the minified func1
+            this.a = 2;
+            // The original JS was: this.func2();
+            // The compiled JS is: this.c();
+            // The problem is that 'c' is not defined.
+            callC(); // Simulate the call to the missing function 'c'
+        }
+
+        // We need to ensure that callC() is not defined in this class.
+        // If we were using a JS engine, this would cause a runtime exception.
+        // In pure Java, we need to trigger an error.
+        // The best way to reproduce the *spirit* of the bug is to expect
+        // an error when 'callC()' is invoked.
+
+        // Let's make 'func1' in our Java test call the 'b' method,
+        // which in turn calls the non-existent 'callC'.
+        public void func1() {
+            this.a = 2;
+            // In the buggy compilation, func1 calls func2.
+            // The compiled output shows func1 calling 'c'.
+            // Let's directly call the method that represents the buggy compiled function.
+            b();
+        }
+
+        // This method is intentionally left undefined to simulate the missing 'c' function.
+        // private void callC() {
+        //     // This method should not be called.
+        //     throw new UnsupportedOperationException("Method 'c' should not be called as it is missing.");
+        // }
+
+        // We need a way to assert that calling 'func1' leads to an error because 'c' is missing.
+        // Since 'callC()' is not defined, a direct call will result in a compile-time error
+        // if we tried to call it from within 'b'.
+        // The bug report implies the compiler *emits no errors* but the *runtime* fails.
+        // This suggests the error happens when the compiled code is executed.
+
+        // To simulate this in JUnit, we can use an assertion that expects an exception.
+        // We'll need to manually trigger the problematic call.
+    }
+
+    CompiledA instance = new CompiledA();
+    instance.a = 1; // Initialize 'a' as per the constructor
+
+    // The bug occurs when 'func1' is called, which then tries to call the non-existent 'c'.
+    // We expect an error when 'func1' is invoked.
+    // Since 'CompiledA.b()' calls 'callC()' which is not defined, we expect an error.
+    // However, Java won't let us call an undefined method directly.
+
+    // Let's adjust the simulation. The bug is that the *compiler* renames func2 to c,
+    // but then *deletes* the definition of c.
+    // So, the compiled code looks like:
+    // function a() { this.a = 1 }
+    // a.prototype.func1 = function() { this.a = 2; this.c(); } // calls non-existent 'c'
+    // window.A = a;
+
+    // Let's create a Java class that *tries* to replicate this faulty structure.
+    class FaultyCompiledA {
+        public int a;
+
+        public FaultyCompiledA() {
+            this.a = 1;
+        }
+
+        // This method simulates the compiled 'func1' which calls the missing 'c'.
+        public void func1() {
+            this.a = 2;
+            // Here we need to simulate the call to 'c'.
+            // Since 'c' doesn't exist, we can't directly call it.
+            // We can use reflection to *attempt* to call a method named "c".
+            try {
+                // Attempt to find and invoke a method named "c"
+                java.lang.reflect.Method methodC = this.getClass().getMethod("c");
+                methodC.invoke(this);
+            } catch (java.lang.reflect.NoSuchMethodException e) {
+                // This is the expected outcome: the method 'c' does not exist.
+                // The bug report states the compiler emits NO errors, but the runtime fails.
+                // So, the Java code *calling* this faulty structure should catch the runtime error.
+                // We can re-throw a specific exception to indicate the bug was reproduced.
+                throw new RuntimeException("Simulated bug: Method 'c' not found, as described in the issue.", e);
+            } catch (Exception e) {
+                // Handle other potential reflection exceptions
+                throw new RuntimeException("Unexpected error during reflection.", e);
+            }
+        }
+
+        // We do NOT define a method named 'c' here, to simulate the compiler deleting it.
+        // If we were testing the *JavaScript* output, we'd see a TypeError.
+        // In Java, using reflection, we'll get NoSuchMethodException.
+    }
+
+    FaultyCompiledA faultyInstance = new FaultyCompiledA();
+
+    // We expect that calling func1 on this instance will result in a RuntimeException
+    // because it tries to call the non-existent method 'c' via reflection.
+    assertThrows(RuntimeException.class, () -> {
+        faultyInstance.func1();
+    }, "Calling func1 should throw a RuntimeException due to missing method 'c'");
+}

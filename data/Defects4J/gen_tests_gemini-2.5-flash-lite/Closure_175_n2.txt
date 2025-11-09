@@ -1,0 +1,40 @@
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+import java.util.Collections;
+
+public class CompilerTest {
+
+    @Test
+    public void testAdvancedOptimizationsBug() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setCompilationLevel(com.google.javascript.jscomp.CompilationLevel.ADVANCED_OPTIMIZATIONS);
+        options.setLanguageIn(com.google.javascript.jscomp.LanguageMode.ECMASCRIPT5);
+        options.setLanguageOut(com.google.javascript.jscomp.LanguageMode.ECMASCRIPT5);
+        options.setPrettyPrint(true);
+
+        String inputJs = "window[\"anchor\"] = function (obj, modifiesProp) {\n" +
+                         " return (function (saved) {\n" +
+                         " return modifiesProp(obj) + saved;\n" +
+                         " })(obj[\"prop\"]);\n" +
+                         "}";
+
+        SourceFile inputSource = SourceFile.fromCode("input.js", inputJs);
+        SourceFile externs = SourceFile.fromCode("window.js", "var window;");
+
+        compiler.compile(externs, inputSource, options);
+
+        String compiledCode = compiler.toSource();
+
+        // The expected output is derived from the bug report's description of the expected output.
+        // It assumes the original function name "anchor" is preserved and the parameters are renamed.
+        // The actual output in the bug report is for a different function "foo", so we adapt it.
+        String expectedOutput = "window.anchor=function(a,b){var HOLD=a.prop;return b(a)+HOLD};";
+
+        assertEquals(expectedOutput, compiledCode.trim());
+    }
+}

@@ -1,0 +1,35 @@
+public void testStringCollectionDeserializerCustomCollection() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+
+    // Mock custom collection and its immutable version
+    class CustomStringCollection extends ArrayList<String> {
+        public CustomStringCollection() {
+            super();
+        }
+        // Assume this is the immutable version used for deserialization
+        public static class Immutable extends CustomStringCollection {
+            public Immutable() {
+                // No-arg constructor needed for deserialization
+            }
+        }
+    }
+
+    class Container {
+        public CustomStringCollection strings;
+    }
+
+    // Configure module to use Immutable for deserialization
+    SimpleModule module = new SimpleCollectionModule();
+    module.addDeserializer(CustomStringCollection.class, new StringCollectionDeserializer(CustomStringCollection.Immutable.class));
+    mapper.registerModule(module);
+
+    // Test case that should fail
+    String json = "{\"strings\": [\"hello\", \"world\"]}";
+    try {
+        mapper.readValue(json, Container.class);
+        fail("Should have thrown an exception because Immutable has no no-arg constructor in this context.");
+    } catch (JsonMappingException e) {
+        // Verify the exception message indicates the problem
+        assertTrue(e.getMessage().contains("no default no-arguments constructor found"));
+    }
+}

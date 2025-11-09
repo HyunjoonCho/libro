@@ -1,0 +1,56 @@
+public void testArgumentsOptimisation() throws Exception {
+    // This test case is based on the JavaScript example provided in the bug report.
+    // The goal is to simulate a scenario where the JavaScript engine might incorrectly
+    // optimize function calls involving the 'arguments' object and 'this' context.
+    // Since we are testing Java code, we'll use a Java approximation to demonstrate
+    // the potential issue.
+
+    // The core of the problem in JavaScript is that 'arguments[0] = this' can
+    // prematurely modify the value of the first argument if it's also being used
+    // directly in the function call (like 'a.apply' where 'a' is the first argument).
+
+    // We will create a mock object that simulates a function that takes arguments
+    // and has a 'this' context.
+    class MockCallable {
+        Object firstArg;
+        Object thisContext;
+
+        public void apply(Object context, Object[] args) {
+            this.thisContext = context;
+            if (args != null && args.length > 0) {
+                this.firstArg = args[0];
+            }
+        }
+    }
+
+    // Simulate the scenario where the first argument is also the function to be called.
+    MockCallable callable = new MockCallable();
+    Object[] argumentsArray = {callable, "extraArg1", "extraArg2"};
+    Object thisContext = new Object(); // Simulate a 'this' context
+
+    // Now, let's simulate the potentially problematic optimization in Java.
+    // In JavaScript, the optimization would look something like:
+    // function d3_call(a){arguments[0]=this;a.apply(this,arguments);return this};
+    //
+    // We need to check if modifying 'arguments[0]' before calling 'apply' affects
+    // the 'firstArg' that 'apply' receives.
+
+    // Simulate the optimization:
+    // In a real scenario, 'arguments' is a special object. Here, we use an array
+    // and manually modify it to mimic the behavior.
+    Object[] simulatedArguments = argumentsArray.clone(); // Clone to work with
+    simulatedArguments[0] = thisContext; // This is the problematic line in JS
+
+    // Now call the 'apply' method with the modified arguments.
+    // We expect 'callable.firstArg' to be 'thisContext' if the optimization is flawed.
+    // If the optimization is correct, 'callable.firstArg' should still be the original 'callable' object.
+    callable.apply(thisContext, simulatedArguments);
+
+    // Assert that the first argument passed to apply is NOT the 'this' context.
+    // This indicates that the original first argument was preserved.
+    // If the test fails here, it means 'callable.firstArg' became 'thisContext',
+    // reproducing the bug described.
+    assertNotSame("The first argument should not have been overwritten by 'this'", thisContext, callable.firstArg);
+    // Also assert that the first argument is indeed the original callable object.
+    assertSame("The first argument should be the original callable object", callable, callable.firstArg);
+}

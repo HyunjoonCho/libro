@@ -1,0 +1,181 @@
+public void testTarGzWithEmptyOwnerGroup() throws IOException, URISyntaxException {
+    // Create a dummy tar.gz file with an entry having empty username and groupname
+    // This requires creating a TarArchiveOutputStream and writing an entry to it.
+    // For simplicity, we'll simulate the problematic scenario by creating a byte array
+    // that mimics the header structure causing the exception.
+
+    // A simplified tar header structure for a file entry.
+    // Fields like name, mode, uid, gid, size, mtime, typeflag, linkname, magic, version, uname, gname, devmajor, devminor, prefix
+    // The issue is with uname and gname fields which are expected to be octal representations of UID/GID.
+    // If they are empty or contain non-octal characters, TarUtils.parseOctal can fail.
+
+    // We'll create a minimal valid tar entry header that would cause the issue.
+    // The actual file content is not important for this test.
+    byte[] tarHeader = new byte[512]; // Standard tar header size
+
+    // Set a dummy name
+    String name = "testentry";
+    System.arraycopy(name.getBytes(), 0, tarHeader, 0, name.length());
+
+    // Set mode (e.g., 0644)
+    String mode = "000644"; // Octal representation
+    System.arraycopy(mode.getBytes(), 0, tarHeader, 100, mode.length());
+
+    // Set uid and gid to 0 (root) - these are octal
+    String uid = "000000";
+    System.arraycopy(uid.getBytes(), 0, tarHeader, 108, uid.length());
+    String gid = "000000";
+    System.arraycopy(gid.getBytes(), 0, tarHeader, 116, gid.length());
+
+    // Set size to 0
+    String size = "0000000";
+    System.arraycopy(size.getBytes(), 0, tarHeader, 124, size.length());
+
+    // Set mtime to current time (octal)
+    String mtime = Long.toOctalString(System.currentTimeMillis() / 1000);
+    while (mtime.length() < 11) {
+        mtime = "0" + mtime;
+    }
+    System.arraycopy(mtime.getBytes(), 0, tarHeader, 8, mtime.length());
+
+    // Set typeflag to regular file
+    tarHeader[156] = (byte) '0';
+
+    // Set magic and version
+    System.arraycopy("ustar".getBytes(), 0, tarHeader, 257, 5);
+    tarHeader[262] = (byte) ' '; // Version 00
+    System.arraycopy("00".getBytes(), 0, tarHeader, 262, 2);
+
+
+    // *** The problematic part: simulate empty uname and gname ***
+    // In the original tar format, these fields are null-padded.
+    // The issue arises when the parser expects octal digits but finds null bytes or other invalid chars.
+    // The exception "Invalid byte 32 at offset 7 in ' {NUL}' len=8" suggests it's trying to parse the gname field.
+    // Let's simulate a header where uname and gname are not valid octal strings.
+    // A common representation for empty fields in tar headers is null padding.
+    // The TarUtils.parseOctal method expects digits.
+
+    // Let's simulate the exact problematic scenario from the bug report where it might be trying to parse ' {NUL}'
+    // The offsets for uname and gname are 297 and 325 respectively.
+    // The length of these fields is 32 bytes.
+
+    // Simulate an empty username (all nulls)
+    // tarHeader[297] = 0; // Already zero-initialized, but good to be explicit
+
+    // Simulate an empty group name (all nulls)
+    // tarHeader[325] = 0; // Already zero-initialized
+
+    // To trigger the specific exception "Invalid byte 32 at offset 7 in ' {NUL}' len=8",
+    // it seems the parser is misinterpreting the null bytes.
+    // Let's try to construct a header that would lead to this.
+    // The TarUtils.parseOctal method reads up to 8 bytes and expects them to be digits.
+    // If the first byte is a null byte (0x00), it might proceed and then fail.
+
+    // Let's set the uname and gname fields to be null-padded strings that are effectively empty.
+    // The TarUtils.parseOctal method expects a null-terminated string or a string of digits.
+    // The issue might be in how it handles the null termination vs. fixed-length fields.
+
+    // Re-inspecting the exception: "Invalid byte 32 at offset 7 in ' {NUL}' len=8"
+    // This suggests that it's trying to read 8 bytes, and the 7th byte (index 6) is a NUL (0x00).
+    // The ' {NUL}' part might be a representation of the byte array it's looking at.
+    // The offset 7 is relative to the start of the field being parsed.
+
+    // Let's try to create a header where the username and groupname fields are filled with nulls.
+    // The TarUtils.parseOctal method has a length parameter. If the field is shorter than expected,
+    // it might pad with nulls.
+
+    // Let's manually set the uname and gname fields to be null-padded.
+    // The TarUtils.parseOctal method in older versions might have had issues with fully null-padded fields.
+    // For this test, we need to create a byte array that represents a tar archive containing such an entry.
+    // This is complex to do from scratch without a TarArchiveOutputStream.
+
+    // Alternative: Find a pre-existing tar.gz file that exhibits this behavior or create one using a tool.
+    // The bug report mentions it can be reproduced with a file created by Maven Assembly Plugin.
+    // Since we cannot easily create such a file within a JUnit test without external dependencies or complex setup,
+    // we will simulate the input stream that would cause the failure.
+
+    // Let's assume we have a byte array representing a tar.gz file.
+    // We need to construct a byte array that, when decompressed by Gzip and then read by TarArchiveInputStream,
+    // triggers the error.
+
+    // A more practical approach for a unit test is to mock or create a minimal valid structure.
+    // The core of the issue is TarUtils.parseOctal and how it handles null bytes within the uid/gid fields.
+
+    // Let's try to create a tar entry with empty uname and gname using TarArchiveOutputStream.
+    // This requires creating temporary files and using the commons-compress library itself to create the problematic archive.
+    // This is a bit of a chicken-and-egg problem for a unit test.
+
+    // Let's focus on reproducing the exception's condition: TarUtils.parseOctal receiving invalid input.
+    // The exception "Invalid byte 32 at offset 7 in ' {NUL}' len=8" is key.
+    // '32' is the ASCII code for space. 'NUL' is 0x00.
+    // So, it's trying to parse 8 bytes, and at index 6 (7th byte), it finds a NUL.
+    // The string ' {NUL}' is likely a debug representation.
+
+    // Let's create a byte array that represents a TarArchiveEntry header with nulls in uname/gname.
+    // We need to be careful about the exact offsets and lengths.
+
+    // Based on the Tar specification and commons-compress source:
+    // uname starts at offset 297, length 32
+    // gname starts at offset 325, length 32
+
+    // Let's create a TarArchiveEntry object and manually set its username and groupname to null or empty strings,
+    // then serialize it into a byte array as if it were a tar header.
+    // This is still quite involved.
+
+    // A simpler approach for a unit test:
+    // Create a GzipCompressorOutputStream, then a TarArchiveOutputStream, write a dummy entry with empty owner/group,
+    // close them, and then read it back with TarArchiveInputStream.
+
+    // --- Revised approach: Create a problematic archive in memory ---
+
+    // 1. Create a byte array output stream for the tar archive.
+    ByteArrayOutputStream tarOut = new ByteArrayOutputStream();
+    // 2. Wrap it with a GzipCompressorOutputStream.
+    try (GzipCompressorOutputStream gzipOut = new GzipCompressorOutputStream(tarOut)) {
+        // 3. Wrap it with a TarArchiveOutputStream.
+        try (TarArchiveOutputStream tarArchiveOut = new TarArchiveOutputStream(gzipOut)) {
+            // 4. Create a TarArchiveEntry.
+            TarArchiveEntry entry = new TarArchiveEntry("empty_owner_group_file.txt");
+            entry.setSize(0); // Empty file
+
+            // *** The crucial part: set username and groupname to null or empty strings ***
+            // The library should handle these gracefully. The bug is that it doesn't.
+            // Setting them to null might be interpreted as empty, which then causes parsing issues.
+            // Let's explicitly set them to empty strings, which should result in null-padded fields in the header.
+            entry.setUserName("");
+            entry.setGroupName("");
+
+            // Write the entry. This is where the header is constructed.
+            tarArchiveOut.putArchiveEntry(entry);
+            tarArchiveOut.closeArchiveEntry();
+        }
+    }
+
+    // Now we have a byte array in tarOut.toByteArray() that *should* represent a tar.gz file
+    // with an entry having empty username and groupname.
+
+    // 5. Read the archive back using TarArchiveInputStream.
+    byte[] archiveBytes = tarOut.toByteArray();
+    ByteArrayInputStream archiveIn = new ByteArrayInputStream(archiveBytes);
+
+    // Wrap with GzipCompressorInputStream
+    try (GzipCompressorInputStream gzipIn = new GzipCompressorInputStream(archiveIn)) {
+        // Wrap with TarArchiveInputStream
+        try (TarArchiveInputStream tarIn = new TarArchiveInputStream(gzipIn)) {
+            TarArchiveEntry entry;
+            // The loop should complete without throwing an exception if the bug is fixed.
+            // If the bug is present, getNextTarEntry() will throw an exception.
+            while ((entry = tarIn.getNextTarEntry()) != null) {
+                // We expect to successfully get the entry.
+                // We can assert its properties if needed, but the main goal is to not crash.
+                assertNotNull(entry);
+                assertEquals("empty_owner_group_file.txt", entry.getName());
+                // The following lines might fail in older versions due to exception
+                assertEquals("", entry.getUserName());
+                assertEquals("", entry.getGroupName());
+            }
+            // If the loop finishes, the test passes.
+            // If an exception is thrown, the test fails.
+        }
+    }
+}

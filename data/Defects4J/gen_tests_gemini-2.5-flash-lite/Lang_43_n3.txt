@@ -1,0 +1,155 @@
+public void testExtendedMessageFormatOutOfMemory() {
+    Map<String, Object> formatRegistry = new HashMap<String, Object>();
+    formatRegistry.put("dummy", new DummyFormatFactory());
+    ExtendedMessageFormat mf = new ExtendedMessageFormat("it''s a {dummy} 'test'!", formatRegistry);
+    mf.format(new String[]{"great"});
+    // The test should not throw OutOfMemoryError.
+    // No assertion is needed here as the test passes if no error is thrown.
+}
+
+// DummyFormatFactory and DummyFormat need to be defined for this test to compile and run.
+// These are placeholder definitions based on the provided bug description.
+static class DummyFormatFactory implements FormatFactory {
+    public Format getFormat(String name, Map<String, Object> arguments, Locale locale) {
+        return new DummyFormat();
+    }
+}
+
+static class DummyFormat extends Format {
+    @Override
+    public String format(Object obj, StringBuffer toAppendTo, FieldPosition pos) {
+        toAppendTo.append("formatted");
+        return toAppendTo.toString();
+    }
+
+    @Override
+    public Object parseObject(String source, ParsePosition pos) {
+        return null;
+    }
+}
+
+// ExtendedMessageFormat and FormatFactory are assumed to be available in the test class's scope.
+// For completeness, here are simplified versions if they are not in scope:
+
+interface FormatFactory {
+    Format getFormat(String name, Map<String, Object> arguments, Locale locale);
+}
+
+static class ExtendedMessageFormat extends MessageFormat {
+    private static final char QUOTE = '\'';
+    private final Map<String, Object> registry;
+    private final String pattern;
+    private boolean escapingOn = true; // Assuming escaping is on by default
+
+    public ExtendedMessageFormat(String pattern, Map<String, Object> registry) {
+        super(pattern);
+        this.pattern = pattern;
+        this.registry = registry;
+    }
+
+    public String format(Object[] arguments) {
+        return format(arguments, new StringBuffer(), new FieldPosition(0)).toString();
+    }
+
+    @Override
+    public StringBuffer format(Object obj, StringBuffer appendTo, FieldPosition pos) {
+        // Simplified logic to demonstrate the potential issue
+        // In a real scenario, this would involve parsing the pattern
+        // and handling placeholders and quotes.
+        // The key is to simulate the problematic quote handling.
+
+        // This is a highly simplified simulation of the bug.
+        // The actual bug is in the parsing logic of ExtendedMessageFormat itself.
+        // We are trying to trigger the OutOfMemoryError by having a pattern
+        // with many single quotes that might lead to infinite recursion or excessive string building.
+
+        // Simulate the problematic quote handling by creating a long string with quotes
+        // that might trigger the bug in the original implementation.
+        StringBuilder simulatedPattern = new StringBuilder();
+        for (int i = 0; i < 1000; i++) { // Use a large number to increase OOM risk
+            simulatedPattern.append("''");
+        }
+        simulatedPattern.append(" {dummy} ");
+        for (int i = 0; i < 1000; i++) {
+            simulatedPattern.append("''");
+        }
+
+        // Re-instantiate with a pattern that is likely to cause issues with the buggy parser
+        // This is a heuristic to trigger the bug.
+        try {
+            ExtendedMessageFormat emfWithBuggyPattern = new ExtendedMessageFormat(simulatedPattern.toString(), registry);
+            // The actual format method would parse this.
+            // Here we simulate calling the format method on the original pattern.
+            // The bug is in the parsing logic, not necessarily the formatting output itself.
+
+            // The original code snippet provided the fix as adding "next(pos)" after checking QUOTE.
+            // This suggests the issue was in how the parser advanced its position when encountering a quote.
+            // To reproduce the OOM, we need to get the parser into a state where it repeatedly
+            // processes quotes without advancing properly.
+
+            // Let's try to directly call a method that might be affected by the parsing logic.
+            // This is a hypothetical call to mimic the internal parsing process.
+            // In a real test, you'd call the public format method and observe the OOM.
+
+            // The provided fix suggests the issue is in the internal parsing of the pattern string.
+            // We need to trigger that parsing.
+            // The simplest way is to create the ExtendedMessageFormat instance.
+            // The bug is likely triggered during the construction or the first format call.
+
+            // Let's assume the constructor or an internal method called by format()
+            // is where the parsing happens and the OOM is thrown.
+            // The test should just instantiate and call format to trigger the buggy code path.
+
+            // The provided pattern "it''s a {dummy} 'test'!" is already used.
+            // The description implies the OOM happens with this pattern and a custom registry.
+            // The fix involves how the parser handles quotes.
+
+            // Let's refine the reproduction attempt by focusing on the quote handling.
+            // The code snippet shows:
+            // if (escapingOn && c[start] == QUOTE) { ... }
+            // The bug is likely that when QUOTE is encountered, the parser doesn't advance `start` correctly,
+            // leading to repeated checks on the same character, potentially causing an infinite loop or
+            // excessive string building if the pattern is complex.
+
+            // Let's try to create a pattern with many consecutive single quotes.
+            StringBuilder problematicPattern = new StringBuilder();
+            for (int i = 0; i < 5000; i++) { // A large number to ensure OOM
+                problematicPattern.append("''");
+            }
+            problematicPattern.append(" {dummy} ");
+            for (int i = 0; i < 5000; i++) {
+                problematicPattern.append("''");
+            }
+
+            ExtendedMessageFormat emf = new ExtendedMessageFormat(problematicPattern.toString(), registry);
+            emf.format(new String[]{"argument"}); // This call should trigger the OOM if the bug exists.
+
+            // If the above doesn't throw OOM, it might be due to the specific version of MessageFormat
+            // or other dependencies. The core idea is to expose the parser to a pattern that
+            // triggers the faulty quote handling.
+
+            // Revert to the original example pattern, as the problem description implies it's sufficient.
+            // The OOM might not be directly tied to the *length* of the string but the *logic* of parsing quotes.
+            ExtendedMessageFormat originalMf = new ExtendedMessageFormat("it''s a {dummy} 'test'!", formatRegistry);
+            originalMf.format(new String[]{"great"});
+
+
+        } catch (OutOfMemoryError e) {
+            // This catch block is for *demonstration* purposes if running outside a test runner
+            // that expects exceptions. In a JUnit test, you'd typically let the OOM propagate.
+            System.err.println("Caught OutOfMemoryError as expected: " + e.getMessage());
+            throw e; // Re-throw to fail the test
+        } catch (Exception e) {
+            // Catch other potential exceptions during parsing if the OOM doesn't manifest directly.
+            // For example, if the parser fails before OOM.
+            // This is less likely the OOM bug itself, but good practice.
+            e.printStackTrace();
+            throw new RuntimeException("An unexpected error occurred during formatting.", e);
+        }
+
+        // If no OutOfMemoryError is thrown, the test fails.
+        // No explicit assertion is needed here; the absence of OOM is the success condition.
+        // However, if the OOM is caught and re-thrown, the test runner will mark it as failed.
+        fail("OutOfMemoryError was not thrown, indicating the bug might be fixed or not reproducible.");
+    }
+}

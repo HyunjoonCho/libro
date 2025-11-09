@@ -1,0 +1,113 @@
+public void testTarArchiveInputStreamBigUserId() throws IOException {
+    byte[] header = new byte[512];
+    // Set a big user ID (larger than 8 digits, which is the limit for octal representation)
+    // Example: 62410554 is 0x3B00000A, which would be 9 digits in octal.
+    // We'll use a value that overflows the typical 8-digit octal representation.
+    // Let's use 10 digits: 1234567890
+    // In octal, this is 011111111122.
+    // The TarUtils.parseOctal method expects digits 0-7.
+    // A value like 62410554 (decimal) is 016333333322 (octal) which is 10 digits.
+    // The original code likely fails because it expects at most 8 digits for octal.
+    // Let's simulate a header with a user ID that would cause this issue.
+    // The user ID field is at offset 108 and is 8 bytes long.
+    // We need to represent a number larger than 2^24 - 1 (which is the max for 8 octal digits).
+    // Let's use a decimal value that translates to more than 8 octal digits.
+    // 100000000 decimal is 2342151100 octal.
+    // We need to fit this into 8 bytes, null-padded.
+    // Let's try a value that's just over the 8-digit limit, e.g., 2^24.
+    // 2^24 = 16777216. In octal, this is 040000000. This is 8 digits.
+    // Let's try 2^24 + 1 = 16777217. In octal, this is 040000001. Still 8 digits.
+    // The problematic value mentioned in the bug is '62410554'.
+    // Let's represent 62410554 in octal: 016333333322. This is 10 octal digits.
+    // We need to put this into the 8-byte user ID field.
+    // The tar format stores this as a null-terminated string of octal digits.
+    // If the number is too big, it might not fit.
+    // Let's create a byte array that represents a tar header with a user ID field
+    // that, when parsed as octal, would cause the error.
+    // The example in the bug description "Invalid byte 52 at offset 7 in '62410554'"
+    // suggests that '62410554' is being parsed, and '52' (ASCII for '4') is the issue.
+    // This implies the parser is expecting octal digits, and '6' is valid,
+    // but '52' is not a valid octal digit. This is confusing.
+    // Let's assume the bug is about handling numbers that require more than 8 octal digits.
+    // The user ID field is at offset 108 and is 8 bytes.
+    // Let's put a value that *should* be interpreted as a large number,
+    // and see if it breaks.
+    // A common way to represent large numbers in tar is to use the binary format,
+    // but the error is in parseOctal.
+    // Let's craft a header where the user ID field contains characters that
+    // are not valid octal digits if interpreted as a pure octal string.
+    // The error message "Invalid byte 52 at offset 7 in '62410554'"
+    // suggests that '62410554' is the string being parsed, and byte 52 (ASCII '4')
+    // at offset 7 is the problem. This implies the parser is reading past the expected
+    // null terminator or expecting only octal digits.
+    // Let's simulate a tar entry where the user ID field is populated with
+    // a string that would cause this error.
+    // The user ID field is 8 bytes, and is null-terminated.
+    // A value like 62410554 in decimal is 16333333322 in octal. This doesn't fit 8 bytes.
+    // The tar specification allows for 8 digits of octal or 12 digits of binary.
+    // If the value exceeds 8 octal digits, it should be treated as binary.
+    // The `parseOctalOrBinary` method is called.
+    // The error happens in `parseOctal`.
+    // Let's try to create a header where the user ID field contains a number
+    // that *looks* like it could be octal but causes an issue.
+    // The bug description implies the string "62410554" is problematic.
+    // Let's put this string into the user ID field.
+    // The user ID field starts at offset 108 and is 8 bytes long.
+    // We need to make sure it's null-terminated.
+    Arrays.fill(header, (byte) ' '); // Fill with spaces first, as per tar spec padding
+    // Set the entry name to something simple
+    String name = "testfile";
+    System.arraycopy(name.getBytes(StandardCharsets.US_ASCII), 0, header, 0, name.length());
+    // Set mode (e.g., 0644)
+    TarUtils.putLongToTarHeader(0644L, header, 100, 8);
+    // Set user ID. Let's put the problematic string "62410554" here.
+    // This string is 8 characters long. It will fill the field.
+    // It should be null-terminated, but if it's exactly 8 chars, it won't be.
+    // Let's see if the parser handles a non-null-terminated 8-char string.
+    // The error message implies it's trying to parse "62410554" and failing at byte 52 ('4').
+    // This means the parser is reading the whole 8 bytes.
+    System.arraycopy("62410554".getBytes(StandardCharsets.US_ASCII), 0, header, 108, 8);
+    // Set file size
+    TarUtils.putLongToTarHeader(100L, header, 124, 12);
+    // Set modification time
+    TarUtils.putLongToTarHeader(System.currentTimeMillis() / 1000, header, 136, 12);
+    // Set file type (regular file)
+    header[156] = (byte) '0';
+    // Set magic number and version
+    System.arraycopy("ustar".getBytes(StandardCharsets.US_ASCII), 0, header, 257, 5);
+    header[262] = (byte) '0';
+    // Set group name
+    // Set user name
+    // Set checksum (can be dummy for this test)
+    TarUtils.putLongToTarHeader(1, header, 148, 8); // Dummy checksum
+
+    // Create a ByteArrayInputStream from the header
+    ByteArrayInputStream bais = new ByteArrayInputStream(header);
+    // Wrap it in a TarArchiveInputStream
+    TarArchiveInputStream tais = new TarArchiveInputStream(bais);
+
+    // Try to read the next entry. This is where the exception should occur.
+    try {
+        TarArchiveEntry entry = tais.getNextTarEntry();
+        fail("Expected IllegalArgumentException for invalid user ID");
+    } catch (IllegalArgumentException e) {
+        // Check if the exception message is related to the parsing error
+        assertTrue(e.getMessage().contains("Invalid byte") || e.getMessage().contains("Invalid octal"));
+    } finally {
+        // Close the stream
+        if (tais != null) {
+            try {
+                tais.close();
+            } catch (IOException e) {
+                // Ignore
+            }
+        }
+        if (bais != null) {
+            try {
+                bais.close();
+            } catch (IOException e) {
+                // Ignore
+            }
+        }
+    }
+}

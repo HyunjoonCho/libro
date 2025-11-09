@@ -1,0 +1,85 @@
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectMapper.DefaultTyping;
+import com.fasterxml.jackson.databind.module.SimpleKeyDeserializers;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import java.io.IOException;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class TestJacksonFails {
+
+    private static final String TEST_INSTANCE_SERIALIZED = "{\"mapProperty\":[\"java.util.HashMap\",{\"Compound|Key\":\"Value\"}]}";
+
+    @Test
+    public void testFailsWhenKeyDeserializerIsNotExplicitlyRegistered() throws JsonParseException, JsonMappingException, IOException {
+        ObjectMapper mapper = new ObjectMapper().enableDefaultTyping(DefaultTyping.NON_FINAL);
+        // This readValue will fail because the key deserializer for CompoundKey is not found
+        // when DefaultTyping is enabled and the key deserializer is specified only via @JsonDeserialize
+        mapper.readValue(TEST_INSTANCE_SERIALIZED, TestClass.class);
+    }
+
+    // The following are helper classes copied from the original bug report to make the test self-contained.
+    // In a real scenario, these would be part of the actual application code.
+
+    @com.fasterxml.jackson.annotation.JsonAutoDetect(fieldVisibility = com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility.ANY)
+    public static final class TestClass {
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(keyUsing = CompoundKeySerializer.class)
+        @com.fasterxml.jackson.annotation.JsonProperty("mapProperty")
+        private final java.util.Map<CompoundKey, String> mapProperty;
+
+        @com.fasterxml.jackson.annotation.JsonCreator
+        private TestClass(@com.fasterxml.jackson.databind.annotation.JsonDeserialize(keyUsing = CompoundKeyDeserializer.class) @com.fasterxml.jackson.annotation.JsonProperty("mapProperty") java.util.Map<CompoundKey, String> mapProperty) {
+            this.mapProperty = mapProperty;
+        }
+    }
+
+    public static final class CompoundKey {
+        private String part0;
+        private String part1;
+
+        public CompoundKey(String part0, String part1) {
+            this.part0 = part0;
+            this.part1 = part1;
+        }
+
+        public String getPart0() { return part0; }
+        public String getPart1() { return part1; }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CompoundKey that = (CompoundKey) o;
+            if (part0 != null ? !part0.equals(that.part0) : that.part0 != null) return false;
+            return part1 != null ? part1.equals(that.part1) : that.part1 == null;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = part0 != null ? part0.hashCode() : 0;
+            result = 31 * result + (part1 != null ? part1.hashCode() : 0);
+            return result;
+        }
+    }
+
+    public static class CompoundKeyDeserializer extends com.fasterxml.jackson.databind.KeyDeserializer {
+        @Override
+        public Object deserializeKey(String s, com.fasterxml.jackson.databind.DeserializationContext deserializationContext) throws IOException {
+            String[] parts = s.split("\\|");
+            if (parts.length != 2) {
+                throw new IOException("Invalid CompoundKey format: " + s);
+            }
+            return new CompoundKey(parts[0], parts[1]);
+        }
+    }
+
+    public static class CompoundKeySerializer extends com.fasterxml.jackson.databind.JsonSerializer<CompoundKey> {
+        @Override
+        public void serialize(CompoundKey compoundKey, com.fasterxml.jackson.core.JsonGenerator jsonGenerator, com.fasterxml.jackson.databind.SerializerProvider serializerProvider) throws IOException {
+            jsonGenerator.writeFieldName(compoundKey.getPart0() + '|' + compoundKey.getPart1());
+        }
+    }
+}

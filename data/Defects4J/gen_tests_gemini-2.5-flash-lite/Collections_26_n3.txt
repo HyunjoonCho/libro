@@ -1,0 +1,34 @@
+public void testMultiKeyDeserializationWithSubclass() throws IOException, ClassNotFoundException {
+    class MultiKeySubclass<A, B> extends MultiKey {
+        private static final long serialVersionUID = 1L;
+
+        public MultiKeySubclass(A key1, B key2) {
+            super(key1, key2);
+        }
+
+        // This subclass is only for testing the deserialization issue with a private readResolve
+        // In a real scenario, you might add more methods or fields.
+    }
+
+    MultiKeySubclass<String, String> original = new MultiKeySubclass<>("testKey1", "testKey2");
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    ObjectOutputStream oos = new ObjectOutputStream(baos);
+    oos.writeObject(original);
+    oos.close();
+
+    ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+    ObjectInputStream ois = new ObjectInputStream(bais);
+    MultiKeySubclass<String, String> deserialized = (MultiKeySubclass<String, String>) ois.readObject();
+    ois.close();
+
+    // The assertion here is that the deserialized object is not null and its internal state (like keys) is correct.
+    // The original bug was that deserialization would fail or result in an object with an incorrect hashCode
+    // due to the private readResolve not being accessible.
+    // If the test passes without exception and the keys are equal, it implies readResolve (whether private or protected)
+    // was either bypassed or handled correctly by the Java deserialization mechanism in this specific context,
+    // or that the fix (making readResolve protected) has been applied to the MultiKey class itself.
+    // The crucial part is to ensure deserialization works for subclasses.
+    assertNotNull(deserialized);
+    assertEquals(original.getKeys(), deserialized.getKeys());
+    assertEquals(original.hashCode(), deserialized.hashCode()); // This would fail if readResolve was not working as expected for subclasses.
+}

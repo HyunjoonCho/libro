@@ -1,0 +1,362 @@
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class ExternalPropertyEnumTest {
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "kind")
+    @JsonSubTypes({
+            @JsonSubTypes.Type(value = Contact.class, name = "CONTACT")
+    })
+    interface BaseData {
+    }
+
+    enum Invite {
+        CONTACT
+    }
+
+    static class Contact implements BaseData {
+        public String name;
+        public Invite to;
+
+        // Needed for deserialization
+        public Contact() {
+        }
+
+        public Contact(String name, Invite to) {
+            this.name = name;
+            this.to = to;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Contact contact = (Contact) o;
+            if (name != null ? !name.equals(contact.name) : contact.name != null) return false;
+            return to == contact.to;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = name != null ? name.hashCode() : 0;
+            result = 31 * result + (to != null ? to.hashCode() : 0);
+            return result;
+        }
+    }
+
+    @Test
+    public void testExternalPropertyEnumDeserialization() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\n" +
+                "  \"kind\": \"CONTACT\",\n" +
+                "  \"to\": {\n" +
+                "    \"name\": \"Foo\"\n" +
+                "  }\n" +
+                "}";
+
+        // This part is tricky. The original code uses a structure where the 'to' field
+        // is supposed to be deserialized as a Contact object, which then contains the enum.
+        // However, the bug report implies the 'to' field itself should be deserialized directly
+        // into the Enum type based on the 'kind' property.
+        // The test below attempts to reproduce the error by directly deserializing into
+        // a structure that expects the enum where the Contact object was.
+        // If the intention was for 'to' to be an object containing the enum, the original
+        // structure might be correct, and the issue lies elsewhere.
+
+        // Let's try to reproduce the error as described: expecting the enum to be deserialized directly.
+        // For this, we need a wrapper class that directly holds the enum, and the JSON
+        // should reflect that the enum value is determined by the 'kind' property.
+
+        // To truly match the error "Can not construct instance of enum.Invite, problem: argument type mismatch"
+        // when the property is 'to', we need a class where 'to' is the enum.
+        // The provided JSON doesn't directly map to this scenario.
+        // The most direct interpretation of the error is that Jackson is trying to
+        // instantiate the Enum 'Invite' using a constructor or factory method that
+        // expects a different type, likely because it's trying to use the 'to' object
+        // as input for the enum deserialization.
+
+        // Let's define a class that directly maps to the JSON structure and expects 'to' as an Enum.
+        // This requires adjusting the JSON slightly or the class definition.
+        // The bug report's JSON has "to": { "name": "Foo" }. This implies 'to' is an object, not an enum.
+        // The error message "Can not construct instance of enum.Invite" suggests Jackson *tried* to deserialize
+        // something into Invite. This likely happens when 'to' is declared as Invite in the target class.
+
+        // Let's create a target class where 'to' is an Invite enum, and simulate the JSON
+        // that would cause the error IF the polymorphic type handling was misapplied to the enum.
+
+        // Based on the description and the error, the issue might be that Jackson,
+        // when seeing EXTERNAL_PROPERTY on a field that's an Enum, gets confused.
+        // The example JSON provided in the bug:
+        // {
+        //  "kind": "CONTACT",
+        //  "to": {
+        //    "name": "Foo"
+        //  }
+        // }
+        // This JSON structure implies 'to' is an object. The error message implies Jackson tried to deserialize
+        // 'to' into an enum. This mismatch is key.
+
+        // Let's assume the intent was for the 'to' field to *be* the enum, and the JSON was perhaps
+        // simplified or incorrectly represented in the bug description for the purpose of showing the error.
+        // A JSON that *would* cause the error if 'to' was an enum and polymorphic handling was attempted:
+        // {
+        //   "kind": "CONTACT",
+        //   "to": "CONTACT" // This is what Jackson would expect for an enum
+        // }
+        // If the JSON was like this, and the class had `public Invite to;`, the error would make sense if
+        // Jackson tried to apply external property logic to the enum deserialization.
+
+        // The provided reproduction link has this structure:
+        // data class Data(@property:JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "kind") val baseData: BaseData)
+        // interface BaseData
+        // data class Contact(val name: String, val to: Invite) : BaseData
+        // enum class Invite { CONTACT }
+        // JSON: { "kind": "CONTACT", "to": { "name": "Foo" } }
+        // This JSON is inconsistent with the classes. The JSON says 'kind' is "CONTACT", which should map to Contact.
+        // But then inside 'to', it has an object with "name": "Foo". This 'to' field in the JSON is not an enum value.
+        // The error message "argument type mismatch" happens when Jackson tries to deserialize the JSON's "to": { "name": "Foo" }
+        // into the `Invite` enum.
+
+        // The test should reflect the actual JSON and the classes that *would* be used.
+        // The bug is that Jackson tries to use the external property logic (which is for polymorphic *types*)
+        // on an enum field, leading to a type mismatch when it encounters the JSON structure for 'to'.
+
+        // Let's test the deserialization of the provided JSON with the structure that aims to reproduce the error.
+        // The key is that the `to` field in the JSON is an object, but the target class expects an enum.
+        // The polymorphic handling on `BaseData` is relevant because it dictates how `kind` is interpreted.
+        // When `kind` is "CONTACT", Jackson expects a `Contact` object.
+        // Inside `Contact`, the `to` field is an `Invite` enum.
+        // The JSON provides `to: { "name": "Foo" }`. This object cannot be deserialized into the `Invite` enum.
+
+        // Let's create a minimal structure that triggers the error.
+        // We need a class with an enum field and a JSON that tries to deserialize an object into it.
+        // The "external property" part might be a red herring or a specific scenario where this occurs.
+        // The core issue seems to be deserializing a JSON object into an enum field.
+
+        // Let's simplify to the core problem: deserializing an object into an enum field.
+        // The external property context seems to exacerbate it.
+
+        // Based on the provided repository, the issue is with this specific JSON and class structure:
+        // JSON: { "kind": "CONTACT", "to": { "name": "Foo" } }
+        // Class: Contact(name: String, to: Invite)
+
+        // Let's simulate this scenario.
+        // We need a structure where 'kind' determines the outer type, and within that type,
+        // a field is an enum, but the JSON provides an object for that enum field.
+
+        // Create a wrapper class that uses external property for the polymorphic type
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "kind")
+        @JsonSubTypes({
+                @JsonSubTypes.Type(value = DataContainer.class, name = "CONTACT")
+        })
+        interface PolymorphicWrapper {}
+
+        static class DataContainer implements PolymorphicWrapper {
+            public InnerData to; // This field should be an Enum, but JSON provides an object.
+            // The bug report implies that Jackson tries to deserialize the *object* into the *enum*.
+        }
+
+        // Define the enum
+        enum MyEnum {
+            CONTACT_VALUE // Using a different name to avoid confusion with the JSON value "CONTACT"
+        }
+
+        // Let's adjust the JSON to match the structure described in the bug report's linked repo.
+        // The repo's JSON is: { "kind": "CONTACT", "to": { "name": "Foo" } }
+        // The repo's class is: data class Contact(val name: String, val to: Invite) : BaseData
+        // Where `BaseData` is the polymorphic type identified by `kind`.
+        // The `Invite` enum is defined as `enum class Invite { CONTACT }`.
+
+        // So, the JSON `to: { "name": "Foo" }` is being deserialized into the `Invite` enum.
+        // This is the mismatch.
+
+        // Let's define classes that match this description for the test.
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "kind")
+        @JsonSubTypes({
+                @JsonSubTypes.Type(value = BuggyContact.class, name = "CONTACT")
+        })
+        interface BuggyBaseData {}
+
+        enum BuggyInvite {
+            CONTACT // Matches the JSON value "CONTACT"
+        }
+
+        static class BuggyContact implements BuggyBaseData {
+            public String name;
+            public BuggyInvite to; // This is where the object { "name": "Foo" } will be deserialized into.
+
+            // Default constructor needed for deserialization
+            public BuggyContact() {}
+
+            public BuggyContact(String name, BuggyInvite to) {
+                this.name = name;
+                this.to = to;
+            }
+        }
+
+        // The JSON that causes the error according to the bug report and linked repo.
+        String buggyJson = "{\n" +
+                           "  \"kind\": \"CONTACT\",\n" +
+                           "  \"to\": {\n" +
+                           "    \"name\": \"Foo\"\n" +
+                           "  }\n" +
+                           "}";
+
+        // Use an ObjectMapper. Since the bug is related to Jackson module for Kotlin,
+        // we might need to configure the ObjectMapper if we were using Kotlin classes directly.
+        // However, the error is a core Jackson deserialization error, so a standard ObjectMapper should suffice
+        // to demonstrate the failure.
+
+        ObjectMapper buggyMapper = new ObjectMapper();
+
+        // The assertion is that this deserialization *fails* with the specific exception.
+        // We can't directly assert an exception type without running the code.
+        // The goal of the test method is to *reproduce* the failure.
+        // So, the test will simply attempt the deserialization. If it throws the expected exception,
+        // the test fails as intended (because the bug is present). If it succeeds, the test passes,
+        // indicating the bug is fixed.
+
+        // To make it a valid JUnit test that *shows* the failure, we can wrap the call in an assertThrows.
+        // However, the prompt asks to *reproduce the failure behavior*, which implies the code *should* fail.
+        // A simple call that is expected to throw is sufficient for reproduction.
+
+        // Let's try deserializing into a wrapper class that holds the polymorphic type.
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "kind")
+        @JsonSubTypes({
+                @JsonSubTypes.Type(value = DataHolder.class, name = "CONTACT")
+        })
+        interface DataWrapper {}
+
+        static class DataHolder implements DataWrapper {
+            public ContactDetails details; // This is what the JSON provides for 'to'
+        }
+
+        static class ContactDetails { // This class represents the object found in the JSON for 'to'
+            public String name;
+        }
+
+        // The bug description implies that Jackson tries to deserialize the *object* found in the JSON
+        // for the 'to' field into the *enum* `Invite`. This happens when `to` is declared as an enum.
+
+        // Let's create a class that directly uses the enum for the 'to' field and see if it fails.
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "kind")
+        @JsonSubTypes({
+                @JsonSubTypes.Type(value = ContactWithEnum.class, name = "CONTACT")
+        })
+        interface PolymorphicContactWrapper {}
+
+        static class ContactWithEnum implements PolymorphicContactWrapper {
+            public String name;
+            public BuggyInvite to; // This field is an enum.
+
+            // Default constructor
+            public ContactWithEnum() {}
+
+            public ContactWithEnum(String name, BuggyInvite to) {
+                this.name = name;
+                this.to = to;
+            }
+        }
+
+        // The JSON that causes the problem:
+        String jsonCausingEnumMismatch = "{\n" +
+                                         "  \"kind\": \"CONTACT\",\n" +
+                                         "  \"to\": {\n" +
+                                         "    \"name\": \"Foo\"\n" +
+                                         "  }\n" +
+                                         "}";
+
+        // Attempt deserialization. This line is expected to throw JsonMappingException.
+        // We don't need to assert the specific exception type here, as the purpose is to
+        // reproduce the failure behavior. If this line executes without error, the test passes,
+        // indicating the bug is fixed. If it throws the exception, the test fails, showing the bug.
+
+        // To make this a proper JUnit test that *fails* when the bug is present,
+        // we can use assertThrows and expect the exception.
+        // However, the prompt asks to "reproduce the failure behavior", which means the code itself
+        // should exhibit the failure when run.
+
+        // The most straightforward way to reproduce the failure is to simply call the deserialization code
+        // that is known to fail. If the test runner executes this method and the exception is thrown,
+        // the test run will indicate a failure.
+
+        // Let's use the structure from the linked repo more closely.
+        // The JSON provided is { "kind": "CONTACT", "to": { "name": "Foo" } }
+        // The structure that expects this JSON is:
+        // data class Data(val baseData: BaseData)
+        // interface BaseData
+        // data class Contact(val name: String, val to: Invite) : BaseData
+        // enum class Invite { CONTACT }
+
+        // Replicating this in Java:
+
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "kind")
+        @JsonSubTypes({
+                @JsonSubTypes.Type(value = ActualContact.class, name = "CONTACT")
+        })
+        interface ActualBaseData {}
+
+        enum ActualInvite {
+            CONTACT
+        }
+
+        static class ActualContact implements ActualBaseData {
+            public String name;
+            public ActualInvite to; // This field is an enum.
+
+            // Default constructor
+            public ActualContact() {}
+
+            public ActualContact(String name, ActualInvite to) {
+                this.name = name;
+                this.to = to;
+            }
+        }
+
+        // Wrapper class to hold the polymorphic type
+        static class OuterData {
+            @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "kind")
+            @JsonSubTypes({
+                    @JsonSubTypes.Type(value = ActualContact.class, name = "CONTACT")
+            })
+            public ActualBaseData baseData;
+
+            // Default constructor
+            public OuterData() {}
+
+            public OuterData(ActualBaseData baseData) {
+                this.baseData = baseData;
+            }
+        }
+
+        String json reproducer = "{\n" +
+                                "  \"kind\": \"CONTACT\",\n" +
+                                "  \"to\": {\n" +
+                                "    \"name\": \"Foo\"\n" +
+                                "  }\n" +
+                                "}";
+
+        ObjectMapper reproducerMapper = new ObjectMapper();
+
+        // This line is the core of the reproduction. It's expected to throw JsonMappingException.
+        // The test method itself doesn't need an explicit assertion for failure;
+        // the fact that this line throws an exception during test execution signifies the bug.
+        reproducerMapper.readValue(json reproducer, OuterData.class);
+
+        // If the above line executes without throwing an exception, the test passes, meaning the bug is fixed.
+        // If it throws the exception, the test fails, indicating the bug is still present.
+        // Therefore, no explicit assertion is needed here to *fail* the test.
+        // The goal is to *trigger* the failure condition.
+
+        // To make it a test that *asserts* the failure, we would do:
+        // assertThrows(JsonMappingException.class, () -> {
+        //     reproducerMapper.readValue(json reproducer, OuterData.class);
+        // });
+        // But the prompt asks to reproduce the behavior, implying the code *itself* should fail.
+
+        // Let's stick to the simplest reproduction: the line that fails.
+    }
+}

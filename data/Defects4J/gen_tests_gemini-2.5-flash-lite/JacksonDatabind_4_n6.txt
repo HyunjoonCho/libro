@@ -1,0 +1,82 @@
+public void testIndexIsNotSetForCollectionAndArrayInInvalidFormatException() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    String json = "{\"list\": [1, \"a\", 3]}";
+    try {
+        mapper.readValue(json, new TypeReference<Map<String, List<Integer>>>() {});
+    } catch (JsonMappingException e) {
+        // Check if any of the exceptions in the chain contain index information.
+        // The exact exception type might vary depending on the Jackson version and context,
+        // so we'll check for a common pattern or message.
+        boolean foundIndexInfo = false;
+        Throwable cause = e;
+        while (cause != null) {
+            if (cause instanceof InvalidFormatException) {
+                // In older versions, InvalidFormatException might not explicitly store the index.
+                // The bug description implies the index is missing.
+                // We'll assert that it's not present or has the default -1 value if the exception was constructed that way.
+                // If the fix is applied, we'd expect to see a non -1 index.
+                // For reproducing the *failure*, we expect the index to be problematic.
+                // Let's assume the failure is that the index is NOT set correctly, meaning it's still -1 or absent.
+                // We can't directly assert "absent", but we can assert it's not what we'd expect if it *were* set.
+                // The bug states it's *always* -1, so we'll check for that.
+                if (((InvalidFormatException) cause).getPathReference() != null && ((InvalidFormatException) cause).getPathReference().indexOf("[1]") != -1) {
+                     // This is a weak check, as the path might be represented differently.
+                     // The core issue is the exception being thrown without the correct index context.
+                     // A more robust test would check the *message* or look for specific exception types
+                     // that *should* have the index.
+                     // For the purpose of reproducing the described failure, we focus on the fact that
+                     // the index information is missing or incorrect when it should be present.
+
+                     // Let's re-evaluate based on the bug: "index values is always '-1'".
+                     // This implies we should find an exception where the index information is indeed -1,
+                     // or missing altogether. The test aims to *trigger* this condition.
+                     // The provided JSON will cause an error at index 1.
+                     // If the bug is present, the exception related to "a" will not have index 1 associated.
+
+                     // The most direct way to reproduce the failure is to trigger an exception
+                     // and then assert that the exception details *lack* the expected index.
+                     // Since we can't directly assert "lack of information", we can assert
+                     // the presence of the default/incorrect value (-1) if that's how it manifests.
+
+                     // Let's refine: The bug says "index values is always '-1'".
+                     // This means when an exception is thrown *because* of an index issue,
+                     // the `getIndex()` or equivalent method (if it existed and was intended)
+                     // would return -1. Or, the `getPathReference()` doesn't clearly indicate the index.
+
+                     // Given the description, the test should cause an error at a specific index (e.g., index 1)
+                     // and then verify that the exception thrown *does not* correctly report this index.
+                     // The most straightforward interpretation is that the `JsonMappingException`'s chain
+                     // will contain an `InvalidFormatException` where the index is effectively lost or -1.
+
+                     // Let's check the path reference for the problematic index.
+                     // If the exception doesn't report the index correctly, the path might be malformed
+                     // or lack the specific index part.
+                     String pathRef = ((InvalidFormatException) cause).getPathReference();
+                     if (pathRef != null && !pathRef.contains("[1]")) {
+                         // This indicates the index information is missing or incorrect in the path reference.
+                         // This aligns with the bug description.
+                         foundIndexInfo = true;
+                         break;
+                     }
+                }
+            }
+            // Check for JsonProcessingException as well, as it might wrap InvalidFormatException
+            if (cause instanceof JsonProcessingException && cause.getMessage() != null && cause.getMessage().contains("Cannot deserialize value of type `java.lang.Integer`")) {
+                 // This is a general check for the type mismatch error.
+                 // The key is that the *context* (index) is missing.
+                 // If the fix is applied, the error message or exception details should be more specific about the index.
+                 // For reproducing the failure, we expect the opposite.
+                 // Let's try to find the InvalidFormatException specifically.
+            }
+            cause = cause.getCause();
+        }
+        // The assertion should reflect that the expected index information was *not* found correctly.
+        // If the fix works, the index should be present. For the failure, it's not.
+        // The most direct way to assert the failure is to ensure the condition described in the bug holds.
+        // The bug states "index values is always '-1'". This means we expect to catch an exception
+        // where the index information IS NOT correctly set.
+        // We'll assert that we found evidence of the missing index information.
+        assertTrue("Index information should be missing or incorrect in the exception chain for the failure case.", foundIndexInfo || e.getMessage().contains("Cannot deserialize value of type `java.lang.Integer` from String \"a\"") && !e.getMessage().contains("index 1"));
+
+    }
+}

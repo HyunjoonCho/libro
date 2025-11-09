@@ -1,0 +1,200 @@
+public void testBase64VariantIgnored() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    ObjectNode root = mapper.createObjectNode();
+    root.put("binary", "U29tZSBiaW5hcnkgZGF0YQ=="); // "Some binary data" encoded
+    
+    // Use a non-default Base64Variant (e.g., a URL-safe one)
+    Base64Variants urlSafeVariant = Base64Variants.URL_SAFE;
+    
+    // Mocking the TreeTraversingParser to force the usage of the specific variant
+    // In a real test, we'd likely need to mock the internal call or have a way to inject the variant.
+    // For demonstration, let's assume we can get the parser and check its behavior.
+    // The actual bug is that the parser *ignores* the provided variant.
+    
+    // Simulating the scenario where the parser is used and the variant is *not* applied correctly.
+    // The expected outcome is that the default Base64 variant is used, leading to incorrect decoding
+    // if the input string was encoded with a different variant.
+    
+    // Let's create a scenario where the default decoding would fail if the input was URL-safe.
+    // For example, if the input contained '-' or '_'.
+    // "SGVsbG8gV29ybGQ=" is "Hello World"
+    // "SGVsbG8gV29ybGQ_" is "Hello World" with URL-safe '_' instead of '+'
+    
+    String urlSafeEncoded = "SGVsbG8gV29ybGQ_"; // Base64 for "Hello World" using URL-safe variant
+    root.put("binary", urlSafeEncoded);
+    
+    JsonParser parser = mapper.treeAsTokens(root);
+    
+    // Advance to the binary field
+    parser.nextToken(); // START_OBJECT
+    parser.nextToken(); // FIELD_NAME "binary"
+    parser.nextToken(); // VALUE_STRING
+    
+    // The bug is that parser.getBinaryValue(urlSafeVariant) *should* use urlSafeVariant,
+    // but it uses the default one, which would fail for the '_' character.
+    // We can't directly assert the internal use of the variant without deeper mocking.
+    // However, we can assert that if the default variant is used, it will fail to decode
+    // a correctly URL-safe encoded string.
+    
+    try {
+        byte[] decodedBytes = parser.getBinaryValue(urlSafeVariant);
+        // If this line is reached without exception, and the decodedBytes are incorrect,
+        // it confirms the wrong variant was used.
+        // A more direct test would involve inspecting the TextNode's binaryValue() call.
+        
+        // If the default Base64 variant is used, and it doesn't support '_', this will throw.
+        // If the correct variant is used, this will succeed.
+        // The actual bug is that the default is used *even when a specific variant is passed*.
+        // So, if the input *requires* the specific variant (like using '_'), and the default doesn't handle it,
+        // the call to getBinaryValue() will fail.
+        
+        // Let's refine the assertion: if the default variant is used and it's the standard one,
+        // decoding a URL-safe string with '_' should fail.
+        // If the provided variant is used, it should succeed.
+        
+        // The critical part is that `n.binaryValue()` inside TreeTraversingParser uses the default.
+        // We need to simulate this.
+        
+        // Let's assume the bug means that `parser.getBinaryValue(urlSafeVariant)` internally
+        // calls `textNode.getBinaryValue()` without passing the variant, or using the default.
+        
+        // To truly test this, we'd need to mock TextNode.binaryValue() or have access to the internal node.
+        // Given the description, the issue is that the `Base64Variant` parameter is ignored.
+        // So, if we provide a variant that decodes a string successfully, but the default variant
+        // would fail on that *same* string, we can infer the bug.
+        
+        // Let's use a string that's valid in URL_SAFE but invalid in BASIC_DECODERS.
+        // Example: "SGVsbG8gV29ybGQ_" is "Hello World" in URL_SAFE.
+        // BASIC_DECODERS would likely fail on the '_'.
+        
+        // We cannot directly assert *which* variant was used internally without deeper mocking.
+        // The most we can do is assert the *outcome* when a specific variant is expected to work
+        // and the default variant might not.
+        
+        // If `getBinaryValue(urlSafeVariant)` correctly uses `urlSafeVariant`, it should decode.
+        // If it incorrectly uses a default variant that doesn't handle '_', it should throw.
+        
+        // The bug report states: "The call to n.binaryValue(), when n is a TextNode, then uses the default Base64 variant instead of what's specified."
+        // This implies that even though we pass `urlSafeVariant`, the underlying `TextNode` operation uses the default.
+        
+        // Therefore, if the input string *requires* `urlSafeVariant` (e.g., contains '_'),
+        // and the default variant *doesn't* support it, then `parser.getBinaryValue(urlSafeVariant)`
+        // should throw an exception because the default variant is used internally.
+        
+        // Let's try to decode a string that is valid in URL_SAFE but *not* in the default Basic variant.
+        // The character '_' is the key.
+        
+        String urlSafeInput = "aW5wdXQgd2l0aCBfdGhhbiBib28="; // "input with _ than boo"
+        root.put("binary", urlSafeInput);
+        parser = mapper.treeAsTokens(root);
+        parser.nextToken(); parser.nextToken(); parser.nextToken(); // Move to the string value
+        
+        // If the default variant is used (which doesn't handle '_'), this should throw.
+        // If the urlSafeVariant is used correctly, it should succeed.
+        try {
+            byte[] result = parser.getBinaryValue(urlSafeVariant);
+            // If we reach here, it means the decoding succeeded.
+            // This *could* mean the bug is fixed, or the default variant *also* handles '_',
+            // which is unlikely for standard Base64.
+            // Let's assert the content to be sure.
+            assertEquals("input with _ than boo", new String(result, StandardCharsets.UTF_8));
+            
+            // This assertion implies the bug *might* be fixed or the default handles it.
+            // The original bug report implies the default variant is used *regardless* of input.
+            // A more robust test would involve mocking or inspecting the internal calls.
+            
+            // Let's consider the scenario where the default variant *does not* handle '_'.
+            // If we provide an input with '_', and `getBinaryValue` uses the default, it should fail.
+            
+            // The description is: "The call to n.binaryValue(), when n is a TextNode, then uses the default Base64 variant instead of what's specified."
+            // This means that even if we call `parser.getBinaryValue(someVariant)`, internally it's like calling `textNode.binaryValue()`
+            // which uses the default.
+            
+            // To reproduce the failure, we need an input that is valid for `urlSafeVariant` but invalid for `Base64Variants.getDefaultVariant()`.
+            // The '_' character is a good candidate.
+            
+            // Let's assume `Base64Variants.getDefaultVariant()` is `Base64Variants.BASIC_DECODERS`.
+            // `BASIC_DECODERS` does not handle '_' and expects '+'.
+            // `URL_SAFE` handles '_' and expects '-'.
+            
+            // So, if we pass "aW5wdXQgd2l0aCBfdGhhbiBib28=", which contains '_',
+            // and `getBinaryValue` uses `BASIC_DECODERS`, it should throw an `IllegalArgumentException`.
+            // If it uses `URL_SAFE`, it should succeed.
+            
+            // The bug is that it uses `BASIC_DECODERS` even when `URL_SAFE` is passed.
+            // So, the call `parser.getBinaryValue(urlSafeVariant)` should throw `IllegalArgumentException`.
+            
+            // Let's revert the assertion to expect the exception.
+            fail("Expected IllegalArgumentException because default Base64 variant does not handle URL-safe characters like '_'");
+            
+        } catch (IllegalArgumentException e) {
+            // This is the expected behavior if the default variant is used and it doesn't support the character.
+            // This confirms the bug: the provided variant was ignored.
+            assertTrue(e.getMessage().contains("Illegal base64 character") || e.getMessage().contains("Invalid base64 data"));
+        }
+        
+    } catch (IOException e) {
+        // Handle other potential IO errors
+        throw e;
+    }
+    
+    // Final attempt to capture the essence of the bug:
+    // The `TreeTraversingParser` accepts a `Base64Variant` but ignores it when calling `TextNode.binaryValue()`.
+    // This means `TextNode.binaryValue()` is called with the default `Base64Variant`.
+    // To reproduce the failure, we need to provide input that is valid for a specific `Base64Variant` (e.g., URL_SAFE)
+    // but invalid for the default `Base64Variant` (e.g., BASIC_DECODERS).
+    // The character '_' is used in URL_SAFE but is typically invalid in BASIC_DECODERS.
+    
+    String urlSafeEncodedString = "aW5wdXQgd2l0aCBfdGhhbiBib28="; // "input with _ than boo" encoded with URL_SAFE
+    
+    ObjectMapper mapperForTest = new ObjectMapper();
+    ObjectNode nodeForTest = mapperForTest.createObjectNode();
+    nodeForTest.put("data", urlSafeEncodedString);
+    
+    JsonParser parserForTest = mapperForTest.treeAsTokens(nodeForTest);
+    
+    // Advance to the string value
+    parserForTest.nextToken(); // START_OBJECT
+    parserForTest.nextToken(); // FIELD_NAME "data"
+    parserForTest.nextToken(); // VALUE_STRING
+    
+    Base64Variants specificVariant = Base64Variants.URL_SAFE;
+    
+    // The bug is that parserForTest.getBinaryValue(specificVariant) should use specificVariant,
+    // but it ends up using the default variant internally.
+    // If the default variant cannot decode the string (because it contains '_'), an exception should be thrown.
+    
+    try {
+        // This call *should* succeed if `specificVariant` is used correctly.
+        // But due to the bug, it uses the default variant, which fails.
+        byte[] decoded = parserForTest.getBinaryValue(specificVariant);
+        
+        // If we reach here, it means the decoding succeeded. This contradicts the bug description
+        // if the default variant was indeed used and couldn't handle '_'.
+        // This suggests either the default variant *can* handle '_', or the bug is fixed,
+        // or the test setup isn't correctly triggering the buggy path.
+        
+        // Let's assert the decoded content to be absolutely sure.
+        assertEquals("input with _ than boo", new String(decoded, StandardCharsets.UTF_8));
+        
+        // If the above assertion passes, it implies that the default Base64 decoder used internally
+        // *also* handles the '_' character or the bug is fixed.
+        // The original bug report implies a failure should occur.
+        
+        // To *force* a failure reproduction, we need a scenario where the default variant *definitely* fails.
+        // This might require knowing the exact default variant used by Jackson at that version.
+        // Assuming it's the standard RFC 4648 Basic Base64, it does not support '_'.
+        
+        // Let's try to assert that an exception *is* thrown.
+        fail("Expected an exception because the default Base64 variant was used instead of the specified URL_SAFE variant, and the input contains a URL-safe character ('_').");
+        
+    } catch (IllegalArgumentException e) {
+        // This is the expected outcome if the default Base64 variant (e.g., BASIC_DECODERS)
+        // is used and it encounters an illegal character like '_'.
+        // The message should indicate an illegal character.
+        assertTrue(e.getMessage().contains("Illegal base64 character") || e.getMessage().contains("Invalid base64 data"));
+        // Successfully reproduced the failure where the specified variant was ignored.
+    } catch (IOException e) {
+        throw e; // Re-throw other IOExceptions
+    }
+}

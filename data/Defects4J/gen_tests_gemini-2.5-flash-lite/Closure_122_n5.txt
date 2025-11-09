@@ -1,0 +1,47 @@
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testNonJsDocCommentHandling() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        // Set options to enable warnings, but not necessarily fail compilation on warnings
+        options.setWarningLevel(com.google.javascript.jscomp.CheckLevel.WARNING, com.google.javascript.jscomp.DiagnosticGroup.forPattern(".*"));
+        options.setPrettyPrint(true); // To ensure output is consistent
+
+        SourceFile input = SourceFile.fromCode("test.js", "/* @preserve Foo License */ alert('foo');");
+        SourceFile expectedOutput = SourceFile.fromCode("test.js", "alert('foo');");
+
+        // The original bug report describes a warning being printed.
+        // In a unit test, we typically assert the *result* of the compilation
+        // or check for specific diagnostic messages.
+        // The description implies the comment is *removed* despite being non-JSDoc.
+        // Let's assert that the comment is removed, as that's the observable behavior
+        // described as problematic.
+        com.google.javascript.jscomp.JSSourceCode[] result = compiler.compile(null, new SourceFile[]{input}, options);
+
+        // If the compiler successfully compiled (even with warnings), check the output code.
+        if (result.length > 0 && !compiler.hasHaltingErrors()) {
+            String compiledCode = result[0].getCode();
+            // The expected behavior based on the description is that the non-JSDoc comment
+            // with @preserve is stripped, which is incorrect.
+            // A correct implementation would either preserve it or warn more appropriately.
+            // The test here verifies the incorrect stripping.
+            assertEquals(expectedOutput.getCode().trim(), compiledCode.trim());
+        } else {
+            // If compilation failed or had halting errors, fail the test.
+            // This might happen if the warning is treated as an error in certain configurations.
+            fail("Compilation failed or had halting errors: " + compiler.getErrors());
+        }
+
+        // The bug report also mentions a specific warning message.
+        // It's harder to assert specific warning messages directly with the public API
+        // without more advanced diagnostic collection. However, the core issue is the
+        // comment removal. The warning itself is secondary to the incorrect code transformation.
+    }
+}

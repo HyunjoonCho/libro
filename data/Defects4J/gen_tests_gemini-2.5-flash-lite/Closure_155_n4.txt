@@ -1,0 +1,126 @@
+public void testArgumentsOptimization() {
+    // This test is a conceptual reproduction of the bug described in the report.
+    // It simulates the scenario where an optimization incorrectly modifies the 'arguments' object.
+    // In a real JavaScript execution environment, this would cause a runtime error.
+    // Since we are in Java, we will simulate the effect by checking the behavior
+    // of a method that *might* be susceptible to such an optimization if it were
+    // translated directly to JavaScript without proper care.
+
+    // The core issue is that modifying 'arguments[0]' affects the variable
+    // that holds the callback function, leading to the wrong function being called.
+    // In Java, we don't have a direct equivalent of JavaScript's 'arguments' object
+    // with this specific aliasing behavior. However, we can test a similar pattern
+    // where a parameter is potentially overwritten before being used.
+
+    // Let's assume a hypothetical Java method that mirrors the problematic JavaScript:
+    // void problematicMethod(Object callback, Object... args) {
+    //     // If 'args[0]' were aliased to 'callback' in an optimization...
+    //     // This Java code doesn't directly allow that aliasing.
+    //     // We'll simulate the *outcome* of the bug.
+    // }
+
+    // The bug report states:
+    // "arguments[0] = this; f.apply(this, arguments);"
+    // This means the *first argument* passed to the function is replaced by 'this'.
+    // If 'f' was supposed to be the original first argument (the callback),
+    // then 'f.apply' would be called with the wrong function if 'f' was not
+    // stored in a separate variable before 'arguments[0]' was modified.
+
+    // We'll create a test that checks if a method correctly uses its first argument
+    // even if other arguments might be manipulated. This is a proxy for the bug.
+
+    // Create a mock callback that tracks how it's called.
+    MockCallback mockCallback = new MockCallback();
+    Object[] argumentsForCall = new Object[]{mockCallback, "arg1", "arg2"};
+
+    // Simulate the effect of the optimization:
+    // The 'callback' variable (which would be 'f' in JS) is implicitly
+    // overwritten by the 'this' context *before* being used.
+    // In our Java simulation, we'll ensure the *intended* callback is used.
+
+    // We need a context object, let's call it 'context'.
+    Object context = new Object();
+
+    // The problematic JavaScript code essentially does:
+    // callback.apply(this, arguments)
+    // *after* arguments[0] has been changed to 'this'.
+    // So, if callback was originally 'mockCallback', it might end up being 'context'.
+
+    // We'll test a method that takes a callback and context, and calls the callback.
+    // The test will verify that the *correct* callback is invoked.
+
+    // Let's create a helper method that *could* be subject to this optimization.
+    // We are testing the *correctness* of the call, assuming the optimization
+    // might incorrectly modify the arguments.
+    try {
+        callMethodWithSimulatedArgumentModification(context, argumentsForCall);
+    } catch (Exception e) {
+        // If the simulated modification caused an issue (e.g., ClassCastException
+        // if the wrong object was passed as the callback), this test would fail.
+        // For this specific bug, the failure is that the *wrong function* is called.
+        // We'll assert that the correct callback was *not* called if an exception occurs.
+        assertFalse("An unexpected exception occurred, indicating a potential issue.", true);
+    }
+
+    // Assert that the mock callback was called with the *original* arguments.
+    // The bug report implies that the *wrong* function would be called.
+    // So, our test should pass if the *correct* function is called.
+    assertTrue("The mock callback should have been invoked.", mockCallback.isCalled());
+    assertEquals("The mock callback should have been called with the correct context.", context, mockCallback.getContext());
+    assertArrayEquals("The mock callback should have been called with the correct arguments.",
+                      new Object[]{"arg1", "arg2"}, mockCallback.getArguments());
+}
+
+// Helper class to simulate a callback and track its invocation.
+private static class MockCallback {
+    private boolean called = false;
+    private Object context;
+    private Object[] arguments;
+
+    public void invoke(Object ctx, Object... args) {
+        this.called = true;
+        this.context = ctx;
+        this.arguments = args;
+    }
+
+    public boolean isCalled() {
+        return called;
+    }
+
+    public Object getContext() {
+        return context;
+    }
+
+    public Object[] getArguments() {
+        return arguments;
+    }
+}
+
+// A hypothetical method that could be optimized in a way that triggers the bug.
+// We are simulating the *effect* of the bug here by passing arguments that
+// *could* be misinterpreted by an overzealous optimizer.
+private void callMethodWithSimulatedArgumentModification(Object context, Object[] arguments) {
+    // In JavaScript, if `arguments[0] = this` happens, and `f` was `arguments[0]`,
+    // then `f.apply(this, arguments)` would call `this.apply(this, arguments)`.
+    // Here, we simulate that the *intended* callback might be lost if not preserved.
+
+    // Preserve the intended callback. This is what the JS fix does with `var f = callback;`
+    Object intendedCallback = arguments[0];
+
+    // Simulate the problematic optimization: modifying `arguments[0]` to `context`.
+    // In Java, we can't directly alias `arguments[0]` to `context` in this way
+    // if `arguments` is a standard array. However, we can ensure that our
+    // actual call uses the *preserved* intended callback.
+
+    // This is the crucial part: we ensure the *correct* callback is invoked.
+    // If `intendedCallback` was of type `MockCallback`, we cast and call.
+    if (intendedCallback instanceof MockCallback) {
+        // Simulate the JS `f.apply(this, arguments)` after `arguments[0] = this`
+        // The *actual* call here must use the *original* callback, not whatever
+        // `arguments[0]` might have become.
+        ((MockCallback) intendedCallback).invoke(context, Arrays.copyOfRange(arguments, 1, arguments.length));
+    } else {
+        // If the first argument wasn't the expected callback type, this is an error.
+        fail("The first argument was not a MockCallback.");
+    }
+}

@@ -1,0 +1,579 @@
+public void testHelpFormatterWrap() {
+    HelpFormatter formatter = new HelpFormatter();
+    String longDescription = "This is a very long description that should definitely wrap multiple times to demonstrate the bug in the HelpFormatter.";
+    String expectedPrefix = "   "; // Default indentation for options
+    int width = 50;
+
+    // Construct the command line string with an option and its description
+    // The actual command line string is not directly used by findWrapPos,
+    // but it simulates the context where findWrapPos would be called.
+    // We'll focus on testing the wrapping logic of the description itself.
+    // We'll manually trigger the wrapping logic by creating a string that
+    // would normally be processed by the formatter.
+
+    // To isolate the bug in findWrapPos, we'll create a string that
+    // mimics the input to findWrapPos, including a starting position.
+    // The original bug report implies that the issue arises when startPos > 0.
+    // Let's simulate a scenario where the description is appended to some prefix.
+
+    StringBuilder commandLineBuilder = new StringBuilder();
+    commandLineBuilder.append("  --long-option");
+    commandLineBuilder.append(System.lineSeparator());
+    // The description is typically indented. Let's assume an indentation.
+    String indentedDescription = expectedPrefix + longDescription;
+    commandLineBuilder.append(indentedDescription);
+
+    // The findWrapPos method is called internally by HelpFormatter.formatHelp.
+    // To test findWrapPos directly, we need to simulate its usage.
+    // The bug is described as "every line beyond the first will be too long".
+    // This suggests that the logic for subsequent lines is flawed.
+    // Let's craft an input string and a starting position that would trigger
+    // the incorrect wrapping.
+
+    // The findWrapPos method is called to find the wrap position *within* a line
+    // starting from a given startPos. The issue is that the width calculation
+    // seems to be incorrect for subsequent lines, potentially by adding startPos
+    // where it shouldn't.
+
+    // Let's simulate a call to findWrapPos that would occur for the second line.
+    // The `text` passed to findWrapPos would be the `indentedDescription`.
+    // The `width` would be the `formatter.getWidth()`.
+    // The `startPos` would be the indentation level (e.g., 3 for "   ").
+
+    // The problematic lines in the provided findWrapPos are:
+    // pos = width; // This is the start of the search for the last whitespace
+    // ...
+    // pos = startPos + width; // This is the start of the search for the first whitespace after width
+
+    // The bug description suggests that `width + startPos` is used incorrectly.
+    // Let's test a case where `startPos` is non-zero and the description
+    // requires multiple wraps.
+
+    // We'll create a string that's longer than the width, and then call
+    // findWrapPos multiple times, simulating the internal loop of HelpFormatter.
+    // This is a bit of a reverse-engineering test, as we're testing a private helper.
+    // A better approach would be to test the public `format` method and assert
+    // the output string's line lengths. However, the bug report explicitly points
+    // to `findWrapPos`.
+
+    // Let's try to reproduce the symptom: lines beyond the first are too long.
+    // This means that the calculated wrap point is too far to the right.
+
+    // Create a long string that will definitely wrap.
+    String textToWrap = "This is a very very very very very very very very long description that will need to wrap multiple times.";
+    int defaultWidth = 30; // A small width to force wrapping
+    int defaultStartPos = 0; // Start from the beginning for the first line
+
+    // Simulate the first wrap
+    int wrap1 = formatter.findWrapPos(textToWrap, defaultWidth, defaultStartPos);
+    assertTrue("First wrap position should be found", wrap1 > 0);
+    assertTrue("First wrap position should be within width", wrap1 <= defaultWidth);
+
+    // Now, simulate the second line. The text for the second line starts
+    // after the first wrap position. The `startPos` for the *next* call
+    // to `findWrapPos` should be the `wrap1` position.
+    // However, the bug description says "every line beyond the first".
+    // This implies that the `startPos` is being used incorrectly in the
+    // calculation of the *end* of the line being considered for wrapping.
+
+    // Let's assume the `findWrapPos` is called with the *entire* string
+    // and the `startPos` indicates the beginning of the *current line*.
+    // The bug is that the `width` is being added to `startPos` when it
+    // shouldn't be, making the search for wrap points go too far.
+
+    // Let's craft an input string and `startPos` that *should* wrap at a specific point,
+    // but the buggy method will wrap much later.
+
+    // Example: "abcdefghijklmnopqrstuvwxyz", width=10, startPos=0
+    // Expected wrap: after 'j' (pos=10)
+    // Buggy behavior: might look up to width+startPos=10, then search forward.
+
+    // Consider a string where the last space before width+startPos is very far.
+    String testString = "This is a long sentence that needs to be wrapped correctly.";
+    int testWidth = 20;
+    int testStartPos = 0; // First line
+
+    // First wrap position
+    int firstWrap = formatter.findWrapPos(testString, testWidth, testStartPos);
+    // Expected: "This is a long sen" -> wrap at 19
+    assertTrue("First wrap position should be found", firstWrap > 0);
+    // The `findWrapPos` returns the position *after* the character to wrap on.
+    // So if it finds a space at index 18, it returns 19.
+    assertEquals("Expected first wrap position", 19, firstWrap);
+
+    // Now, consider the second line. The text for the second line starts at `firstWrap`.
+    // The `startPos` for the *next* call to `findWrapPos` should be `firstWrap`.
+    // The `width` is still `testWidth`.
+    // The buggy code uses `width + startPos` for searching.
+    // So, it would search up to `testWidth + firstWrap` = 20 + 19 = 39.
+    // The string length is 57.
+    // The last space before index 39 is at index 38 ('t' in "wrapped").
+    // The buggy code would return 39.
+    // The correct behavior would be to find the first space after index `firstWrap` (19),
+    // which is at index 38. So it should wrap at 39.
+
+    // Let's re-read the bug: "every line beyond the first line will be too long".
+    // This means the *output* line will be longer than `width`.
+    // The `findWrapPos` method returns the position where the line *should* break.
+    // If it returns a value > `width` (when `startPos` is 0), the line is too long.
+    // If `startPos > 0`, the `width` is relative to the *start of the text*, not the `startPos`.
+    // The bug is that the calculation `width + startPos` is used for searching,
+    // implying the search is extended beyond the intended line width.
+
+    // Let's try to trigger the `pos = startPos + width;` part of the code.
+    // This happens when no whitespace is found before `width`.
+    String shortSentence = "Short.";
+    int shortWidth = 10;
+    int shortStartPos = 0;
+    int wrapShort = formatter.findWrapPos(shortSentence, shortWidth, shortStartPos);
+    // Expected: -1 (no wrap needed within width)
+    assertEquals("Short sentence should not wrap", -1, wrapShort);
+
+    // Now, let's test the case where `startPos` is not 0, and the line needs to wrap.
+    // The `HelpFormatter` usually calls `findWrapPos` with the `startPos` being the
+    // indentation level of the option description.
+    String description = "This is a fairly long description that will require wrapping.";
+    int descriptionWidth = 40;
+    int descriptionStartPos = 3; // Mimicking indentation
+
+    // The text being processed by findWrapPos is the `description`.
+    // The `width` is the target line width *from the start of the line*.
+    // The `startPos` is the position *within the text* where the current line starts.
+
+    // Buggy behavior: The code searches for whitespace up to `width + startPos`.
+    // In this case: 40 + 3 = 43.
+    // The string length is 62.
+    // The last space before index 43 is at index 42 ('t' in "wrapping").
+    // The code then searches forward from `startPos + width` (43).
+    // The first space after index 43 is at index 43 itself (space after "wrapping").
+    // So, it would return 43.
+    // The line would then be `description.substring(descriptionStartPos, 43)`,
+    // which is `   This is a fairly long description that will wrap`.
+    // The length of this substring *from the start of the text* is 43.
+    // However, the *displayed* line length, considering the `startPos`,
+    // would be `43 - descriptionStartPos = 40`. This looks correct.
+
+    // Let's re-read the bug report again: "causes it to format every line beyond the first line by 'startPos' to many characters, beyond the specified width."
+    // This implies the *rendered* line length exceeds `width`.
+
+    // Let's try to make the description long enough so that the wrap point found
+    // using `startPos + width` is significantly beyond the actual `width` when
+    // considering the `startPos`.
+
+    String longText = "This is an extremely long description that will definitely need to wrap multiple times to test the bug.";
+    int testWidth2 = 30;
+    int testStartPos2 = 5; // Indentation
+
+    // If `findWrapPos` uses `width + startPos` incorrectly, it will search too far.
+    // Let's assume the `findWrapPos` is called on the *entire* text, and `startPos`
+    // indicates where the current line *begins*.
+
+    // The `findWrapPos` method is supposed to find the best place to break `text`
+    // such that the segment from `startPos` to the break point is at most `width` characters long.
+
+    // Let's trace the buggy `findWrapPos` with:
+    // text = "     This is an extremely long description that will definitely need to wrap multiple times to test the bug."
+    // width = 30
+    // startPos = 5
+
+    // 1. `pos = width` (30).
+    // 2. Search backwards from `pos` (30) for space.
+    //    text.charAt(30) is 'n' in "long".
+    //    text.charAt(29) is 'g' in "long".
+    //    ...
+    //    text.charAt(25) is space before "extremely".
+    //    So, `pos` becomes 25.
+    // 3. `pos > startPos` (25 > 5) is true.
+    // 4. Return `pos` (25).
+
+    // This means the break should occur at index 25.
+    // The substring from `startPos` (5) to `pos` (25) is:
+    // `text.substring(5, 25)` which is "This is an extreme".
+    // The length of this segment is 20 characters. This is LESS than `width` (30).
+    // This doesn't seem to reproduce the "too long" symptom directly.
+
+    // Let's consider the second part of `findWrapPos`:
+    // `pos = startPos + width;` (5 + 30 = 35)
+    // Search forward from `pos` (35) for space.
+    // `text.charAt(35)` is 'd' in "description".
+    // `text.charAt(36)` is 'e' in "description".
+    // ...
+    // `text.charAt(43)` is space before "that".
+    // So, `pos` becomes 43.
+    // `pos == text.length()` is false.
+    // Return `pos` (43).
+
+    // The bug report says "every line beyond the first line will be too long".
+    // This implies that the `findWrapPos` is returning a position that, when used
+    // to create the line, results in a line longer than `width`.
+
+    // Let's assume the `findWrapPos` is called on the *entire* text, and the
+    // `startPos` is the beginning of the line *within that text*.
+    // The bug is that the calculation `width + startPos` is used.
+
+    // Let's craft a string and `startPos` such that the last space *before*
+    // `startPos + width` is very close to `startPos`, and the first space *after*
+    // `startPos + width` is also very close, leading to a short line being
+    // incorrectly identified as the wrap point, or a long segment being kept.
+
+    // The provided fix suggests `width` was used instead of `width + startPos`.
+    // This implies `width + startPos` was used in a context where `width` alone was intended.
+
+    // Let's test the scenario where the default `findWrapPos` (without `startPos`)
+    // would wrap correctly at `width`, but with `startPos` it wraps incorrectly.
+
+    // Example:
+    // text = "abcdefghijklmnopqrstuvwxyz"
+    // width = 10
+    // startPos = 0
+    // findWrapPos(text, 10, 0)
+    //   pos = 10
+    //   search backwards from 10. charAt(10) is 'k'. charAt(9) is 'j'. Found space at 9.
+    //   pos = 9.
+    //   pos > startPos (9 > 0) is true.
+    //   Return 9.
+    //   This seems correct: break after index 9 ('j'). Line is "abcdefghij" (length 10).
+
+    // Now consider:
+    // text = "abcdefghijklmnopqrstuvwxyz"
+    // width = 10
+    // startPos = 5 (e.g., "     abcdefghij...")
+    //
+    // Buggy `findWrapPos(text, 10, 5)`:
+    // 1. `pos = width` (10).
+    // 2. Search backwards from `pos` (10) for space.
+    //    text.charAt(10) is 'k'.
+    //    text.charAt(9) is 'j'.
+    //    ...
+    //    No space found before `startPos` (5). The loop `while ((pos >= startPos) && ...)`
+    //    will terminate when `pos` becomes 5.
+    //    `pos` is now 5.
+    // 3. `pos > startPos` (5 > 5) is false.
+    // 4. `pos = startPos + width` (5 + 10 = 15).
+    // 5. Search forwards from `pos` (15) for space.
+    //    text.charAt(15) is 'p'.
+    //    text.charAt(16) is 'q'.
+    //    ...
+    //    text.charAt(26) is out of bounds. Let's assume string length is 26.
+    //    `pos` becomes 26.
+    // 6. `pos == text.length()` (26 == 26) is true.
+    // 7. Return -1.
+
+    // This means it doesn't wrap. This is incorrect if the line needs to be <= 10 chars.
+    // The intention is that the line starting at `startPos` should not exceed `width`.
+    // So, the break point should be at `startPos + width`.
+
+    // The bug report implies the *opposite*: lines become *too long*.
+    // "causes it to format every line beyond the first line by 'startPos' to many characters, beyond the specified width."
+
+    // Let's assume the `width` in `findWrapPos` is the *maximum length of the line from its start*.
+    // And `startPos` is the index in the *full text* where the current line begins.
+
+    // The problematic code in `findWrapPos` is:
+    // `pos = width;` (This is the initial *candidate* for the end of the line)
+    // `while ((pos >= startPos) && ...)` (Search backwards for space)
+    // If no space is found between `startPos` and `width`, it moves to:
+    // `pos = startPos + width;` (This is the initial *candidate* if no wrap found before `width`)
+    // `while ((pos <= text.length()) && ...)` (Search forwards for space)
+
+    // The bug is that `width + startPos` is used in the forward search.
+    // If the last space before `width` is not found (because `startPos` is large,
+    // or the text before `width` has no spaces), the code jumps to `startPos + width`.
+    // If the text segment from `startPos` to `startPos + width` contains no spaces,
+    // it will search *beyond* `startPos + width`.
+
+    // Let's craft a situation where the last space before `width` is not found
+    // (because `startPos` is too close to `width` or there are no spaces),
+    // and then the `startPos + width` calculation leads to a break point
+    // that, when combined with `startPos`, exceeds the intended `width`.
+
+    String problematicText = "Thisisalongwordthatwillcauseaproblem.";
+    int problematicWidth = 10;
+    int problematicStartPos = 5; // "     Thisisalongword..."
+
+    // `findWrapPos(problematicText, 10, 5)`
+    // `width` = 10, `startPos` = 5.
+    // 1. `pos = width` (10).
+    // 2. Search backwards from 10.
+    //    text.charAt(10) is 'a' in "isalongword".
+    //    text.charAt(9) is 's' in "isalongword".
+    //    ...
+    //    text.charAt(5) is ' '.
+    //    `pos` becomes 5.
+    // 3. `pos > startPos` (5 > 5) is false.
+    // 4. `pos = startPos + width` (5 + 10 = 15).
+    // 5. Search forwards from 15.
+    //    text.charAt(15) is 'l' in "longword".
+    //    ...
+    //    text.charAt(23) is 'd' in "word".
+    //    text.charAt(24) is '.'.
+    //    No space found up to `text.length()`.
+    //    `pos` becomes 35 (text.length()).
+    // 6. `pos == text.length()` (35 == 35) is true.
+    // 7. Return -1.
+
+    // This still doesn't show the "too long" issue.
+
+    // Let's try to make the text *after* `startPos + width` have a space.
+    // text = "Averylongwordthatneedswrapping."
+    // width = 10
+    // startPos = 5
+
+    // `findWrapPos(text, 10, 5)`
+    // `width` = 10, `startPos` = 5.
+    // 1. `pos = width` (10).
+    // 2. Search backwards from 10. `text.charAt(10)` is 'o'. No space found before `startPos` (5).
+    //    `pos` remains 5.
+    // 3. `pos > startPos` (5 > 5) is false.
+    // 4. `pos = startPos + width` (5 + 10 = 15).
+    // 5. Search forwards from 15.
+    //    `text.charAt(15)` is 't' in "thatneeds".
+    //    `text.charAt(16)` is 'n' in "thatneeds".
+    //    ...
+    //    `text.charAt(23)` is 's' in "needs".
+    //    `text.charAt(24)` is 'w' in "wrapping".
+    //    `text.charAt(25)` is 'r' in "wrapping".
+    //    text.charAt(26) is 'a' in "wrapping".
+    //    text.charAt(27) is 'p' in "wrapping".
+    //    text.charAt(28) is 'p' in "wrapping".
+    //    text.charAt(29) is 'i' in "wrapping".
+    //    text.charAt(30) is 'n' in "wrapping".
+    //    text.charAt(31) is 'g' in "wrapping".
+    //    text.charAt(32) is '.'.
+    //    No space found. `pos` becomes 33 (length).
+    // 6. `pos == text.length()` (33 == 33) is true.
+    // 7. Return -1.
+
+    // The original bug report's fix involves changing `width + startPos` to `width`.
+    // This suggests that `width + startPos` was used in a calculation where `width` was the intended boundary.
+
+    // Let's assume the test should simulate the `HelpFormatter.formatHelp` behavior more closely.
+    // It likely calls `findWrapPos` repeatedly on the description.
+
+    // Let's try to reproduce the symptom: output line longer than width.
+    // This means `findWrapPos` returns a value `p` such that `p - startPos > width`.
+
+    // Consider this scenario:
+    // text = "Averylongdescriptionthatwillnotwrapcorrectly"
+    // width = 10
+    // startPos = 0
+
+    // `findWrapPos(text, 10, 0)`
+    // `width` = 10, `startPos` = 0.
+    // 1. `pos = width` (10).
+    // 2. Search backwards from 10. `text.charAt(10)` is 'l'. No space found before `startPos` (0).
+    //    `pos` remains 0.
+    // 3. `pos > startPos` (0 > 0) is false.
+    // 4. `pos = startPos + width` (0 + 10 = 10).
+    // 5. Search forwards from 10.
+    //    `text.charAt(10)` is 'l'.
+    //    ...
+    //    `text.charAt(20)` is 't'.
+    //    `text.charAt(21)` is 'w'.
+    //    `text.charAt(22)` is 'i'.
+    //    `text.charAt(23)` is 'l'.
+    //    `text.charAt(24)` is 'l'.
+    //    `text.charAt(25)` is 'n'.
+    //    `text.charAt(26)` is 'o'.
+    //    `text.charAt(27)` is 't'.
+    //    `text.charAt(28)` is 'w'.
+    //    `text.charAt(29)` is 'r'.
+    //    `text.charAt(30)` is 'a'.
+    //    `text.charAt(31)` is 'p'.
+    //    `text.charAt(32)` is 'c'.
+    //    `text.charAt(33)` is 'o'.
+    //    `text.charAt(34)` is 'r'.
+    //    `text.charAt(35)` is 'r'.
+    //    `text.charAt(36)` is 'e'.
+    //    `text.charAt(37)` is 'c'.
+    //    `text.charAt(38)` is 't'.
+    //    `text.charAt(39)` is 'l'.
+    //    `text.charAt(40)` is 'y'.
+    //    No space found. `pos` becomes 41 (length).
+    // 6. `pos == text.length()` (41 == 41) is true.
+    // 7. Return -1.
+
+    // This means it doesn't wrap, which is also not the "too long" symptom.
+
+    // The fix: "both were using 'width + startPos' when they should have been using width."
+    // This means the `pos = startPos + width;` line and potentially the `width` in `pos = width;`
+    // were the problem.
+
+    // Let's assume the `width` parameter in `findWrapPos` is the *absolute* maximum position from the start of the string for a given line.
+    // And `startPos` is the index where the current line begins.
+    // The goal is to find a break point `p` such that `p - startPos <= width`.
+
+    // The buggy code searches for whitespace up to `width` (relative to start of string).
+    // If it doesn't find one, it searches from `startPos + width`.
+
+    // Let's try to make the `startPos + width` search find a position `p` such that `p - startPos > width`.
+    // This happens if the text between `startPos` and `startPos + width` has no spaces.
+    // And then `findWrapPos` returns a `p` that is significantly larger than `startPos + width`.
+
+    // Consider:
+    // text = "Averylongwordthatneedswrapping."
+    // width = 10
+    // startPos = 15 // "               Averylongword..."
+
+    // `findWrapPos(text, 10, 15)`
+    // `width` = 10, `startPos` = 15.
+    // 1. `pos = width` (10).
+    // 2. `pos >= startPos` (10 >= 15) is false. Loop is skipped.
+    // 3. `pos = startPos + width` (15 + 10 = 25).
+    // 4. Search forwards from 25.
+    //    `text.charAt(25)` is 'i'.
+    //    `text.charAt(26)` is 'n'.
+    //    `text.charAt(27)` is 'g'.
+    //    `text.charAt(28)` is '.'.
+    //    No space found. `pos` becomes 29 (length).
+    // 5. `pos == text.length()` (29 == 29) is true.
+    // 6. Return -1.
+
+    // This is still not showing the "too long" symptom.
+    // The bug must be in how the `width` is interpreted relative to `startPos`.
+
+    // Let's assume the `width` parameter is the *maximum line length*.
+    // And `startPos` is the *index of the start of the current line*.
+
+    // The bug: "causes it to format every line beyond the first line by 'startPos' to many characters, beyond the specified width."
+    // This means a line, when printed, has more than `width` characters.
+
+    // Test case:
+    // text = "This is a long description that will definitely need to wrap."
+    // width = 20
+    // startPos = 0 // First line
+
+    // `findWrapPos(text, 20, 0)`
+    // `width` = 20, `startPos` = 0.
+    // 1. `pos = width` (20).
+    // 2. Search backwards from 20. `text.charAt(20)` is ' '. Found space at 20.
+    //    `pos` becomes 20.
+    // 3. `pos > startPos` (20 > 0) is true.
+    // 4. Return 20.
+    // The line is `text.substring(0, 20)` which is "This is a long desc". Length is 20. Correct.
+
+    // Now, simulate the second line.
+    // The text for the second line starts at index 20. So, `startPos` for the next call is 20.
+    // The remaining text is "ription that will definitely need to wrap."
+    // `findWrapPos(text, 20, 20)`
+    // `width` = 20, `startPos` = 20.
+    // 1. `pos = width` (20).
+    // 2. `pos >= startPos` (20 >= 20) is true.
+    // 3. Search backwards from 20. `text.charAt(20)` is ' '. Loop condition `pos >= startPos` is met.
+    //    The character at `pos` is a space.
+    //    `pos` becomes 20.
+    // 4. `pos > startPos` (20 > 20) is false.
+    // 5. `pos = startPos + width` (20 + 20 = 40).
+    // 6. Search forwards from 40.
+    //    `text.charAt(40)` is 'd' in "definitely".
+    //    `text.charAt(41)` is 'e'.
+    //    ...
+    //    `text.charAt(48)` is ' '. Found space at 48.
+    //    `pos` becomes 48.
+    // 7. `pos == text.length()` (48 == 71) is false.
+    // 8. Return 48.
+
+    // The break point is 48.
+    // The substring from `startPos` (20) to `pos` (48) is:
+    // `text.substring(20, 48)` which is "ription that will defin". Length is 28.
+    // This line is LONGER than `width` (20). This reproduces the bug!
+
+    // So the test case is:
+    // A string that requires wrapping, and the `startPos` for the second line
+    // causes the `pos = width` search to fail finding a space before `startPos`,
+    // leading to the `pos = startPos + width` calculation.
+
+    String longTextForBug = "This is a long description that will definitely need to wrap.";
+    int testWidth3 = 20;
+    // We need to find the first wrap position to determine the start of the second line.
+    int firstWrapPos = formatter.findWrapPos(longTextForBug, testWidth3, 0);
+    assertTrue("First wrap should be found", firstWrapPos > 0);
+
+    // Now, test the wrapping of the *next* line.
+    // The `startPos` for the second line is `firstWrapPos`.
+    // The `width` remains `testWidth3`.
+    int secondWrapPos = formatter.findWrapPos(longTextForBug, testWidth3, firstWrapPos);
+
+    // We need to assert that the segment from `firstWrapPos` to `secondWrapPos` is longer than `testWidth3`.
+    // This means `secondWrapPos - firstWrapPos > testWidth3`.
+
+    // Let's calculate the expected first wrap:
+    // "This is a long desc" -> space at 19. `findWrapPos` returns 20.
+    // So `firstWrapPos` should be 20.
+
+    // Now, call `findWrapPos(longTextForBug, 20, 20)`
+    // `text` = "This is a long description that will definitely need to wrap."
+    // `width` = 20
+    // `startPos` = 20
+
+    // `pos = width` (20).
+    // `pos >= startPos` (20 >= 20) is true.
+    // `text.charAt(20)` is space.
+    // `pos` becomes 20.
+    // `pos > startPos` (20 > 20) is false.
+    // `pos = startPos + width` (20 + 20 = 40).
+    // Search forwards from 40.
+    // `text.charAt(40)` is 'd' in "definitely".
+    // `text.charAt(41)` is 'e'.
+    // `text.charAt(42)` is 'f'.
+    // `text.charAt(43)` is 'i'.
+    // `text.charAt(44)` is 'n'.
+    // `text.charAt(45)` is 'i'.
+    // `text.charAt(46)` is 't'.
+    // `text.charAt(47)` is 'e'.
+    // `text.charAt(48)` is 'l'.
+    // `text.charAt(49)` is 'y'.
+    // `text.charAt(50)` is ' '. Found space at 50.
+    // `pos` becomes 50.
+    // `pos == text.length()` (50 == 71) is false.
+    // Return 50.
+
+    // So `secondWrapPos` is 50.
+    // The length of the second line segment is `secondWrapPos - firstWrapPos` = 50 - 20 = 30.
+    // This is greater than `testWidth3` (20).
+    // This confirms the bug.
+
+    // Let's ensure the `HelpFormatter` instance is configured for the test.
+    formatter.setWidth(testWidth3); // This might affect internal state if `findWrapPos` uses it, but it's passed as a parameter.
+
+    // Construct the actual string that would be passed to findWrapPos for the second line.
+    // The `text` parameter to `findWrapPos` is the *entire* description.
+    // The `startPos` is the index where the current line starts.
+
+    // The test should call `findWrapPos` with parameters that trigger the bug.
+    // We've identified that `findWrapPos(longTextForBug, 20, 20)` should return 50,
+    // and the resulting line segment length (50 - 20 = 30) exceeds the width (20).
+
+    String testDescription = "This is a long description that will definitely need to wrap.";
+    int testWidthParam = 20;
+
+    // Calculate the first wrap position using the buggy method itself.
+    int firstLineBreak = formatter.findWrapPos(testDescription, testWidthParam, 0);
+
+    // Assert that the first line break is as expected (or at least found).
+    // For "This is a long description that will definitely need to wrap." and width 20:
+    // "This is a long desc" (length 19) followed by space at index 20.
+    // `findWrapPos` should return 20.
+    assertEquals("Expected first line break position", 20, firstLineBreak);
+
+    // Now, call `findWrapPos` for the *second* line.
+    // The `startPos` for the second line is the `firstLineBreak`.
+    int secondLineBreak = formatter.findWrapPos(testDescription, testWidthParam, firstLineBreak);
+
+    // Assert that the second line break position is such that the line segment is too long.
+    // The segment is from `firstLineBreak` to `secondLineBreak`.
+    // Its length is `secondLineBreak - firstLineBreak`.
+    // This length should be greater than `testWidthParam`.
+
+    // We calculated `secondLineBreak` to be 50.
+    // `secondLineBreak - firstLineBreak` = 50 - 20 = 30.
+    // `testWidthParam` = 20.
+    // 30 > 20, so the line is too long.
+
+    // The assertion should check this condition.
+    assertTrue("The second line segment is longer than the specified width.",
+               (secondLineBreak - firstLineBreak) > testWidthParam);
+
+    // We can also assert the value of `secondLineBreak` if we are confident in the trace.
+    // assertEquals("Expected second line break position based on buggy logic", 50, secondLineBreak);
+}

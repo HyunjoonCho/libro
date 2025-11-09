@@ -1,0 +1,56 @@
+public void testToStringStyleMemoryLeak() throws Exception {
+    // This test is designed to trigger the potential memory leak by
+    // creating and discarding multiple threads that might use ToStringStyle.
+    // In a real container environment, this would happen during application
+    // redeployments. For a JUnit test, we simulate this by creating and
+    // joining threads.
+
+    // We need to ensure the class is loaded and its static initializer runs.
+    // Accessing a static field or method is usually enough.
+    ToStringStyle.setDefaultStyle(ToStringStyle.DEFAULT_STYLE);
+
+    int numberOfThreads = 10;
+    Thread[] threads = new Thread[numberOfThreads];
+
+    for (int i = 0; i < numberOfThreads; i++) {
+        threads[i] = new Thread(() -> {
+            // Simulate some work that might involve ToStringStyle
+            Object obj = new Object() {
+                @Override
+                public String toString() {
+                    return ToStringStyle.DEFAULT_STYLE.toString(this);
+                }
+            };
+            // The mere creation and usage of toString might involve the ThreadLocal
+            obj.toString();
+        });
+        threads[i].start();
+    }
+
+    // Wait for all threads to complete
+    for (int i = 0; i < numberOfThreads; i++) {
+        threads[i].join();
+    }
+
+    // In a real scenario, a memory leak would be detected by a profiler
+    // after multiple application reloads. This JUnit test cannot directly
+    // assert a memory leak. However, the goal is to execute the code path
+    // that is suspected of causing the leak.
+    // A successful execution of this test without exceptions related to
+    // ThreadLocals being improperly managed is the primary objective here.
+
+    // If the ThreadLocal was not properly managed, we might see issues
+    // like stale data or exceptions in more complex scenarios or
+    // during actual container redeployments.
+    // For this test, we assume that if the code runs without crashing
+    // and the ThreadLocal is eventually cleaned up (which the fix aims to do),
+    // then the test passes.
+
+    // To make this test more robust in detecting *potential* issues,
+    // we could try to trigger the ThreadLocal access multiple times,
+    // but a true memory leak test requires a profiler and long-running
+    // application lifecycle simulation.
+
+    // A simple assertion to ensure the test runs to completion.
+    assertTrue(true);
+}

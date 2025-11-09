@@ -1,0 +1,63 @@
+public void testPaxHeaderEntryNameEndingWithSlash() throws IOException, ArchiveException {
+    // Create a tar archive with a PAX header entry ending with "/"
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    ArchiveOutputStream taos = new ArchiveStreamFactory().createArchiveOutputStream(ArchiveStreamFactory.TAR, bos);
+
+    // Create a PAX header entry with a name ending with "/"
+    // This simulates the condition described in the bug report.
+    // We'll use a simple file content to ensure there's something to read.
+    String entryName = "test/dir/";
+    byte[] content = "This is a test file.".getBytes();
+
+    // Manually construct a PAX header to ensure the link flag is set correctly
+    // and the name ends with a slash. This is a bit involved as ArchiveOutputStream
+    // might normalize names. We'll rely on the fact that the bug occurs
+    // when parseTarHeader encounters such a name.
+    // For simplicity, we'll assume the TarArchiveEntry constructor and putArchiveEntry
+    // will create the necessary header structure that triggers the bug in parseTarHeader.
+
+    TarArchiveEntry entry = new TarArchiveEntry(entryName);
+    entry.setSize(content.length);
+    // Assume the scenario where the link flag is set for PAX headers,
+    // which is implicitly handled by ArchiveStreamFactory.TAR and TarArchiveEntry
+    // when dealing with specific types of metadata or when the underlying OS
+    // creates such entries (like Docker sometimes does).
+    // The critical part is the name ending with '/', which is what triggers
+    // the isDirectory() misinterpretation in the buggy parseTarHeader.
+
+    taos.putArchiveEntry(entry);
+    taos.write(content);
+    taos.closeArchiveEntry();
+
+    // Close the archive output stream
+    taos.close();
+
+    // Now, read the archive back and try to process the entry
+    ByteArrayInputStream bis = new ByteArrayInputStream(bos.toByteArray());
+    ArchiveInputStream tais = new ArchiveStreamFactory().createArchiveInputStream(ArchiveStreamFactory.TAR, bis);
+
+    ArchiveEntry archiveEntry;
+    boolean foundEntry = false;
+    while ((archiveEntry = tais.getNextEntry()) != null) {
+        if (archiveEntry.getName().equals(entryName)) {
+            foundEntry = true;
+            TarArchiveEntry tarEntry = (TarArchiveEntry) archiveEntry;
+            // The bug occurs because tarEntry.isDirectory() returns true due to the trailing slash,
+            // even though it's intended to be a file with content.
+            // This prevents content from being read and advances the stream incorrectly.
+            assertFalse("Entry should not be considered a directory due to trailing slash in PAX header", tarEntry.isDirectory());
+
+            // Attempt to read content. If the bug is present, this might behave unexpectedly
+            // or throw an error depending on how the stream is advanced.
+            // We expect to be able to read the content if the bug is fixed.
+            byte[] buffer = new byte[content.length];
+            int bytesRead = tais.read(buffer, 0, buffer.length);
+            assertEquals("Should be able to read the full content of the entry", content.length, bytesRead);
+            assertArrayEquals("Content read should match original content", content, buffer);
+            break;
+        }
+    }
+    tais.close();
+
+    assertTrue("The problematic entry should have been found", foundEntry);
+}

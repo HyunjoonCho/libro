@@ -1,0 +1,232 @@
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.TimeZone;
+
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+public class DateTimeSerializerTest {
+
+    public static class MyObject {
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT")
+        public Date date;
+
+        public MyObject(Date date) {
+            this.date = date;
+        }
+    }
+
+    public static class CustomDateTimeSerializer extends StdSerializer<Date> {
+
+        public CustomDateTimeSerializer() {
+            super(Date.class);
+        }
+
+        @Override
+        public void serialize(Date value, com.fasterxml.jackson.core.JsonGenerator gen, com.fasterxml.jackson.databind.SerializerProvider provider) throws IOException {
+            DateFormat dateFormat = provider.getConfig().getDateFormat();
+            gen.writeString(dateFormat.format(value));
+        }
+
+        @Override
+        public boolean isUnwrappingSerializer() {
+            return true;
+        }
+    }
+
+    @Test
+    public void testSerializerIgnoresConfiguredFormat() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.setDateFormat(new SimpleDateFormat("MM/dd/yyyy"));
+        mapper.setTimeZone(TimeZone.getTimeZone("UTC"));
+        mapper.enable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Ensure default ISO format is not used by default
+
+        MyObject obj = new MyObject(new Date(1678886400000L)); // March 15, 2023 12:00:00 PM UTC
+
+        // The bug is that the serializer created by createContextual uses StdDateFormat.DATE_FORMAT_STR_ISO8601
+        // instead of the configured SimpleDateFormat("MM/dd/yyyy").
+        // We expect the output to be formatted according to the annotation's pattern, not the ObjectMapper's date format.
+        // However, the bug report states that the serializer *ignores* the configured date format.
+        // The actual issue is that it resets to ISO8601 *if the annotation doesn't specify a pattern*.
+        // In this case, the annotation *does* specify a pattern, so the serializer *should* use it.
+        // The bug description seems to be slightly misaligned with the code snippet provided.
+        // The provided code snippet for DateTimeSerializerBase#createContextual shows it *does* check for a pattern.
+        // Let's test the behavior described in the *bug report title* and *description* which implies
+        // that even with a configured format, the serializer might reset to a default.
+
+        // The core of the bug seems to be when the @JsonFormat annotation *itself* is used,
+        // and the serializer created by createContextual might ignore the *ObjectMapper's* configured date format
+        // and fall back to a default if the annotation's pattern is not explicitly set.
+        // However, the annotation *does* have a pattern here.
+
+        // Let's try to reproduce the scenario where the annotation's pattern is *not* set,
+        // and see if it falls back to ISO8601 when it should use the ObjectMapper's format.
+
+        // Re-reading the description: "creates a new serializer with StdDateFormat.DATE_FORMAT_STR_ISO8601 format instead of re-using the actual format that may have been specified on the configuration."
+        // This implies that even if the ObjectMapper has a format, the serializer created might default to ISO8601.
+        // The code snippet shows:
+        // final String pattern = format.hasPattern() ? format.getPattern() : StdDateFormat.DATE_FORMAT_STR_ISO8601;
+        // This means if format.hasPattern() is true (which it is because of "@JsonFormat(pattern = ...)")
+        // it *should* use format.getPattern(). So the serializer *should* use "yyyy-MM-dd HH:mm:ss".
+
+        // Let's assume the bug means that the *ObjectMapper's* configured date format is ignored
+        // in favor of the @JsonFormat pattern or ISO8601 if no pattern is in the annotation.
+        // The provided test case setup seems to be testing a different aspect than the description.
+
+        // Let's create a scenario where the annotation *doesn't* specify a pattern,
+        // and the ObjectMapper *does* have a specific format.
+
+        class ObjectWithoutPattern {
+            @JsonFormat(shape = JsonFormat.Shape.STRING, timezone = "GMT")
+            public Date date;
+
+            public ObjectWithoutPattern(Date date) {
+                this.date = date;
+            }
+        }
+
+        ObjectMapper mapperWithSpecificFormat = new ObjectMapper();
+        SimpleDateFormat specificDateFormat = new SimpleDateFormat("MM/dd/yyyy HH:mm");
+        specificDateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+        mapperWithSpecificFormat.setDateFormat(specificDateFormat);
+        mapperWithSpecificFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+
+        ObjectWithoutPattern objNoPattern = new ObjectWithoutPattern(new Date(1678886400000L)); // March 15, 2023 12:00:00 PM UTC
+
+        // According to the bug report, when @JsonFormat has no pattern, createContextual should use StdDateFormat.DATE_FORMAT_STR_ISO8601.
+        // This would mean it ignores the mapperWithSpecificFormat.getDateFormat().
+        // Let's verify this specific behavior.
+
+        String result = mapperWithSpecificFormat.writeValueAsString(objNoPattern);
+
+        // The expected output, based on the bug description, is ISO8601 format.
+        // Expected ISO8601 format for 1678886400000L (March 15, 2023 12:00:00 PM UTC)
+        // Note: StdDateFormat.DATE_FORMAT_STR_ISO8601 is "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
+        String expectedIsoFormat = "2023-03-15T12:00:00.000Z"; // Assuming UTC timezone is handled correctly by StdDateFormat
+
+        // Let's check if the output matches the ISO8601 format, which indicates the ObjectMapper's format was ignored.
+        // We need to be careful about timezone handling and exact format.
+        // StdDateFormat.DATE_FORMAT_STR_ISO8601 includes milliseconds and 'Z' for UTC.
+
+        // A more robust check would be to parse the output back.
+        // However, the intent is to check the *serialized string*.
+
+        // If the bug is as described, the output string should conform to StdDateFormat.DATE_FORMAT_STR_ISO8601.
+        // The ObjectMapper's configured SimpleDateFormat("MM/dd/yyyy HH:mm") should be ignored.
+
+        // Let's assert that the output *does not* match the configured format, and *does* match the ISO format.
+        // This is a strong indicator that the fallback to ISO8601 happened.
+
+        String unexpectedFormat = "03/15/2023 12:00"; // Based on "MM/dd/yyyy HH:mm" and UTC
+
+        // The actual output might vary slightly in milliseconds or exact Z notation depending on Jackson version and internal StdDateFormat behavior.
+        // Let's check for the core structure of ISO8601.
+        assertTrue("Output should contain date part in ISO8601 format", result.contains("2023-03-15T12:00:00"));
+        assertTrue("Output should end with Z for UTC if ISO8601 is used", result.endsWith("Z\"")); // Jackson often adds quotes around strings
+
+        // Further, let's assert that it does NOT use the configured format.
+        // This is crucial for proving the bug.
+        // We need to be careful with the exact string comparison if milliseconds or timezone offset are involved.
+        // For simplicity, let's assume the configured format would produce a string *without* 'T' and 'Z'.
+        // If Jackson adds quotes, we need to account for that.
+        // The serialization of a Date using ObjectMapper.writeValueAsString usually results in a JSON string, so quotes are expected.
+
+        // Let's re-serialize with the ObjectMapper's format directly to see what it *would* produce if it were used.
+        // This requires a custom serializer or a different approach if we want to force the ObjectMapper's format.
+        // The bug is specifically about `createContextual` *within* a serializer, not the top-level ObjectMapper behavior.
+
+        // The critical part of the bug description is:
+        // "creates a new serializer with StdDateFormat.DATE_FORMAT_STR_ISO8601 format instead of re-using the actual format that may have been specified on the configuration."
+        // This happens *inside* `createContextual`.
+
+        // Let's create a custom serializer that *uses* `createContextual` implicitly.
+        // When Jackson encounters a field annotated with @JsonFormat, it uses a default serializer.
+        // The problem is that this default serializer's `createContextual` method has the bug.
+
+        // To test this, we need a scenario where `createContextual` is called.
+        // The example with `ObjectWithoutPattern` is the most direct way to test the fallback logic.
+        // If `@JsonFormat` has no pattern, `createContextual` should fallback to `StdDateFormat.DATE_FORMAT_STR_ISO8601`.
+        // The bug is that it *always* does this fallback if `format.hasPattern()` is false,
+        // ignoring the `DateFormat` configured on the `ObjectMapper`.
+
+        // Let's refine the assertion.
+        // The `result` string is the JSON representation.
+        // It should be `"2023-03-15T12:00:00.000Z"` if the bug is present and the fallback occurs.
+        // If the bug were fixed, and it respected the ObjectMapper's format, it would be `"03/15/2023 12:00"`.
+
+        // Let's be precise with the expected ISO string.
+        // StdDateFormat.DATE_FORMAT_STR_ISO8601 is "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
+        // The date 1678886400000L is March 15, 2023 12:00:00 PM UTC.
+        // This translates to "2023-03-15T12:00:00.000Z".
+        // Jackson will wrap this in quotes.
+        String expectedIsoString = "\"2023-03-15T12:00:00.000Z\"";
+
+        // Assert that the output matches the ISO format, indicating the bug.
+        assertTrue("Serializer should use ISO8601 format when @JsonFormat has no pattern, ignoring ObjectMapper's format.",
+                   result.equals(expectedIsoString));
+
+        // If the bug were fixed, the output would be based on the ObjectMapper's SimpleDateFormat.
+        // This would be "03/15/2023 12:00" (without milliseconds and Z, as the pattern doesn't include them).
+        // However, the timezone "GMT" from @JsonFormat is also specified.
+        // The bug description implies that the `createContextual` method *itself* is the problem.
+        // The `StdDateFormat.DATE_FORMAT_STR_ISO8601` is hardcoded.
+
+        // Let's try to make a positive assertion that the bug is present.
+        // We've established that when @JsonFormat has no pattern, the output is ISO8601.
+        // This is the behavior described as buggy.
+    }
+
+    // Add another test to show the *expected* behavior if the bug were fixed.
+    // This isn't strictly required by the prompt, but helps clarify.
+    // If fixed, the serializer should use the ObjectMapper's configured DateFormat.
+    @Test
+    public void testSerializerRespectsConfiguredFormatIfFixed() throws IOException {
+        // This test assumes the bug is NOT present.
+        // If the bug were fixed, the `createContextual` method would use the ObjectMapper's DateFormat
+        // when @JsonFormat has no pattern.
+
+        class ObjectWithoutPattern {
+            @JsonFormat(shape = JsonFormat.Shape.STRING, timezone = "GMT") // No pattern specified
+            public Date date;
+
+            public ObjectWithoutPattern(Date date) {
+                this.date = date;
+            }
+        }
+
+        ObjectMapper mapperWithSpecificFormat = new ObjectMapper();
+        SimpleDateFormat specificDateFormat = new SimpleDateFormat("MM/dd/yyyy HH:mm");
+        specificDateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+        mapperWithSpecificFormat.setDateFormat(specificDateFormat);
+        mapperWithSpecificFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+
+        ObjectWithoutPattern objNoPattern = new ObjectWithoutPattern(new Date(1678886400000L)); // March 15, 2023 12:00:00 PM UTC
+
+        String result = mapperWithSpecificFormat.writeValueAsString(objNoPattern);
+
+        // If the bug were fixed, the output would be based on the ObjectMapper's SimpleDateFormat.
+        // The timezone specified in @JsonFormat ("GMT") is also passed to `createContextual`.
+        // StdDateFormat.withTimeZone() is called.
+        // The ObjectMapper's DateFormat (SimpleDateFormat) should also have its timezone set.
+        // So, the output should be formatted by "MM/dd/yyyy HH:mm" with UTC timezone.
+        String expectedFormatString = "\"03/15/2023 12:00\""; // Expecting quotes as it's a JSON string
+
+        // This assertion would FAIL if the bug is present, and PASS if it's fixed.
+        // Therefore, the previous test `testSerializerIgnoresConfiguredFormat` is the one that PASSES
+        // when the bug is present.
+        // We are asked to reproduce the failure, so the first test is the correct one.
+
+        // Let's ensure the first test correctly reproduces the failure.
+        // The failure is that `createContextual` uses `StdDateFormat.DATE_FORMAT_STR_ISO8601`
+        // instead of the configured format when @JsonFormat has no pattern.
+        // Our `testSerializerIgnoresConfiguredFormat` does exactly this by checking the output.
+    }
+}

@@ -1,0 +1,37 @@
+public void testZipVersionNeededToExtract() throws IOException {
+    File zipFile = File.createTempFile("test", ".zip");
+    zipFile.deleteOnExit();
+
+    ZipArchiveOutputStream zipArchiveOutputStream = null;
+    try {
+        zipArchiveOutputStream = new ZipArchiveOutputStream(zipFile);
+        zipArchiveOutputStream.setMethod(ZipEntry.DEFLATED);
+
+        ZipArchiveEntry entry = new ZipArchiveEntry("test.txt");
+        entry.setSize(100);
+        zipArchiveOutputStream.putArchiveEntry(entry);
+        zipArchiveOutputStream.write(new byte[100]);
+        zipArchiveOutputStream.closeArchiveEntry();
+
+        zipArchiveOutputStream.close();
+        zipArchiveOutputStream = null;
+
+        ZipFile zip = new ZipFile(zipFile);
+        try {
+            ZipArchiveEntry archiveEntry = zip.getEntry("test.txt");
+            // The local file header's version needed to extract should reflect the use of Deflate compression.
+            // The central directory's version needed to extract should also reflect this.
+            // If data descriptors are used (due to buffering), the version needed should be at least 2.0.
+            // With DEFLATED method, it should be at least 2.0 for both local and central directory.
+            // This test specifically checks if the local header version is correctly set when DEFLATED is used.
+            // The bug implies that it might not be set to 2.0 when DEFLATED is used and data descriptors are present.
+            assertThat(archiveEntry.getVersionNeededToExtract(), is(2));
+        } finally {
+            zip.close();
+        }
+    } finally {
+        if (zipArchiveOutputStream != null) {
+            zipArchiveOutputStream.close();
+        }
+    }
+}

@@ -1,0 +1,45 @@
+public void testExplicitNumberShapeOverridesLocale() throws Exception {
+    final ObjectMapper mapper = new ObjectMapper();
+    mapper.setLocale(Locale.GERMAN); // German locale uses comma as decimal separator
+
+    // Explicitly specify NUMBER shape, but use a value that would normally
+    // require locale-specific formatting if shape wasn't specified.
+    // This test expects that the explicit NUMBER shape takes precedence and
+    // the value is serialized using the default JSON number format (dot separator).
+    final BeanWithExplicitNumberShape bean = new BeanWithExplicitNumberShape(BigDecimal.valueOf(123.45));
+
+    // If the fix is NOT applied, this serialization will likely fail or produce
+    // an incorrect string like "123,45" instead of "123.45".
+    // If the fix IS applied, it should produce "123.45".
+    String json = mapper.writeValueAsString(bean);
+
+    // Assert that the output uses a dot as the decimal separator, indicating
+    // that the locale-specific formatting was overridden by the explicit NUMBER shape.
+    assertTrue("JSON output should use dot as decimal separator for explicit NUMBER shape", json.contains("\"value\":123.45"));
+
+    // Also test deserialization to ensure the fix works both ways
+    final BeanWithExplicitNumberShape deserializedBean = mapper.readValue(json, BeanWithExplicitNumberShape.class);
+    assertEquals("Deserialized value should match original", bean.getValue(), deserializedBean.getValue());
+}
+
+// Helper classes (these would typically be in your test source folder)
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public static class BeanWithExplicitNumberShape {
+    @JsonFormat(shape = JsonFormat.Shape.NUMBER)
+    private BigDecimal value;
+
+    public BeanWithExplicitNumberShape() {
+    }
+
+    public BeanWithExplicitNumberShape(BigDecimal value) {
+        this.value = value;
+    }
+
+    public BigDecimal getValue() {
+        return value;
+    }
+
+    public void setValue(BigDecimal value) {
+        this.value = value;
+    }
+}

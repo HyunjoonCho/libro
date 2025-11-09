@@ -1,0 +1,44 @@
+public void testAdvancedOptimizationsErroneousOptimization() throws Exception {
+    String inputJs = "window[\"anchor\"] = function (obj, modifiesProp) {\n" +
+                     " return (function (saved) {\n" +
+                     " return modifiesProp(obj) + saved;\n" +
+                     " })(obj[\"prop\"]);\n" +
+                     " }";
+    String externsJs = "var window; window.prop;";
+
+    CompilerOptions options = new CompilerOptions();
+    options.setJSSrcs(new String[]{"input.js"});
+    options.setExterns(new String[]{"externs.js"});
+    options.setLanguage(LanguageMode.ECMASCRIPT5);
+    options.setPrettyPrint(true);
+    options.setCodingConvention(new ClosureCodingConvention());
+    options.setOptimizationLevel(CompilerOptions.OptimizationLevel.ADVANCED_OPTIMIZATIONS);
+    options.setWarningLevel(DiagnosticGroups.ALL, CheckLevel.VERBOSE);
+
+    Compiler compiler = new Compiler();
+    compiler.init(new JvmJsFileLoader(new File("."), new File("."), null),
+                  new JvmJsFileLoader(new File("."), new File("."), null),
+                  options);
+
+    // Create dummy files for the compiler
+    FileUtil.writeFile("input.js", inputJs, java.nio.charset.StandardCharsets.UTF_8);
+    FileUtil.writeFile("externs.js", externsJs, java.nio.charset.StandardCharsets.UTF_8);
+
+    compiler.compile();
+
+    String output = compiler.toSource();
+
+    // The original bug report describes the expected output as:
+    // window.foo=function(a,b){var HOLD=a.prop;return b(a)+HOLD};
+    // However, the provided minimal test case uses "anchor" and not "foo".
+    // Let's adjust the expected output to match the function name in the test case.
+    // The key is that `saved` (which is `obj["prop"]`) should be preserved
+    // and used in the return statement.
+    String expectedOutputSnippet = "return modifiesProp(obj) + saved";
+
+    assertTrue("Output should contain the preserved 'saved' variable", output.contains(expectedOutputSnippet));
+
+    // Clean up dummy files
+    new File("input.js").delete();
+    new File("externs.js").delete();
+}

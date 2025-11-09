@@ -1,0 +1,43 @@
+public void testGenericTypeResolution() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.addAbstractTypeResolver(new SimpleAbstractTypeResolver() {
+        @Override
+        public JavaType resolveAbstractType(final TypeResolutionContext context, final JavaType type) {
+            if (type.getRawClass().equals(MyBaseClass.class)) {
+                return context.resolveType(new TypeReference<MyConcreteClass<String>>() {
+                });
+            }
+            return null;
+        }
+    });
+    mapper.registerModule(module);
+
+    MyContainerClass input = new MyContainerClass();
+    input.data = new MyConcreteClass<>();
+    input.data.value = "test";
+
+    String json = mapper.writeValueAsString(input);
+    MyContainerClass output = mapper.readValue(json, MyContainerClass.class);
+
+    assertNotNull(output);
+    assertNotNull(output.data);
+    assertTrue(output.data instanceof MyConcreteClass);
+    assertEquals("test", output.data.value);
+}
+
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
+@JsonSubTypes({
+        @JsonSubTypes.Type(value = MyConcreteClass.class, name = "concrete")
+})
+abstract class MyBaseClass<T> {
+    public T value;
+}
+
+class MyConcreteClass<T> extends MyBaseClass<T> {
+    public T value;
+}
+
+class MyContainerClass {
+    public MyBaseClass<String> data;
+}

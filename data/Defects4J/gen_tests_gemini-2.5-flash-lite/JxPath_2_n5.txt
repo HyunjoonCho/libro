@@ -1,0 +1,531 @@
+public void testNodeSetReturnedByExtensionFunction() {
+    // Mock an extension function that returns a BasicNodeSet
+    JXPathContext context = JXPathContext.newContext(new Object());
+    context.registerNamespace("ems", ""); // Register a dummy namespace
+
+    // Mock the extension function to return a NodeSet
+    context.setFactory(new JXPathContextFactoryAdapter() {
+        @Override
+        public Expression createExpression(String expression) {
+            if ("ems:observations()".equals(expression)) {
+                return new Expression() {
+                    @Override
+                    public Object compute(JXPathContext context) {
+                        // Create a BasicNodeSet and add a dummy NodePointer
+                        BasicNodeSet nodeSet = new BasicNodeSet();
+                        nodeSet.add(new DummyNodePointer("/some/path"));
+                        return nodeSet;
+                    }
+
+                    @Override
+                    public <T> void search(JXPathContext context, PointerIterator iterator) {
+                        // This method is not directly relevant for testing the bug,
+                        // but needs to be implemented.
+                        // The bug is in how compute() or iterate() handles the NodeSet.
+                    }
+
+                    @Override
+                    public Pointer getPointer(JXPathContext context) {
+                        // This is the method that seems to be problematic in the original code.
+                        // It should return the NodeSet's pointers, not wrap the NodeSet itself.
+                        Object result = compute(context);
+                        if (result instanceof NodeSet) {
+                            NodeSet nodeSet = (NodeSet) result;
+                            if (nodeSet.size() == 1) {
+                                // Return the first pointer from the NodeSet
+                                return nodeSet.get(0);
+                            } else {
+                                // If multiple pointers, the behavior is less clear from the bug,
+                                // but for this test, we assume a single pointer is the issue.
+                                return null; // Or handle appropriately
+                            }
+                        }
+                        return null;
+                    }
+
+                    @Override
+                    public void searchAndSort(JXPathContext context, PointerIterator iterator) {
+                        // Not directly relevant for this test.
+                    }
+
+                    @Override
+                    public boolean isContextDependent() {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean requiresDyadic() {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean isContextDependent(JXPathContext context) {
+                        return false;
+                    }
+                };
+            }
+            return super.createExpression(expression);
+        }
+    });
+
+    // Expected behavior: selectNodes should return the pointers within the NodeSet,
+    // not a single node containing the NodeSet.
+    // In the buggy version, it would return a single NodePointer representing the BasicNodeSet.
+    // After the fix, it should return the actual NodePointer(s) added to the BasicNodeSet.
+
+    // The original bug description implies that selectNodes("ems:observations()")
+    // would return a single node. This test assumes that after the fix,
+    // it should return the actual nodes represented by the pointers in the NodeSet.
+    // If the function returns a NodeSet with one pointer, selectNodes should return that pointer.
+    // If the function returns a NodeSet with multiple pointers, selectNodes should return all of them.
+
+    // For this test, we'll check if the result is a single pointer, as implied by the bug description.
+    // If the fix works, selectNodes("ems:observations()") should yield the pointer(s) inside the NodeSet.
+    // The bug report states "I'm getting a single node containing the BasicNodeSet."
+    // This means the result of selectNodes would be a list containing one element, which is a NodePointer
+    // pointing to the BasicNodeSet itself.
+    // After the fix, it should return the actual pointer(s) from the BasicNodeSet.
+
+    // Let's simulate the *expected* behavior after the fix.
+    // If the extension function returns a NodeSet with one pointer, selectNodes should return a list
+    // containing that single pointer.
+    List<?> results = context.selectNodes("ems:observations()");
+
+    // Assert that the result is a list
+    assertNotNull(results);
+    // Assert that the list contains exactly one element (as per the mocked function)
+    assertEquals(1, results.size());
+    // Assert that the element in the list is a NodePointer
+    assertTrue(results.get(0) instanceof NodePointer);
+    // Assert that the NodePointer points to the expected path
+    assertEquals("/some/path", ((NodePointer) results.get(0)).getPath());
+}
+
+// Dummy NodePointer implementation for testing
+private static class DummyNodePointer implements NodePointer {
+    private final String path;
+
+    public DummyNodePointer(String path) {
+        this.path = path;
+    }
+
+    @Override
+    public String getPath() {
+        return path;
+    }
+
+    @Override
+    public Object getBaseValue() {
+        return null;
+    }
+
+    @Override
+    public Object getNode() {
+        return null;
+    }
+
+    @Override
+    public Object getRootContext() {
+        return null;
+    }
+
+    @Override
+    public NodePointer createPath(String pathExpression) {
+        return null;
+    }
+
+    @Override
+    public NodePointer createPath(NodePointer pointer) {
+        return null;
+    }
+
+    @Override
+    public NodePointer createPath(Object value) {
+        return null;
+    }
+
+    @Override
+    public void setValue(Object value) {
+    }
+
+    @Override
+    public void remove() {
+    }
+
+    @Override
+    public NodePointer getParent() {
+        return null;
+    }
+
+    @Override
+    public NodePointer getChild(int index) {
+        return null;
+    }
+
+    @Override
+    public NodePointer getChild(String key) {
+        return null;
+    }
+
+    @Override
+    public int getLength() {
+        return 0;
+    }
+
+    @Override
+    public int getPosition() {
+        return 0;
+    }
+
+    @Override
+    public boolean isLeaf() {
+        return false;
+    }
+
+    @Override
+    public boolean isCollection() {
+        return false;
+    }
+
+    @Override
+    public boolean isContainer() {
+        return false;
+    }
+
+    @Override
+    public boolean isArray() {
+        return false;
+    }
+
+    @Override
+    public boolean isDefined() {
+        return true;
+    }
+
+    @Override
+    public boolean isNull() {
+        return false;
+    }
+
+    @Override
+    public boolean isDefault() {
+        return false;
+    }
+
+    @Override
+    public boolean isActual() {
+        return false;
+    }
+
+    @Override
+    public boolean isLocked() {
+        return false;
+    }
+
+    @Override
+    public boolean isLocked(String propertyName) {
+        return false;
+    }
+
+    @Override
+    public boolean isWriteable(String propertyName) {
+        return false;
+    }
+
+    @Override
+    public boolean isWriteable() {
+        return false;
+    }
+
+    @Override
+    public void lock(String propertyName) {
+    }
+
+    @Override
+    public void unlock(String propertyName) {
+    }
+
+    @Override
+    public void unlock() {
+    }
+
+    @Override
+    public Iterator iterator() {
+        return null;
+    }
+
+    @Override
+    public Iterator childIterator(Object... preferredTypes) {
+        return null;
+    }
+
+    @Override
+    public Iterator childIterator(Comparator comparator, Object... preferredTypes) {
+        return null;
+    }
+
+    @Override
+    public Iterator childIterator(Comparator comparator, boolean includeContainers, Object... preferredTypes) {
+        return null;
+    }
+
+    @Override
+    public Comparator getComparator() {
+        return null;
+    }
+
+    @Override
+    public boolean contains(NodePointer pointer) {
+        return false;
+    }
+
+    @Override
+    public boolean isLeaf(NodePointer pointer) {
+        return false;
+    }
+
+    @Override
+    public int compare(NodePointer pointer1, NodePointer pointer2) {
+        return 0;
+    }
+
+    @Override
+    public Object getNamespaceURI(String prefix) {
+        return null;
+    }
+
+    @Override
+    public String getNamespacePrefix(String uri) {
+        return null;
+    }
+
+    @Override
+    public Map getNamespaceContext() {
+        return null;
+    }
+
+    @Override
+    public boolean isNamespace(String prefix) {
+        return false;
+    }
+
+    @Override
+    public boolean isAttribute() {
+        return false;
+    }
+
+    @Override
+    public String getAttributeName() {
+        return null;
+    }
+
+    @Override
+    public String getNamespace() {
+        return null;
+    }
+
+    @Override
+    public String getLocalName() {
+        return null;
+    }
+
+    @Override
+    public String getName() {
+        return null;
+    }
+
+    @Override
+    public String getQualifiedName() {
+        return null;
+    }
+
+    @Override
+    public String getNamespaceURI() {
+        return null;
+    }
+
+    @Override
+    public Object get(int index) {
+        return null;
+    }
+
+    @Override
+    public Object get(String key) {
+        return null;
+    }
+
+    @Override
+    public Object get() {
+        return null;
+    }
+
+    @Override
+    public Object getBean() {
+        return null;
+    }
+
+    @Override
+    public Class getPropertyType() {
+        return null;
+    }
+
+    @Override
+    public boolean isDynamicProperty() {
+        return false;
+    }
+
+    @Override
+    public boolean isDefaultProperty() {
+        return false;
+    }
+
+    @Override
+    public boolean isCollectionProperty() {
+        return false;
+    }
+
+    @Override
+    public boolean isComplexProperty() {
+        return false;
+    }
+
+    @Override
+    public boolean isAttributeProperty() {
+        return false;
+    }
+
+    @Override
+    public boolean isNamespaceProperty() {
+        return false;
+    }
+
+    @Override
+    public String getPropertyName() {
+        return null;
+    }
+
+    @Override
+    public String getNamespaceContextPointer() {
+        return null;
+    }
+
+    @Override
+    public boolean isRoot() {
+        return false;
+    }
+
+    @Override
+    public Object getRootNode() {
+        return null;
+    }
+
+    @Override
+    public boolean isChild(NodePointer pointer) {
+        return false;
+    }
+
+    @Override
+    public boolean isParent(NodePointer pointer) {
+        return false;
+    }
+
+    @Override
+    public boolean isDescendant(NodePointer pointer) {
+        return false;
+    }
+
+    @Override
+    public boolean isAncestor(NodePointer pointer) {
+        return false;
+    }
+
+    @Override
+    public boolean isSameProperty(NodePointer pointer) {
+        return false;
+    }
+
+    @Override
+    public boolean isDerivedProperty(NodePointer pointer) {
+        return false;
+    }
+
+    @Override
+    public boolean isDynamicPropertyPointer() {
+        return false;
+    }
+
+    @Override
+    public String getPropertyPointer() {
+        return null;
+    }
+
+    @Override
+    public String getNamespacePointer() {
+        return null;
+    }
+
+    @Override
+    public Object getBaseValue(NodePointer pointer) {
+        return null;
+    }
+
+    @Override
+    public Object getBaseValue(String propertyName) {
+        return null;
+    }
+
+    @Override
+    public Object getBaseValue(int index) {
+        return null;
+    }
+
+    @Override
+    public Object getBaseValue() {
+        return null;
+    }
+
+    @Override
+    public Object getNodeValue() {
+        return null;
+    }
+
+    @Override
+    public Object getNodeValue(String propertyName) {
+        return null;
+    }
+
+    @Override
+    public Object getNodeValue(int index) {
+        return null;
+    }
+
+    @Override
+    public Object getNodeValue(NodePointer pointer) {
+        return null;
+    }
+
+    @Override
+    public boolean hasChild(String key) {
+        return false;
+    }
+
+    @Override
+    public boolean hasChild(int index) {
+        return false;
+    }
+
+    @Override
+    public boolean hasChild(NodePointer pointer) {
+        return false;
+    }
+
+    @Override
+    public boolean isRoot(NodePointer pointer) {
+        return false;
+    }
+
+    @Override
+    public boolean isRoot() {
+        return false;
+    }
+}

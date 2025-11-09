@@ -1,0 +1,71 @@
+public void testEmbeddedPojoInTree() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.enable(SerializationFeature.INDENT_OUTPUT);
+    
+    // Mocking the classes and serializer for the test
+    // Assuming ListAttribute is a class that holds a list and an itemJsonKey
+    // Assuming X is a class that holds a String and a ListAttribute
+    
+    ListAttribute listAttribute = new ListAttribute("someKey", Arrays.asList("item1", "item2"));
+    X<String> xObject = new X<>();
+    xObject.s = "testString";
+    xObject.items = Arrays.asList(listAttribute); // Assuming X's items can hold ListAttribute
+    
+    // Registering the custom serializer
+    SimpleModule module = new SimpleModule();
+    module.addSerializer(ListAttribute.class, new ListAttributeSerializer());
+    mapper.registerModule(module);
+    
+    // Serialize to tree
+    JsonNode tree = mapper.valueToTree(xObject);
+    
+    // The bug is that the "items" field should contain JSON array nodes,
+    // but instead it contains an embedded object node representing the ArrayList.
+    
+    JsonNode itemsNode = tree.get("items");
+    assertNotNull(itemsNode);
+    
+    // This assertion will fail if the bug is present, as itemsNode will be an ObjectNode
+    // instead of an ArrayNode containing serialized representations of the list items.
+    assertTrue(itemsNode.isArray()); 
+}
+
+// Mock classes for the test to compile
+class X<T> {
+    String s;
+    List<T> items;
+    
+    public String getS() { return s; }
+    public List<T> getItems() { return items; }
+}
+
+class ListAttribute {
+    private String itemJsonKey;
+    private List<?> items;
+    
+    public ListAttribute(String itemJsonKey, List<?> items) {
+        this.itemJsonKey = itemJsonKey;
+        this.items = items;
+    }
+    
+    public String getItemJsonKey() { return itemJsonKey; }
+    public List<?> getItems() { return items; }
+}
+
+class ListAttributeSerializer extends JsonSerializer<ListAttribute> {
+    @Override
+    public void serialize(ListAttribute value, JsonGenerator jgen, SerializerProvider provider) throws IOException {
+        jgen.writeStartObject();
+        jgen.writeStringField("itemType", value.getItemJsonKey());
+        jgen.writeObjectField("items", value.getItems()); // This is where the issue lies
+        jgen.writeEndObject();
+    }
+
+    @Override
+    public void serializeWithType(ListAttribute value, JsonGenerator jgen, SerializerProvider provider, TypeSerializer typeSer) throws IOException {
+        typeSer.writeTypePrefixForObject(value, jgen);
+        jgen.writeStringField("itemType", value.getItemJsonKey());
+        jgen.writeObjectField("items", value.getItems()); // This is where the issue lies
+        typeSer.writeTypeSuffixForObject(value, jgen);
+    }
+}

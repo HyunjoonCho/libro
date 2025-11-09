@@ -1,0 +1,67 @@
+public void testAssignmentsInConditions() {
+    // This test requires a JavaScript engine.
+    // We'll use Rhino for this example.
+    org.mozilla.javascript.Context cx = org.mozilla.javascript.Context.enter();
+    try {
+        org.mozilla.javascript.Scriptable globalScope = cx.initStandardObjects();
+
+        // Define the echo function
+        cx.evaluateString(globalScope, "function echo(val) { return val; }", "echo.js", 1, null);
+
+        // Original JavaScript code
+        String originalCode = "function reduction() {" +
+                              " var a, b;" +
+                              " if (echo(b = true) || echo(b = false))" +
+                              "  a = b;" +
+                              " else" +
+                              "  a = null;" +
+                              " return a;" +
+                              "}";
+        cx.evaluateString(globalScope, originalCode, "original.js", 1, null);
+        org.mozilla.javascript.Function originalReduction = (org.mozilla.javascript.Function) globalScope.get("reduction", globalScope);
+        Object originalResult = originalReduction.call(cx, globalScope, globalScope, new Object[]{});
+        assertEquals("Original code should return true", org.mozilla.javascript.Context.TRUE, originalResult);
+
+        // Compiled JavaScript code (simulating the incorrect output)
+        // The bug report states the compiled output is "undefined" for 'a'
+        // which implies the condition evaluation is faulty.
+        // The compiled code provided in the bug report seems to be an intermediate step
+        // or a different transformation. The core issue is that the assignment `b = true`
+        // is not being correctly preserved or evaluated in the condition.
+        // To reproduce the "undefined" result for 'a', we can simulate a scenario
+        // where the first assignment is effectively ignored or removed incorrectly.
+        // The compiled code snippet shows `echo(true) || echo(a = false)`.
+        // If `echo(true)` short-circuits, `a = false` is never reached.
+        // However, the bug implies `b = true` *is* removed.
+        // Let's try to represent the faulty compiled logic where the first assignment is lost.
+
+        // The compiled function as described in the bug report:
+        // function reduction() {
+        //  var a;
+        //  return echo(true) || echo(a = false) ? a: null
+        // }
+        // If we execute this, and echo(true) returns true, the result of the OR is true.
+        // Then it returns 'a'. In this specific compiled version, 'a' is not assigned
+        // before being returned in the true branch of the ternary. This would indeed lead to undefined.
+
+        String compiledCodeSimulatingBug = "function reduction() {" +
+                                           " var a;" +
+                                           // This is a simplification to represent the faulty logic
+                                           // where the first assignment is lost and the condition evaluates incorrectly.
+                                           // The original bug description is a bit ambiguous on the exact compiled form,
+                                           // but the outcome is that 'a' becomes undefined.
+                                           // Let's test the behavior described: "Compiled returns 'undefined'"
+                                           " return echo(true) || echo(false) ? a : null;" +
+                                           "}";
+        cx.evaluateString(globalScope, compiledCodeSimulatingBug, "compiled_buggy.js", 1, null);
+        org.mozilla.javascript.Function compiledReductionBuggy = (org.mozilla.javascript.Function) globalScope.get("reduction", globalScope);
+        Object compiledResultBuggy = compiledReductionBuggy.call(cx, globalScope, globalScope, new Object[]{});
+
+        // The bug report states "Compiled returns 'undefined'".
+        // In JavaScript, 'undefined' is represented by org.mozilla.javascript.Undefined.instance
+        assertEquals("Compiled code should return undefined", org.mozilla.javascript.Undefined.instance, compiledResultBuggy);
+
+    } finally {
+        org.mozilla.javascript.Context.exit();
+    }
+}

@@ -1,0 +1,46 @@
+public void testAdvancedOptimizationsMishandlesClosure() {
+    String inputJs = "window[\"anchor\"] = function (obj, modifiesProp) {\n" +
+                     " return (function (saved) {\n" +
+                     " return modifiesProp(obj) + saved;\n" +
+                     " })(obj[\"prop\"]);\n" +
+                     "}";
+    CompilerOptions options = new CompilerOptions();
+    options.setLanguage(CompilerOptions.LanguageMode.ECMASCRIPT5);
+    options.setOptimizationLevel(CompilerOptions.OptimizationLevel.ADVANCED_OPTIMIZATIONS);
+    options.setPrettyPrint(true);
+
+    // Create a dummy externs file for 'window'
+    String externsJs = "var window = {};";
+    List<SourceFile> externs = Lists.newArrayList(SourceFile.fromCode("externs.js", externsJs));
+
+    List<SourceFile> inputs = Lists.newArrayList(SourceFile.fromCode("input.js", inputJs));
+
+    Compiler compiler = new Compiler();
+    compiler.init(new PrintStream(new ByteArrayOutputStream()), new PrintStream(new ByteArrayOutputStream()), compilerOptions);
+    compiler.compile(externs, inputs, new Result());
+
+    String outputJs = compiler.toSource();
+
+    // The expected output is based on the bug description, which indicates a specific transformation.
+    // We are checking if the compiler *fails* to perform this optimization correctly,
+    // meaning the output is *different* from the expected optimized version.
+    // The bug states the incorrect output is:
+    // window.foo=function(a,b){return b(a)+a.prop};
+    // This implies that the original `saved` variable, which captured `obj["prop"]`
+    // before `modifiesProp(obj)` was called, is lost.
+    // Therefore, if the correct optimization is applied, the output should be:
+    // window["anchor"] = function(obj, modifiesProp) {
+    //   var saved = obj.prop;
+    //   return modifiesProp(obj) + saved;
+    // };
+    // The test should assert that the actual output is *not* the incorrectly optimized version.
+
+    String incorrectOptimizedJs = "window.anchor = function(obj, modifiesProp) { return modifiesProp(obj) + obj.prop; };";
+
+    assertNotEquals(incorrectOptimizedJs.trim(), outputJs.trim());
+
+    // Optionally, you could assert that the output *is* the correctly optimized version if you know it.
+    // However, the core of the bug is the incorrect optimization, so asserting against that is key.
+    // For demonstration, let's check for a structure that implies the 'saved' variable is used.
+    assertTrue(outputJs.contains("saved")); // A simple check that might indicate the correct behavior
+}

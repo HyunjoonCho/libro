@@ -1,0 +1,39 @@
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.xml.DOMConstants;
+import org.junit.Test;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import javax.xml.parsers.DocumentBuilderFactory;
+import static org.junit.Assert.assertEquals;
+
+public class JXPathNamespaceTest {
+
+    @Test
+    public void testResettingDefaultNamespaceCausesLoop() throws Exception {
+        String xml = "<root xmlns='test111'><b:foo xmlns:b='bla' xmlns='test111'><b:bar>a</b:bar><test xmlns=''></test></b:foo></root>";
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+        Document doc = factory.newDocumentBuilder().parse(new org.xml.sax.InputSource(new java.io.StringReader(xml)));
+
+        JXPathContext context = JXPathContext.newInstance(doc);
+
+        // Get the 'test' node
+        Element testNode = (Element) doc.getElementsByTagNameNS("","test").item(0);
+
+        // Ensure the node has the correct namespace URI (or lack thereof)
+        assertEquals("Namespace URI for 'test' node should be empty", "", testNode.getNamespaceURI());
+
+        // Create a pointer for the 'test' node
+        org.apache.commons.jxpath.Pointer testPointer = context.getPointer("//test");
+
+        // This should no longer cause an endless loop and should produce the correct path
+        String path = testPointer.asPath();
+
+        // The expected path should reflect the absence of a namespace for the 'test' element
+        // and the correct prefix for 'foo' and 'bar' elements.
+        // Based on the bug description, the original incorrect path was '//b:fo/null:test'.
+        // The fix suggests that an empty namespace URI should result in just the local name.
+        // Therefore, the path to the 'test' element should be '/root/b:foo/test'.
+        assertEquals("/root/b:foo/test", path);
+    }
+}

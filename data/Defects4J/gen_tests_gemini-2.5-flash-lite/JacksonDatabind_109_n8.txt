@@ -1,0 +1,60 @@
+public void testBigDecimalJsonFormatIgnored() throws Exception {
+    ObjectMapper mapper = new ObjectMapper()
+            .enable(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN);
+    mapper.setNodeFactory(JsonNodeFactory.instance);
+
+    TestObject testObject = new TestObject(new BigDecimal("0.0000000005"));
+    String json = mapper.writeValueAsString(testObject);
+
+    // The bug describes that WRITE_BIGDECIMAL_AS_PLAIN is ignored if @JsonFormat is used.
+    // The provided example does not use @JsonFormat, so we simulate it by creating a class
+    // with the annotation and asserting the behavior.
+    // If @JsonFormat was used, the output would be a JSON string.
+    // Since WRITE_BIGDECIMAL_AS_PLAIN is enabled, and it's not a string, it should be plain.
+    // The bug implies that if @JsonFormat(shape=JsonFormat.Shape.STRING) was present,
+    // WRITE_BIGDECIMAL_AS_PLAIN would be ignored and the output would be in scientific notation.
+
+    // To reproduce the bug, we need to test the case *with* @JsonFormat.
+    // Let's create a wrapper class that has the annotation.
+    JsonNode node = mapper.readTree(json);
+    JsonNode valueNode = node.get("value");
+
+    // Assert that the value is a JSON number (not a string) and is in plain format.
+    assertTrue(valueNode.isNumber());
+    assertEquals("0.0000000005", valueNode.asText());
+
+    // Now, let's test the scenario *with* @JsonFormat to show the bug.
+    ObjectMapper mapperWithAnnotation = new ObjectMapper()
+            .enable(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN);
+    TestObjectWithAnnotation testObjectWithAnnotation = new TestObjectWithAnnotation(new BigDecimal("0.0000000005"));
+    String jsonWithAnnotation = mapperWithAnnotation.writeValueAsString(testObjectWithAnnotation);
+
+    JsonNode nodeWithAnnotation = mapperWithAnnotation.readTree(jsonWithAnnotation);
+    JsonNode valueNodeWithAnnotation = nodeWithAnnotation.get("value");
+
+    // According to the bug report, WRITE_BIGDECIMAL_AS_PLAIN is ignored.
+    // This means it should serialize as a string and potentially in scientific notation.
+    assertTrue(valueNodeWithAnnotation.isTextual());
+    // The bug states WRITE_BIGDECIMAL_AS_PLAIN is ignored, so it should not be plain.
+    // It should be in scientific notation as per the example output.
+    assertEquals("5.0E-10", valueNodeWithAnnotation.asText());
+}
+
+// Helper class without @JsonFormat
+static class TestObject {
+    public BigDecimal value;
+
+    public TestObject(BigDecimal value) {
+        this.value = value;
+    }
+}
+
+// Helper class with @JsonFormat to reproduce the bug
+static class TestObjectWithAnnotation {
+    @com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING)
+    public BigDecimal value;
+
+    public TestObjectWithAnnotation(BigDecimal value) {
+        this.value = value;
+    }
+}

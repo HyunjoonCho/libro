@@ -1,0 +1,144 @@
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Date;
+
+import static org.junit.Assert.assertTrue;
+
+public class DateTimeSerializerTest {
+
+    // Dummy class to test serialization with JsonFormat
+    static class Event {
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss.SSSZ")
+        public Date eventDate;
+
+        public Event(Date eventDate) {
+            this.eventDate = eventDate;
+        }
+    }
+
+    @Test
+    public void testSerializerIgnoresConfiguredFormat() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Ensure we are not using default ISO8601
+
+        Date testDate = new Date(1678886400000L); // Represents 2023-03-15T12:00:00.000Z
+        Event event = new Event(testDate);
+
+        String json = mapper.writeValueAsString(event);
+
+        // The bug is that the serializer should use the pattern from @JsonFormat,
+        // but it defaults to ISO8601 if no pattern is explicitly provided in @JsonFormat.
+        // However, in this test case, we *are* providing a pattern.
+        // The bug description implies that even with a provided pattern, it falls back.
+        // Let's check if the output uses the specified pattern.
+        // If the bug is present, the output will NOT contain the specified pattern.
+        // The actual bug is that if @JsonFormat is present but has NO pattern, it defaults to ISO8601.
+        // The provided code snippet is for a case where a pattern *is* specified.
+        // The description is slightly misleading. The real issue is when @JsonFormat is used
+        // *without* a pattern, it resets to ISO8601.
+
+        // Let's adjust the test to reflect the actual described bug behavior.
+        // The bug is that if @JsonFormat is present, it *always* uses DATE_FORMAT_STR_ISO8601
+        // if `format.getPattern()` is null or empty, which is the case when no pattern is specified.
+        // The test should verify that if @JsonFormat is present *without* a pattern,
+        // it doesn't use the configured ObjectMapper's DateFormat.
+
+        // Let's create a scenario where the ObjectMapper has a specific format,
+        // and the annotated field has @JsonFormat but no pattern.
+        ObjectMapper mapperWithCustomFormat = new ObjectMapper();
+        mapperWithCustomFormat.setDateFormat(new java.text.SimpleDateFormat("MM/dd/yyyy"));
+
+        class EventWithEmptyFormat {
+            @JsonFormat(shape = JsonFormat.Shape.STRING) // No pattern specified
+            public Date eventDate;
+
+            public EventWithEmptyFormat(Date eventDate) {
+                this.eventDate = eventDate;
+            }
+        }
+
+        Date dateForEmptyFormat = new Date(1678886400000L); // Represents 2023-03-15T12:00:00.000Z
+        EventWithEmptyFormat eventWithEmptyFormat = new EventWithEmptyFormat(dateForEmptyFormat);
+
+        String jsonWithEmptyFormat = mapperWithCustomFormat.writeValueAsString(eventWithEmptyFormat);
+
+        // Expected behavior (buggy): The format should revert to ISO8601.
+        // The ObjectMapper's "MM/dd/yyyy" format should be ignored.
+        // The output should contain something like "2023-03-15T12:00:00.000+0000" (ISO8601)
+        // If the bug were fixed, it would use "03/15/2023".
+
+        // Let's check for the presence of ISO8601 format elements that wouldn't be in MM/dd/yyyy
+        assertTrue("The output should use ISO8601 format, indicating the configured format was ignored.",
+                   jsonWithEmptyFormat.contains("-") && jsonWithEmptyFormat.contains(":") && jsonWithEmptyFormat.contains("."));
+
+        // To be more precise, let's check if it *doesn't* match the ObjectMapper's format.
+        // This is a negative assertion for the fix.
+        // If the bug is present, it will NOT match the custom format.
+        // If the bug is fixed, it WILL match the custom format.
+
+        // Assert that the output does NOT match the expected format from the ObjectMapper
+        // if the bug is present.
+        // The buggy behavior is that it defaults to ISO8601.
+        // So, we assert that it does NOT match the expected custom format.
+        // This test reproduces the *failure* by checking for the *absence* of the correct format.
+
+        // The actual JSON produced by the buggy code for EventWithEmptyFormat would look like:
+        // {"eventDate":"2023-03-15T12:00:00.000+0000"}
+        // The desired JSON (if fixed) would be:
+        // {"eventDate":"03/15/2023"}
+
+        // So, we assert that the generated JSON does NOT contain "03/15/2023"
+        // AND it *does* contain elements of ISO8601.
+        // The check above `jsonWithEmptyFormat.contains("-") && jsonWithEmptyFormat.contains(":") && jsonWithEmptyFormat.contains(".")`
+        // is sufficient to indicate the fallback to ISO8601.
+
+        // Let's add a check for the specific pattern provided in the first example,
+        // to show that even when a pattern IS provided in @JsonFormat, it might be ignored
+        // if the `createContextual` logic is flawed.
+        // The description says: "creates a new serializer with StdDateFormat.DATE_FORMAT_STR_ISO8601 format
+        // instead of re-using the actual format that may have been specified on the configuration."
+        // This implies even if format.getPattern() returns something, it might still fall back.
+        // Let's re-read the code snippet:
+        // `final String pattern = format.hasPattern() ? format.getPattern() : StdDateFormat.DATE_FORMAT_STR_ISO8601;`
+        // This line *itself* seems to be the issue if `format.hasPattern()` is true but `format.getPattern()` is null/empty.
+        // The test case above `EventWithEmptyFormat` covers the `format.hasPattern()` is false case.
+
+        // Let's craft a test where format.hasPattern() is TRUE but the pattern is empty or null.
+        // This is hard to achieve directly with annotations.
+        // The described bug is more about the `createContextual` method's fallback logic.
+
+        // The core of the bug is that `DateTimeSerializerBase#createContextual`
+        // incorrectly resets the format to `StdDateFormat.DATE_FORMAT_STR_ISO8601`
+        // when `@JsonFormat` is present but doesn't specify a pattern, ignoring
+        // the `ObjectMapper`'s configured `DateFormat`.
+
+        // Let's use the `EventWithEmptyFormat` class again, and verify the output.
+        // The bug is that `jsonWithEmptyFormat` will use ISO8601, not the ObjectMapper's date format.
+
+        // We already asserted that it contains elements of ISO8601.
+        // Let's ensure it does NOT contain the custom format.
+        // This is the most direct way to show the fallback.
+        String customFormatString = "03/15/2023"; // Based on dateForEmptyFormat and mapperWithCustomFormat
+        // We need to be careful about timezone and milliseconds.
+        // The custom format is "MM/dd/yyyy".
+        // The dateForEmptyFormat is 2023-03-15T12:00:00.000Z.
+        // So, the expected custom format string is "03/15/2023".
+        // The buggy output will be like: {"eventDate":"2023-03-15T12:00:00.000+0000"}
+
+        // Assert that the generated JSON does NOT contain the custom format string.
+        // This implies the bug is present.
+        assertTrue("The generated JSON should NOT contain the custom format string if the bug is present.",
+                   !jsonWithEmptyFormat.contains(customFormatString));
+
+        // We can also be more specific and check for the ISO8601 format itself.
+        // The actual output for `EventWithEmptyFormat` will be like:
+        // {"eventDate":"2023-03-15T12:00:00.000+0000"}
+        // Let's check for a key part of this ISO8601 format.
+        assertTrue("The generated JSON should contain ISO8601 elements.",
+                   jsonWithEmptyFormat.contains("2023-03-15") && jsonWithEmptyFormat.contains("T") && jsonWithEmptyFormat.contains("000+0000"));
+    }
+}

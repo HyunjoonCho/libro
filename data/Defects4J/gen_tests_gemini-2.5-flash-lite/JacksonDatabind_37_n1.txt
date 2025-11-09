@@ -1,0 +1,71 @@
+public void testJsonTypeDefaultImplInheritedField() throws IOException {
+    String json = "{\n" +
+            "  \"version\": \"1.0\",\n" +
+            "  \"schemas\": [\n" +
+            "    {\n" +
+            "      \"name\": \"MySchema\",\n" +
+            "      \"tables\": [\n" +
+            "        {\n" +
+            "          \"name\": \"MyTable\"\n" +
+            "        }\n" +
+            "      ]\n" +
+            "    }\n" +
+            "  ]\n" +
+            "}";
+
+    ObjectMapper mapper = new ObjectMapper();
+    // Mock the necessary classes to reproduce the issue without full Calcite dependency
+    // This assumes JsonRoot, JsonMapSchema, and JsonTable are structured similarly
+    // to how they would be used with @JsonType.defaultImpl in Calcite.
+
+    // Define minimal mock classes to simulate the structure
+    class JsonSchema {
+        public String name;
+    }
+
+    class JsonMapSchema extends JsonSchema {
+        // If JsonMapSchema itself had properties, they would be here.
+        // The issue is with the inherited 'name' field.
+        public java.util.List<Object> tables; // Using Object to avoid needing JsonTable mock
+    }
+
+    class JsonRoot {
+        public String version;
+        public java.util.List<JsonMapSchema> schemas;
+    }
+
+    // Configure the ObjectMapper to handle the polymorphism if necessary,
+    // though the core of the bug seems to be how it processes inherited fields
+    // when a default implementation is specified.
+    // For this specific bug, the problem is that 'name' is not recognized on JsonMapSchema,
+    // even though it's inherited. Jackson should resolve this.
+    // The original issue might have involved @JsonType and @JsonSubTypes,
+    // but the stack trace points to UnrecognizedPropertyException on 'name' for JsonMapSchema.
+
+    // If a polymorphic type handling was explicitly configured and failing,
+    // it would look something like this (but this might not be needed to reproduce the core issue):
+    // SimpleModule module = new SimpleModule();
+    // module.addDeserializer(JsonSchema.class, new JsonDeserializer<JsonSchema>() {
+    //     @Override
+    //     public JsonSchema deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+    //         // This would typically inspect the JSON to decide which subclass to instantiate.
+    //         // For this test, we're assuming the JSON structure directly implies JsonMapSchema.
+    //         return p.readValueAs(JsonMapSchema.class);
+    //     }
+    // });
+    // mapper.registerModule(module);
+
+    // The core of the problem is Jackson's deserialization of inherited fields.
+    // The provided stack trace shows that `name` is an unrecognized property for `JsonMapSchema`.
+    // This suggests that Jackson is not correctly picking up the `name` field from the base `JsonSchema`
+    // when processing `JsonMapSchema`.
+
+    try {
+        mapper.readValue(json, JsonRoot.class);
+        fail("Should have thrown UnrecognizedPropertyException for 'name' field.");
+    } catch (UnrecognizedPropertyException e) {
+        // Assert that the exception is indeed about the 'name' field and the correct class
+        assertTrue(e.getMessage().contains("Unrecognized field \"name\""));
+        assertTrue(e.getMessage().contains("class org.apache.calcite.model.JsonMapSchema")); // Use the class name from the stack trace
+    }
+}

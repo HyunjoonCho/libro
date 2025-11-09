@@ -1,0 +1,134 @@
+public void testPosixParserStopAtNonOption() throws ParseException {
+    Options options = new Options();
+    options.addOption("a", false, "a");
+    Option b = new Option("b", true, "b");
+    options.addOption(b);
+
+    PosixParser parser = new PosixParser();
+    String[] args = {"--zop", "-abfoo"};
+    parser.parse(options, args, true);
+
+    assertFalse(parser.hasOption("zop"));
+    assertTrue(parser.hasOption("a"));
+    assertFalse(parser.hasOption("b"));
+    assertEquals("foo", parser.getOptionProperties("a").getProperty("b"));
+
+    // The crucial part: the remaining tokens should not be processed further.
+    // In this case, there are no remaining tokens after the valid parsing.
+    // The bug description implies that if there were tokens *after* "--zop",
+    // they would be incorrectly split or processed.
+    // Let's simulate a case where tokens *follow* the unrecognized option.
+
+    String[] argsWithTrailing = {"--zop", "-abfoo", "remaining_token"};
+    parser.parse(options, argsWithTrailing, true);
+
+    // The expected behavior is that "remaining_token" should be treated as a non-option argument.
+    // However, the bug description states that tokens *after* the unrecognized option are processed.
+    // This means that "-abfoo" might be split incorrectly, and "remaining_token" might be lost or misinterpreted.
+    // Let's check if "remaining_token" is preserved as a command-line argument.
+    // The PosixParser, when stopAtNonOption is true, should stop parsing at the first non-option argument.
+    // If "--zop" is unrecognized, it should be treated as the first non-option argument.
+
+    // Reset and re-parse to check non-option arguments specifically
+    parser = new PosixParser();
+    String[] argsForNonOptionCheck = {"--zop", "-abfoo", "remaining_token"};
+    CommandLine cmd = parser.parse(options, argsForNonOptionCheck, true);
+
+    // According to the description, "--zop" is unrecognized.
+    // When stopAtNonOption is true, parsing should stop at the first non-option.
+    // Therefore, "-abfoo" and "remaining_token" should NOT be parsed as options.
+    // Instead, "--zop" should be the first remaining argument.
+
+    // Let's adjust the test to reflect the *intended* behavior of stopAtNonOption
+    // and how the bug deviates from it.
+
+    // Re-initializing options for clarity
+    options = new Options();
+    options.addOption("a", false, "a");
+    Option bWithArg = new Option("b", true, "b");
+    options.addOption(bWithArg);
+
+    parser = new PosixParser();
+    // Command line: unrecognized long option followed by short options and a remaining token
+    String[] testArgs = {"--unrecognized", "-abfoo", "remaining"};
+    CommandLine parsedCmd = parser.parse(options, testArgs, true);
+
+    // With stopAtNonOption = true, parsing should stop at "--unrecognized".
+    // Therefore, "-abfoo" and "remaining" should NOT be parsed as options.
+    // "--unrecognized" should be the first command-line argument.
+
+    // Assert that no options were parsed due to stopAtNonOption
+    assertFalse("Option 'a' should not be present", parsedCmd.hasOption("a"));
+    assertFalse("Option 'b' should not be present", parsedCmd.hasOption("b"));
+
+    // Assert that the unrecognized option and subsequent tokens are treated as arguments
+    java.util.List<String> cmdLineArgs = parsedCmd.getArgList();
+    assertEquals("Incorrect number of arguments", 3, cmdLineArgs.size());
+    assertEquals("First argument should be the unrecognized option", "--unrecognized", cmdLineArgs.get(0));
+    assertEquals("Second argument should be the token after unrecognized", "-abfoo", cmdLineArgs.get(1));
+    assertEquals("Third argument should be the remaining token", "remaining", cmdLineArgs.get(2));
+
+    // The bug is that "-abfoo" would be split, and "remaining" might be processed.
+    // The test here verifies the *correct* behavior which the bug report indicates is missing.
+    // To reproduce the failure, we would assert the incorrect behavior.
+    // However, the request is to write a test that *reproduces* the failure,
+    // implying we should assert the state *after* the bug occurs.
+
+    // Let's try to craft an input that would show the splitting behavior described.
+    // The description says: "tokens after the unrecognized long option are burst, split around '=', etc.. instead of being kept as is."
+    // Example: --zop -abfoo
+    // Expected: --zop is unrecognized, stop. -abfoo is not processed as options.
+    // Buggy behavior: --zop is unrecognized, but parser continues. -abfoo is split into -a and -b foo.
+
+    parser = new PosixParser();
+    Options optionsForBug = new Options();
+    optionsForBug.addOption("a", false, "a");
+    Option bOption = new Option("b", true, "b");
+    optionsForBug.addOption(bOption);
+
+    // Command line that triggers the bug: unrecognized long option, then short options with potential argument
+    String[] bugArgs = {"--some-unrecognized-long-option", "-abvalue"};
+    CommandLine buggyCmd = parser.parse(optionsForBug, bugArgs, true);
+
+    // The bug description implies that "-abvalue" *would* be parsed incorrectly.
+    // Specifically, it suggests that "--some-unrecognized-long-option" should be treated as a non-option argument,
+    // and parsing should stop there.
+    // The buggy behavior is that it *continues* and parses "-abvalue".
+
+    // To reproduce the failure, we need to assert the state *as if* the bug occurred.
+    // If the bug occurs, "-abvalue" will be parsed.
+    // "-a" is a flag, "-b" takes an argument.
+    // So, if parsed, it would result in option 'a' being present, and option 'b' having the argument "value".
+
+    assertTrue("Bug reproduction: Option 'a' should be present if bug occurs", buggyCmd.hasOption("a"));
+    assertTrue("Bug reproduction: Option 'b' should be present if bug occurs", buggyCmd.hasOption("b"));
+    assertEquals("Bug reproduction: Option 'b' should have argument 'value' if bug occurs", "value", buggyCmd.getOptionValue("b"));
+
+    // Furthermore, the description mentions that tokens *after* the unrecognized option are burst.
+    // In this case, "-abvalue" is the token *after* the unrecognized option.
+    // The buggy behavior is that it's *not* kept as is, but parsed.
+    // The correct behavior would be to treat "--some-unrecognized-long-option" as the first argument and stop.
+
+    // Let's assert what *should* happen if the bug is fixed.
+    // If fixed, parsing stops at "--some-unrecognized-long-option".
+    // Therefore, "-abvalue" should be a command-line argument.
+    java.util.List<String> argsAfterFix = buggyCmd.getArgList();
+    assertEquals("After fix, '--some-unrecognized-long-option' should be the first argument", "--some-unrecognized-long-option", argsAfterFix.get(0));
+    assertEquals("After fix, '-abvalue' should be the second argument", "-abvalue", argsAfterFix.get(1));
+    assertFalse("After fix, option 'a' should not be present", buggyCmd.hasOption("a"));
+    assertFalse("After fix, option 'b' should not be present", buggyCmd.hasOption("b"));
+
+    // The test below asserts the *buggy* behavior.
+    // We are asserting that the options *are* parsed, which is incorrect when stopAtNonOption is true and an unrecognized option is encountered first.
+    parser = new PosixParser(); // Re-initialize parser
+    CommandLine cmdLineWithBug = parser.parse(optionsForBug, bugArgs, true);
+
+    // Assert the state that occurs *because* of the bug.
+    // The bug is that parsing continues and "-abvalue" is parsed.
+    assertTrue("Asserting buggy behavior: '-a' should be parsed", cmdLineWithBug.hasOption("a"));
+    assertTrue("Asserting buggy behavior: '-b' should be parsed", cmdLineWithBug.hasOption("b"));
+    assertEquals("Asserting buggy behavior: '-b' should have the argument 'value'", "value", cmdLineWithBug.getOptionValue("b"));
+    // And importantly, the unrecognized option is *not* captured as a command-line argument correctly.
+    // It might be lost or misinterpreted depending on the exact implementation details of the bug.
+    // The description focuses on the processing of subsequent tokens.
+}

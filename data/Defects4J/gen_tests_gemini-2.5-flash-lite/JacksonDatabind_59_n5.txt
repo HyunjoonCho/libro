@@ -1,0 +1,109 @@
+@Test
+    public void testJsonDeserializeKeyUsingWithDefaultTypingNonFinalFails() throws JsonParseException, JsonMappingException, IOException {
+        ObjectMapper mapper = new ObjectMapper().enableDefaultTyping(DefaultTyping.NON_FINAL);
+        String json = "{\"mapProperty\":[\"java.util.HashMap\",{\"Compound|Key\":\"Value\"}]}";
+        try {
+            TestClass testInstance = mapper.readValue(json, TestClass.class);
+            // If readValue succeeds, the deserialization of the key was not as expected.
+            // The expected behavior is that it should fail because the key deserializer is ignored.
+            // However, the bug report indicates it *does* deserialize, but incorrectly.
+            // To reproduce the *failure* as described, we assert that it does *not* match
+            // the expected deserialized object if the key deserializer were correctly applied.
+
+            // This assertion is based on the assumption that if the key deserializer is ignored,
+            // Jackson will attempt to deserialize "Compound|Key" as a String, not a CompoundKey.
+            // The bug report implies the deserialization happens but is incorrect, which is
+            // what this test aims to catch.
+            Map<CompoundKey, String> map = testInstance.mapProperty;
+            assertFalse("Deserialization should have failed or produced an unexpected result", map.containsKey(new CompoundKey("Compound", "Key")));
+            // If the test reaches here without assertion error, it means the key was not deserialized as expected.
+            // A more direct reproduction would involve checking the type of the key if Jackson didn't throw an exception.
+            // Since the bug report implies a failure in deserialization, we'll simulate checking for an incorrect outcome.
+
+        } catch (JsonMappingException e) {
+            // If a JsonMappingException occurs, it might indicate that Jackson failed to deserialize
+            // the key because it couldn't find a suitable deserializer, which is closer to the expected failure.
+            // However, the bug report states it *ignores* the annotation, not that it fails to find a deserializer.
+            // The core of the bug is that @JsonDeserialize(keyUsing=...) is bypassed.
+            // The provided failing test in the bug report asserts equality of serialized/deserialized strings,
+            // implying that the deserialization *does* happen, but the resulting object structure or content is wrong.
+
+            // Let's re-attempt to reproduce the exact failure condition described by the testFails() method in the bug.
+            // The failure in the original testFails() is that the assertion `assertEquals(TEST_INSTANCE_SERIALIZED, testInstanceSerialized);` fails.
+            // This means that after deserializing and re-serializing, the JSON string is different.
+            // This difference arises because the key "Compound|Key" is not recognized as a CompoundKey and is likely treated as a String key,
+            // and then Jackson's default serializer for String keys is used, which doesn't involve the CompoundKeySerializer.
+
+            ObjectMapper mapperWithTyping = new ObjectMapper().enableDefaultTyping(DefaultTyping.NON_FINAL);
+            TestClass testInstanceWithTyping = mapperWithTyping.readValue(json, TestClass.class);
+            String serializedWithTyping = mapperWithTyping.writeValueAsString(testInstanceWithTyping);
+
+            // The original failing test asserts that the serialized string should be equal to the original.
+            // If it's not equal, the test fails. We are essentially asserting that they are NOT equal
+            // to demonstrate the failure.
+            assertNotEquals("Serialized string should differ due to incorrect key deserialization", json, serializedWithTyping);
+        }
+    }
+
+    // Helper methods and classes from the bug report need to be accessible for this test method.
+    // Assuming they are defined within the same class or imported appropriately.
+
+    @JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
+    public static final class TestClass {
+        @JsonProperty("mapProperty")
+        @JsonSerialize(keyUsing = CompoundKeySerializer.class)
+        private final Map<CompoundKey, String> mapProperty;
+
+        @JsonCreator
+        private TestClass(@JsonDeserialize(keyUsing = CompoundKeyDeserializer.class) @JsonProperty("mapProperty") Map<CompoundKey, String> mapProperty) {
+            this.mapProperty = mapProperty;
+        }
+
+        public Map<CompoundKey, String> getMapProperty() {
+            return mapProperty;
+        }
+    }
+
+    public static final class CompoundKey {
+        private String part0;
+        private String part1;
+
+        public CompoundKey(String part0, String part1) {
+            this.part0 = part0;
+            this.part1 = part1;
+        }
+
+        public String getPart0() { return part0; }
+        public String getPart1() { return part1; }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CompoundKey that = (CompoundKey) o;
+            if (part0 != null ? !part0.equals(that.part0) : that.part0 != null) return false;
+            return part1 != null ? part1.equals(that.part1) : that.part1 == null;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = part0 != null ? part0.hashCode() : 0;
+            result = 31 * result + (part1 != null ? part1.hashCode() : 0);
+            return result;
+        }
+    }
+
+    public static class CompoundKeyDeserializer extends KeyDeserializer {
+        @Override
+        public Object deserializeKey(String s, DeserializationContext deserializationContext) {
+            String[] parts = s.split("\\|");
+            return new CompoundKey(parts[0], parts[1]);
+        }
+    }
+
+    public static class CompoundKeySerializer extends JsonSerializer<CompoundKey> {
+        @Override
+        public void serialize(CompoundKey compoundKey, JsonGenerator jsonGenerator, SerializerProvider serializerProvider) throws IOException {
+            jsonGenerator.writeFieldName(compoundKey.getPart0() + '|' + compoundKey.getPart1());
+        }
+    }

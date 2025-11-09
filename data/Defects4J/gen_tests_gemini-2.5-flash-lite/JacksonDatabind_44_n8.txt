@@ -1,0 +1,196 @@
+public void testPolymorphicWithDefaultImpl() throws Exception {
+    // Configure Jackson ObjectMapper to handle polymorphic types
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(new SimpleModule() {
+        @Override
+        public void setupModule(SetupContext context) {
+            // Define the polymorphic type and its default implementation
+            context.registerSubtypes(new NamedType(Dog.class, "dog"));
+            context.addDeserializers(new PolymorphicTypeDeserializer<>(Animal.class, "type", context.getJavaTypeFactory()));
+        }
+    });
+
+    // Create a Dog instance with properties from both base and derived types
+    Dog dog = new Dog("Buddy", 5, "Golden Retriever");
+    
+    // Serialize the Dog object
+    String json = mapper.writeValueAsString(dog);
+    
+    // Deserialize the JSON back into an Animal type
+    Animal deserializedAnimal = mapper.readValue(json, Animal.class);
+
+    // Assert that the deserialized object is a Dog and has all properties
+    assertTrue(deserializedAnimal instanceof Dog);
+    Dog deserializedDog = (Dog) deserializedAnimal;
+    assertEquals("Buddy", deserializedDog.getName());
+    assertEquals(5, deserializedDog.getAge());
+    assertEquals("Golden Retriever", deserializedDog.getBreed());
+}
+
+// Define the base type
+abstract class Animal {
+    private String name;
+    private int age;
+
+    // Default constructor for Jackson
+    public Animal() {
+    }
+
+    public Animal(String name, int age) {
+        this.name = name;
+        this.age = age;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public int getAge() {
+        return age;
+    }
+
+    public void setAge(int age) {
+        this.age = age;
+    }
+}
+
+// Define a derived type
+class Dog extends Animal {
+    private String breed;
+
+    // Default constructor for Jackson
+    public Dog() {
+    }
+
+    public Dog(String name, int age, String breed) {
+        super(name, age);
+        this.breed = breed;
+    }
+
+    public String getBreed() {
+        return breed;
+    }
+
+    public void setBreed(String breed) {
+        this.breed = breed;
+    }
+}
+
+// Custom deserializer for polymorphic types
+class PolymorphicTypeDeserializer<T> extends StdDeserializer<T> {
+
+    private final String typePropertyName;
+    private final JavaTypeFactory typeFactory;
+
+    protected PolymorphicTypeDeserializer(Class<?> vc, String typePropertyName, JavaTypeFactory typeFactory) {
+        super(vc);
+        this.typePropertyName = typePropertyName;
+        this.typeFactory = typeFactory;
+    }
+
+    @Override
+    public T deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+        JsonNode node = p.getCodec().readTree(p);
+        String type = node.get(typePropertyName).asText();
+        
+        // Resolve the actual Java type based on the type property
+        JavaType baseType = typeFactory.constructType(handledType());
+        JavaType actualType = typeFactory.constructSpecialSimpleType(baseType, type, handledType()); // Simplified for example
+        
+        return (T) p.getCodec().treeToValue(node, actualType.getRawClass());
+    }
+    
+    // Mock JavaTypeFactory for the example
+    private static class JavaTypeFactory {
+        public JavaType constructType(Class<?> cls) {
+            return null; // Mock implementation
+        }
+        public JavaType constructSpecialSimpleType(JavaType baseType, String typeId, Class<?> rawClass) {
+            if ("dog".equals(typeId)) {
+                return new SimpleJavaType(Dog.class); // Mock implementation
+            }
+            return null; // Mock implementation
+        }
+    }
+    
+    // Mock SimpleJavaType for the example
+    private static class SimpleJavaType extends JavaType {
+        private Class<?> rawClass;
+        
+        public SimpleJavaType(Class<?> rawClass) {
+            this.rawClass = rawClass;
+        }
+        
+        @Override
+        public Class<?> getRawClass() {
+            return rawClass;
+        }
+        
+        // Other methods of JavaType would need to be implemented or mocked
+        @Override public boolean isContainerType() { return false; }
+        @Override public boolean isAbstract() { return false; }
+        @Override public boolean isConcrete() { return true; }
+        @Override public boolean isThrowable() { return false; }
+        @Override public boolean isPrimitive() { return false; }
+        @Override public boolean isFinal() { return false; }
+        @Override public boolean isIgnorableType() { return false; }
+        @Override public boolean hasGenericTypes() { return false; }
+        @Override public boolean isArrayType() { return false; }
+        @Override public boolean isCollectionType() { return false; }
+        @Override public boolean isMapType() { return false; }
+        @Override public boolean isEnumType() { return false; }
+        @Override public boolean isInterface() { return false; }
+        @Override public boolean isJavaLangObject() { return false; }
+        @Override public boolean isTypeOrSubTypeOf(Class<?>... classes) { return false; }
+        @Override public boolean isTypeOrSuperClassOf(Class<?>... classes) { return false; }
+        @Override public boolean isArraySubTypeOf(JavaType type) { return false; }
+        @Override public boolean isArrayType() { return false; }
+        @Override public boolean isAbstract() { return false; }
+        @Override public boolean isConcrete() { return true; }
+        @Override public boolean isPrimitive() { return false; }
+        @Override public boolean isFinal() { return false; }
+        @Override public boolean isIgnorableType() { return false; }
+        @Override public boolean hasGenericTypes() { return false; }
+        @Override public boolean isCollectionLikeType() { return false; }
+        @Override public boolean isMapLikeType() { return false; }
+        @Override public boolean isJavaLangObject() { return false; }
+        @Override public boolean isThrowable() { return false; }
+        @Override public boolean isInterface() { return false; }
+        @Override public boolean isEnumType() { return false; }
+        @Override public boolean isValueType() { return true; }
+        @Override public boolean isAbstract() { return false; }
+        @Override public boolean isConcrete() { return true; }
+        @Override public boolean isPrimitive() { return false; }
+        @Override public boolean isFinal() { return false; }
+        @Override public boolean isIgnorableType() { return false; }
+        @Override public boolean hasGenericTypes() { return false; }
+        @Override public boolean isArrayType() { return false; }
+        @Override public boolean isCollectionType() { return false; }
+        @Override public boolean isMapType() { return false; }
+        @Override public boolean isEnumType() { return false; }
+        @Override public boolean isInterface() { return false; }
+        @Override public boolean isJavaLangObject() { return false; }
+        @Override public boolean isTypeOrSubTypeOf(Class<?>... classes) { return false; }
+        @Override public boolean isTypeOrSuperClassOf(Class<?>... classes) { return false; }
+        @Override public boolean isArraySubTypeOf(JavaType type) { return false; }
+        @Override public boolean isArrayType() { return false; }
+        @Override public boolean isAbstract() { return false; }
+        @Override public boolean isConcrete() { return true; }
+        @Override public boolean isPrimitive() { return false; }
+        @Override public boolean isFinal() { return false; }
+        @Override public boolean isIgnorableType() { return false; }
+        @Override public boolean hasGenericTypes() { return false; }
+        @Override public boolean isCollectionLikeType() { return false; }
+        @Override public boolean isMapLikeType() { return false; }
+        @Override public boolean isJavaLangObject() { return false; }
+        @Override public boolean isThrowable() { return false; }
+        @Override public boolean isInterface() { return false; }
+        @Override public boolean isEnumType() { return false; }
+        @Override public boolean isValueType() { return true; }
+        // ... other necessary methods to satisfy JavaType interface
+    }
+}

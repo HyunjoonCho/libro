@@ -1,0 +1,86 @@
+public void testEmbeddedPOJOs() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.enable(SerializationFeature.INDENT_OUTPUT);
+
+    // Define a simple POJO to embed
+    class EmbeddedObject {
+        public String name = "embedded";
+    }
+
+    // Define the class with the list and custom serializer
+    class ListAttribute {
+        private String itemJsonKey = "customItems";
+        private List<EmbeddedObject> items = new ArrayList<>();
+
+        public String getItemJsonKey() {
+            return itemJsonKey;
+        }
+
+        public List<EmbeddedObject> getItems() {
+            return items;
+        }
+    }
+
+    // Custom serializer as described in the bug report
+    class ListAttributeSerializer extends JsonSerializer<ListAttribute> {
+        @Override
+        public void serialize(ListAttribute value, JsonGenerator jgen, SerializerProvider provider) throws IOException {
+            jgen.writeStartObject();
+            jgen.writeStringField("itemType", value.getItemJsonKey());
+            jgen.writeObjectField("items", value.getItems()); // This is the problematic line
+            jgen.writeEndObject();
+        }
+
+        @Override
+        public void serializeWithType(ListAttribute value, JsonGenerator jgen, SerializerProvider provider, TypeSerializer typeSer) throws IOException {
+            typeSer.writeTypePrefixForObject(value, jgen);
+            jgen.writeStringField("itemType", value.getItemJsonKey());
+            jgen.writeObjectField("items", value.getItems()); // This is the problematic line
+            typeSer.writeTypeSuffixForObject(value, jgen);
+        }
+    }
+
+    // Register the custom serializer
+    SimpleModule module = new SimpleModule();
+    module.addSerializer(ListAttribute.class, new ListAttributeSerializer());
+    mapper.registerModule(module);
+
+    // Create an instance of ListAttribute with an embedded object
+    ListAttribute listAttribute = new ListAttribute();
+    listAttribute.getItems().add(new EmbeddedObject());
+
+    // Serialize to a tree
+    JsonNode tree = mapper.valueToTree(listAttribute);
+
+    // Assert that the "items" field is NOT an EmbeddedObject node,
+    // but rather a node representing the serialized list.
+    // The bug report indicates it ends up as VALUE_EMBEDDED_OBJECT,
+    // which means it's not properly serialized into JsonNodes for the list elements.
+    // We expect a structure like:
+    // {
+    //   "itemType": "customItems",
+    //   "items": [ { "name": "embedded" } ]
+    // }
+    // If it's not serialized correctly, the "items" field might contain a node
+    // that represents the raw ArrayList object, not its JSON representation.
+
+    assertNotNull(tree.get("itemType"));
+    assertEquals("customItems", tree.get("itemType").asText());
+
+    JsonNode itemsNode = tree.get("items");
+    assertNotNull(itemsNode);
+
+    // The core of the bug is that itemsNode should be an ArrayNode,
+    // and its elements should be ObjectNodes representing the EmbeddedObject.
+    // If it's VALUE_EMBEDDED_OBJECT, it might be a POJO node or null,
+    // or not an ArrayNode as expected.
+    assertTrue("The 'items' node should be an ArrayNode", itemsNode.isArray());
+    assertEquals("The 'items' array should contain one element", 1, itemsNode.size());
+
+    JsonNode embeddedNode = itemsNode.get(0);
+    assertNotNull(embeddedNode);
+    // Check if the embedded object was correctly serialized into a JsonNode
+    assertTrue("The first item in 'items' should be an ObjectNode", embeddedNode.isObject());
+    assertNotNull(embeddedNode.get("name"));
+    assertEquals("embedded", embeddedNode.get("name").asText());
+}

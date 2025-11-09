@@ -1,0 +1,96 @@
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
+
+import org.junit.Test;
+import java.util.ArrayList;
+import java.util.List;
+
+// Assuming the existence of these interfaces and classes for demonstration
+interface UserAccount {
+    List<String> getEmails();
+    void addEmail(String email);
+}
+
+interface AccountService {
+    void getAccount(String id, AsyncCallback<UserAccount> callback);
+}
+
+interface AsyncCallback<T> {
+    void onSuccess(T result);
+    void onFailure(Throwable t);
+}
+
+public class MockitoAbstractClassTest {
+
+    // This test class simulates the scenario described in the bug report.
+    // It assumes that Mockito *should* support mocking abstract classes
+    // in a way that allows for default implementations of abstract methods.
+    // The bug report suggests that Mockito currently does NOT do this out-of-the-box
+    // and requires workarounds or custom solutions.
+
+    // To reproduce the *failure*, we'll write a test that *expects* this
+    // abstract class mocking to work, and it *will fail* if it doesn't.
+    // If Mockito were to implement this feature, this test would then pass.
+
+    // Abstract class with default implementation for one method and abstract for another
+    abstract static class AbstractUserAccount implements UserAccount {
+        private final List<String> emails = new ArrayList<>();
+
+        @Override
+        public void addEmail(String email) {
+            emails.add(email);
+        }
+
+        @Override
+        public abstract List<String> getEmails(); // This method needs to be handled by Mockito
+    }
+
+    @Test
+    public void testAbstractClassMocking() {
+        // This test *assumes* Mockito can create a mock of an abstract class
+        // and that the non-abstract methods (like addEmail) will work as implemented,
+        // while the abstract methods (like getEmails) can be stubbed.
+
+        // If Mockito does NOT support this directly, the line below will likely throw an exception
+        // or the stubbing will not work as expected.
+        AbstractUserAccount mockAccount = mock(AbstractUserAccount.class);
+
+        // Stubbing the abstract method. This is the core of the expected behavior.
+        // If Mockito doesn't support abstract class mocking, this might fail or be ignored.
+        List<String> expectedEmails = new ArrayList<>();
+        expectedEmails.add("test@example.com");
+        when(mockAccount.getEmails()).thenReturn(expectedEmails);
+
+        // Test the default implemented method
+        mockAccount.addEmail("another@example.com"); // This should work if the default implementation is used
+
+        // Assertions
+        // This assertion checks if the stubbing of the abstract method worked.
+        // If Mockito doesn't support abstract class mocking, this will likely fail
+        // because getEmails() might not have been stubbed correctly, or the mock
+        // object might not have been created properly.
+        assertEquals(expectedEmails, mockAccount.getEmails());
+
+        // This assertion checks if the default implemented method worked.
+        // This part is less likely to fail if the mock object is created,
+        // but it's included to show the expected interaction.
+        // NOTE: This assertion would require access to the internal state of
+        // AbstractUserAccount to verify 'another@example.com' was added.
+        // Since we are mocking, we can't directly access the private 'emails' list.
+        // Instead, we rely on the stubbed getEmails() for the primary test of abstract method handling.
+        // If we were testing the *implementation* of AbstractUserAccount itself,
+        // we would use a real instance or a different mocking strategy.
+        // For the purpose of *this* bug report test, the focus is on stubbing the abstract method.
+    }
+
+    // Helper assertion method (assuming this is part of a JUnit test class)
+    private void assertEquals(Object expected, Object actual) {
+        if (expected == null && actual == null) {
+            return;
+        }
+        if (expected != null && expected.equals(actual)) {
+            return;
+        }
+        throw new AssertionError("Expected: " + expected + ", Actual: " + actual);
+    }
+}

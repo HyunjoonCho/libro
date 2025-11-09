@@ -1,0 +1,50 @@
+public void testMixinAnnotationsLostWithHierarchyAndNonMixinInterfaces() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.disable(MapperFeature.ALLOW_FINAL_FIELDS_AS_MUTATORS);
+    mapper.disable(MapperFeature.AUTO_DETECT_FIELDS);
+    mapper.disable(MapperFeature.AUTO_DETECT_GETTERS);
+    mapper.disable(MapperFeature.AUTO_DETECT_IS_GETTERS);
+    mapper.disable(MapperFeature.INFER_PROPERTY_MUTATORS);
+
+    mapper.setMixInAnnotation(Person.class, PersonMixin.class);
+    // The explicit addition of the parent mixin is the workaround
+    mapper.setMixInAnnotation(Contact.class, ContactMixin.class);
+
+
+    PersonImpl person = new PersonImpl();
+    // Assume ContactImpl has a getCity() implementation that returns "SomeCity"
+    // For the purpose of this test, we don't need the actual implementation details,
+    // just the structure.
+
+    String json = mapper.writeValueAsString(person);
+
+    // Assert that the 'city' property is present and correctly serialized
+    // The expected behavior is that 'city' should be serialized because of the mixin.
+    // If the bug is present, 'city' would be missing.
+    assertTrue(json.contains("\"city\":"));
+    // Depending on the actual implementation and serialization, you might want to assert
+    // the value as well, but the core issue is the presence of the annotated property.
+}
+
+// Helper classes and interfaces as described in the bug report
+interface Contact {
+    String getCity();
+}
+
+class ContactImpl implements Contact {
+    @Override
+    public String getCity() {
+        return "SomeCity"; // Dummy implementation
+    }
+}
+
+class ContactMixin implements Contact {
+    @JsonProperty
+    public String getCity() { return null; }
+}
+
+interface Person extends Contact {}
+
+class PersonImpl extends ContactImpl implements Person {}
+
+class PersonMixin extends ContactMixin implements Person {}

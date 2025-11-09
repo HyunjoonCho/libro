@@ -1,0 +1,78 @@
+public void testSkipDoesNotSkipFullAmount() throws IOException {
+    byte[] data = new byte[1024];
+    Arrays.fill(data, (byte) 'a');
+    ByteArrayInputStream bais = new ByteArrayInputStream(data);
+    // CipherInputStream typically returns 0 for skip() unless the underlying stream is seekable
+    // We simulate this behavior by wrapping a stream that returns 0 for skip()
+    InputStream skippingInputStream = new FilterInputStream(bais) {
+        @Override
+        public long skip(long n) throws IOException {
+            return 0;
+        }
+    };
+    CipherInputStream cis = new CipherInputStream(skippingInputStream, new NullCipher()); // NullCipher does nothing
+
+    long amountToSkip = 512;
+    long skipped = IOUtils.skip(cis, amountToSkip);
+
+    // The bug is that IOUtils.skip() breaks the loop when skipped == 0,
+    // even if more data could be read. We expect it to try and read.
+    // With the current implementation, it will break immediately.
+    // A correct implementation should have skipped more than 0 if data is available.
+    // Since the NullCipher doesn't actually transform data, we expect it to read.
+    // However, the bug description states that CipherInputStream's skip() returns 0,
+    // causing IOUtils.skip() to break prematurely.
+    // We assert that it *didn't* skip the full amount, which is what the bug implies.
+    // A more precise test would be to check the stream position, but that's not directly
+    // available. We'll rely on the fact that if it broke early, it didn't skip 'amountToSkip'.
+    // Given the description, we expect 'skipped' to be 0 or very small if the loop breaks early.
+    // Let's assert it's less than the requested amount.
+    assertTrue(skipped < amountToSkip);
+
+    // Additionally, if the loop broke immediately due to skip returning 0,
+    // the stream position should not have advanced significantly.
+    // If it had read, the position would have advanced.
+    // A simple check is to see if we can read more data.
+    // The original code would likely leave the stream at the beginning.
+    // This test aims to show that `skipped` is not `amountToSkip`.
+}
+
+// Helper class to simulate a CipherInputStream without actual encryption
+class NullCipher implements Cipher {
+    @Override
+    public int process(byte[] in, int inOff, int length, byte[] out, int outOff) {
+        System.arraycopy(in, inOff, out, outOff, length);
+        return length;
+    }
+
+    @Override
+    public int doFinal(byte[] in, int inOff, int length, byte[] out, int outOff) {
+        System.arraycopy(in, inOff, out, outOff, length);
+        return length;
+    }
+
+    @Override
+    public int getBlockSize() {
+        return 1;
+    }
+
+    @Override
+    public int getOutputSize(int length) {
+        return length;
+    }
+
+    @Override
+    public void init(boolean forEncryption, CipherParameters params) {
+        // No-op
+    }
+
+    @Override
+    public String getAlgorithmName() {
+        return "Null";
+    }
+
+    @Override
+    public void reset() {
+        // No-op
+    }
+}

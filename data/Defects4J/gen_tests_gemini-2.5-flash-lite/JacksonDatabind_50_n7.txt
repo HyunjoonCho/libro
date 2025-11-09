@@ -1,0 +1,70 @@
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import static org.junit.Assert.assertNotNull;
+
+public class JsonIdentityInfoTest {
+
+    @Test
+    public void testJsonIdentityInfoDeserializationFails() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        // Test case 1: Object contained within a collection
+        String jsonWithCollection = "{\"items\": [{\"id\": 1, \"name\": \"Item 1\"}]}";
+        ContainerWithCollection containerWithCollection = mapper.readValue(jsonWithCollection, ContainerWithCollection.class);
+        assertNotNull(containerWithCollection);
+        assertNotNull(containerWithCollection.getItems());
+        assertFalse(containerWithCollection.getItems().isEmpty());
+        assertEquals(1, containerWithCollection.getItems().get(0).getId());
+        assertEquals("Item 1", containerWithCollection.getItems().get(0).getName());
+
+
+        // Test case 2: Object as a field (this is where the bug is expected)
+        String jsonWithField = "{\"item\": {\"id\": 2, \"name\": \"Item 2\"}}";
+        ContainerWithField containerWithField = mapper.readValue(jsonWithField, ContainerWithField.class);
+        assertNotNull(containerWithField);
+        assertNotNull(containerWithField.getItem());
+        assertEquals(2, containerWithField.getItem().getId());
+        assertEquals("Item 2", containerWithField.getItem().getName());
+    }
+
+    // Helper classes based on the bug description
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class, property = "id")
+    static class Item {
+        private int id;
+        private String name;
+
+        @JsonCreator
+        public Item(int id, String name) {
+            this.id = id;
+            this.name = name;
+        }
+
+        public int getId() {
+            return id;
+        }
+
+        public String getName() {
+            return name;
+        }
+    }
+
+    static class ContainerWithCollection {
+        private java.util.List<Item> items;
+
+        public java.util.List<Item> getItems() {
+            return items;
+        }
+    }
+
+    static class ContainerWithField {
+        private Item item;
+
+        public Item getItem() {
+            return item;
+        }
+    }
+}

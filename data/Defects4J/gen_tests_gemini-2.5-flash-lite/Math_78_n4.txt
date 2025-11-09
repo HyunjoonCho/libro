@@ -1,0 +1,125 @@
+public void testCloseEvents() throws MaxCountExceededException, DimensionMismatchException, NoContinuationException {
+    // This test case reproduces the bug described in the issue.
+    // It sets up a scenario with two very close events and asserts that both are detected.
+    // The specific switching function and interval values are chosen to trigger the bug condition.
+
+    // Define the switching function: g(t) = -(t - 90)^2 * (t - 135)
+    // This function has roots at t=90 and t=135.
+    // It's increasing around t=90 and decreasing around t=135.
+    SwitchingFunction sf = new SwitchingFunction() {
+        @Override
+        public double g(double t, double[] y) {
+            return -(t - 90.0) * (t - 90.0) * (t - 135.0);
+        }
+
+        @Override
+        public void reset() {
+            // No state to reset
+        }
+
+        @Override
+        public double[] h(double t, double[] y) throws DimensionMismatchException {
+            // Derivative of g(t) with respect to t
+            // g'(t) = -2(t-90)(t-135) - (t-90)^2
+            return new double[]{-2.0 * (t - 90.0) * (t - 135.0) - (t - 90.0) * (t - 90.0)};
+        }
+    };
+
+    // Define the events
+    Event[] events = new Event[]{
+            new Event() {
+                @Override
+                public double g(double t, double[] y) {
+                    return sf.g(t, y);
+                }
+
+                @Override
+                public void eventOccurred(double t, double[] y, boolean increasing) {
+                    // Event at t=90.0
+                }
+
+                @Override
+                public void reset() {
+                    sf.reset();
+                }
+
+                @Override
+                public double[] h(double t, double[] y) throws DimensionMismatchException {
+                    return sf.h(t, y);
+                }
+            },
+            new Event() {
+                @Override
+                public double g(double t, double[] y) {
+                    return sf.g(t, y);
+                }
+
+                @Override
+                public void eventOccurred(double t, double[] y, boolean increasing) {
+                    // Event at t=135.0
+                }
+
+                @Override
+                public void reset() {
+                    sf.reset();
+                }
+
+                @Override
+                public double[] h(double t, double[] y) throws DimensionMismatchException {
+                    return sf.h(t, y);
+                }
+            }
+    };
+
+    // Set up the ODE solver
+    FirstOrderDifferentialEquations ode = new FirstOrderDifferentialEquations() {
+        @Override
+        public int getDimension() {
+            return 1;
+        }
+
+        @Override
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            // Dummy derivative, not relevant for event detection
+            yDot[0] = 0.0;
+        }
+    };
+
+    // Use a GraggBulirschStoerIntegrator which is known to be sensitive to step size
+    GraggBulirschStoerIntegrator integrator = new GraggBulirschStoerIntegrator(
+            1.0e-8, 1.0e8, 1.0e-8, 1.0e-8);
+    integrator.addEventHandler(events[0], 1.0e-8, 1.0e-8, 100);
+    integrator.addEventHandler(events[1], 1.0e-8, 1.0e-8, 100);
+
+    // Initial conditions
+    double[] y = {0.0};
+    double t0 = 0.0;
+    double tEnd = 153.0;
+
+    // Perform integration and check for events
+    final List<Double> eventTimes = new ArrayList<>();
+    integrator.setStepHandler(new StepHandler() {
+        @Override
+        public void init(double t0, double[] y0, double t) {
+        }
+
+        @Override
+        public void handleStep(double t, double[] y, double[] yDot, boolean forward) {
+            // Store detected event times
+            for (Event event : events) {
+                if (event.getEventTime() != null) {
+                    eventTimes.add(event.getEventTime());
+                    event.setEventTime(null); // Reset for next detection
+                }
+            }
+        }
+    });
+
+    integrator.integrate(ode, t0, y, tEnd, new NordsieckInitializer());
+
+    // Assert that both events were detected
+    assertEquals(2, eventTimes.size());
+    // The order might vary, so check for presence of both times
+    assertTrue(eventTimes.contains(90.0));
+    assertTrue(eventTimes.contains(135.0));
+}

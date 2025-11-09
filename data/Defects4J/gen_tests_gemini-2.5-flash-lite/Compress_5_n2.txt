@@ -1,0 +1,84 @@
+public void testTruncatedArchive() throws IOException {
+    byte[] zipData = new byte[1024]; // Simulate a truncated archive
+    InputStream is = new ByteArrayInputStream(zipData);
+    ZipArchiveInputStream zipIs = new ZipArchiveInputStream(is);
+
+    // Expecting an exception or -1 to indicate end of stream due to truncation
+    // The original code would likely return 0 indefinitely.
+    // We'll test for the exception as suggested in the bug fix.
+    try {
+        byte[] buffer = new byte[1024];
+        int bytesRead = zipIs.read(buffer);
+        // If no exception is thrown, and we don't get -1, this is the failure case.
+        // The bug report suggests it would return 0 indefinitely.
+        // We can't easily test "indefinitely", so we'll check if a single read
+        // returns 0 without indicating end of stream or throwing an exception.
+        // A more robust test might involve looping until a certain condition,
+        // but for reproduction, a single read showing the problem is sufficient.
+        assertTrue("Expected read to return -1 or throw exception for truncated archive, but got " + bytesRead, bytesRead == -1);
+    } catch (IOException e) {
+        // If an IOException is thrown, it might be the desired behavior after the fix.
+        // For reproduction of the *failure*, we'd ideally not catch it here,
+        // but the prompt asks for a method that reproduces the *failure*.
+        // The failure is that it *doesn't* throw an exception and *doesn't* return -1.
+        // So, if an exception *is* thrown, the failure is *not* reproduced.
+        // This test aims to assert the *absence* of expected behavior.
+        // A better approach for reproduction is to check the return value.
+        // Let's refine this to directly check the return value.
+    } finally {
+        zipIs.close();
+    }
+
+    // Re-attempting the test to specifically check the return value of read()
+    // This assumes the original buggy implementation.
+    is = new ByteArrayInputStream(zipData);
+    zipIs = new ZipArchiveInputStream(is);
+    byte[] buffer = new byte[1024];
+    int bytesRead = zipIs.read(buffer);
+    // The bug is that for a truncated archive, read() returns 0, not -1.
+    // We need to ensure that read() doesn't return -1 immediately if the archive is truncated
+    // but the internal stream hasn't "finished" in the zip sense yet.
+    // The bug report states "All calls to read() will return 0 bytes read. They will not return -1".
+    // So, the failure is that it returns 0 when it should eventually return -1 or throw.
+    // Let's simulate a scenario where a read returns 0 but inf.finished() is false.
+    // This is hard to perfectly simulate without knowing the internals of inf.
+    // A simpler reproduction is to just pass a small byte array that doesn't contain a full zip structure.
+    // If the first read returns 0, and not -1, that's the problem.
+
+    is = new ByteArrayInputStream(new byte[]{0x50, 0x4B, 0x03, 0x04}); // Partial zip header, not enough data
+    zipIs = new ZipArchiveInputStream(is);
+    buffer = new byte[1024];
+    bytesRead = zipIs.read(buffer);
+    // The failure is that for a truncated archive, read() returns 0, not -1.
+    // If the archive is *so* truncated that not even a single byte can be read meaningfully,
+    // it should return -1. The bug is that it returns 0.
+    // We can't easily make inf.finished() false while read() returns 0 in a simple setup.
+    // The most direct way to test the *reported behavior* is to assume a scenario where read() returns 0.
+    // The test should verify that it *doesn't* return -1 in such a case.
+    // This implies that if read() returns 0, the stream is *not* considered finished.
+
+    // Let's construct a test that *would* fail with the original code.
+    // The original code returns -1 only if read == 0 AND inf.finished().
+    // The bug is that for truncated archives, read == 0 but inf.finished() is false.
+    // So, the original code *doesn't* return -1. It would return 0.
+    // We need to assert that read() *doesn't* return -1 in this specific scenario.
+
+    // Create a minimal zip file that is definitely truncated.
+    // A zip file needs at least a local file header and central directory.
+    // Let's create a very small, invalid zip file.
+    byte[] invalidZipData = new byte[5]; // Too small to be a valid zip archive
+    InputStream invalidIs = new ByteArrayInputStream(invalidZipData);
+    ZipArchiveInputStream invalidZipIs = new ZipArchiveInputStream(invalidIs);
+
+    byte[] readBuffer = new byte[100];
+    int result = invalidZipIs.read(readBuffer);
+
+    // The bug is that for a truncated archive, read() will return 0 instead of -1 or throwing.
+    // Therefore, the test should assert that the result is NOT -1.
+    // If the result *is* -1, the bug is not reproduced.
+    // If the result is 0, the bug *is* reproduced.
+    // The assertion should be that the result is 0, to show the failure.
+    assertEquals("ZipArchiveInputStream should return 0 for a truncated archive, not -1", 0, result);
+
+    invalidZipIs.close();
+}

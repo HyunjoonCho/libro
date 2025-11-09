@@ -1,0 +1,43 @@
+public void testAmdModuleSubdirectory() {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setTransformAMDModules(true);
+    options.setProcessCommonJSModules(true);
+    options.setCommonJSEntryModule("Bar.js");
+    options.setWarningLevel(DiagnosticGroups.ALL, Level.OFF); // Suppress warnings for cleaner test output
+    List<SourceFile> sources = new ArrayList<>();
+    sources.add(SourceFile.fromCode("lib/Foo.js", "goog.provide('Foo'); Foo.bar = function() { return 'bar'; };"));
+    sources.add(SourceFile.fromCode("Bar.js", "goog.provide('Bar'); goog.require('Foo'); Bar.foo = function() { return Foo.bar(); };"));
+
+    // Mocking the filesystem to simulate the subdirectory structure
+    FileSystem fileSystem = FileSystems.getDefault();
+    Path libDir = fileSystem.getPath("lib");
+    try {
+        Files.createDirectories(libDir);
+        Files.write(libDir.resolve("Foo.js"), sources.get(0).getCode().getBytes());
+        Files.write(fileSystem.getPath("Bar.js"), sources.get(1).getCode().getBytes());
+
+        // Need to adjust the compiler's source path to include the directory structure
+        options.setJsRoot(fileSystem.getPath(".")); // Point to the root directory
+
+        // Attempt to compile
+        compiler.compile(JavaSourceArgs.builder().add(sources).setOptions(options).build());
+
+        // If compilation succeeds without the expected error, the test passes.
+        // The original bug report indicates an error is thrown.
+        // If this code is reached, it means the bug is fixed or not reproducible with this setup.
+        assertFalse("Compilation should have failed with the expected error.", compiler.hasErrors());
+
+    } catch (IOException e) {
+        fail("IOException during test setup: " + e.getMessage());
+    } finally {
+        // Clean up the created directory and files
+        try {
+            Files.deleteIfExists(libDir.resolve("Foo.js"));
+            Files.deleteIfExists(libDir);
+            Files.deleteIfExists(fileSystem.getPath("Bar.js"));
+        } catch (IOException e) {
+            // Ignore cleanup errors
+        }
+    }
+}

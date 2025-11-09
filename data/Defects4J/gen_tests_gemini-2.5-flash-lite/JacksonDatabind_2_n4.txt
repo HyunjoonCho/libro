@@ -1,0 +1,66 @@
+public void testUnwantedPojoEmbeddedInTree() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    ListAttributeSerializer serializer = new ListAttributeSerializer();
+    SimpleModule module = new SimpleModule();
+    module.addSerializer(ListAttribute.class, serializer);
+    mapper.registerModule(module);
+
+    ListAttribute listAttribute = new ListAttribute("someType", Arrays.asList("item1", "item2"));
+    ObjectNode rootNode = mapper.createObjectNode();
+    rootNode.set("list", mapper.valueToTree(listAttribute));
+
+    // The bug is that "items" should be serialized as JSON nodes, not embedded objects.
+    // We expect the 'items' field to be an array of text nodes.
+    JsonNode itemsNode = rootNode.get("list").get("items");
+    assertNotNull(itemsNode);
+    assertTrue(itemsNode.isArray());
+    assertEquals(2, itemsNode.size());
+    assertEquals("item1", itemsNode.get(0).asText());
+    assertEquals("item2", itemsNode.get(1).asText());
+
+    // To verify the original bug description, we can check if it's an embedded object
+    // This part might fail if the bug is fixed, which is the goal.
+    // The original bug description implies that it would be a VALUE_EMBEDDED_OBJECT
+    // which would not be an array of text nodes.
+    // If the test passes, it means the serialization is now producing the expected JSON structure.
+}
+
+// Dummy classes to make the test compilable
+class ListAttribute {
+    private String itemJsonKey;
+    private List<String> items;
+
+    public ListAttribute(String itemJsonKey, List<String> items) {
+        this.itemJsonKey = itemJsonKey;
+        this.items = items;
+    }
+
+    public String getItemJsonKey() {
+        return itemJsonKey;
+    }
+
+    public List<String> getItems() {
+        return items;
+    }
+}
+
+class ListAttributeSerializer extends JsonSerializer<ListAttribute> {
+    @Override
+    public void serialize(ListAttribute value, JsonGenerator jgen,
+                            SerializerProvider provider) throws IOException {
+        jgen.writeStartObject();
+        jgen.writeStringField("itemType", value.getItemJsonKey());
+        jgen.writeObjectField("items", value.getItems());
+        jgen.writeEndObject();
+    }
+
+    @Override
+    public void serializeWithType(ListAttribute value, JsonGenerator
+            jgen, SerializerProvider provider, TypeSerializer typeSer) throws
+            IOException {
+        typeSer.writeTypePrefixForObject(value, jgen);
+        jgen.writeStringField("itemType", value.getItemJsonKey());
+        jgen.writeObjectField("items", value.getItems());
+        typeSer.writeTypeSuffixForObject(value, jgen);
+    }
+}

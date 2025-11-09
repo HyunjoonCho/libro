@@ -1,0 +1,45 @@
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class JsonIgnorePropertiesTest {
+
+    @JsonIgnoreProperties("cause")
+    public static class MyException extends RuntimeException {
+        public MyException(String message) {
+            super(message);
+        }
+
+        public MyException(String message, Throwable cause) {
+            super(message, cause);
+        }
+
+        public MyException() {
+            super();
+        }
+
+        // Need a no-arg constructor for Jackson deserialization
+        public MyException() {
+            super();
+        }
+    }
+
+    @Test
+    public void testIgnoreCauseProperty() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        MyException originalException = new MyException("Test message", new IllegalArgumentException("Inner cause"));
+        String json = objectMapper.writeValueAsString(originalException);
+
+        // This deserialization will fail on GAE without the fix,
+        // but should work with the @JsonIgnoreProperties annotation.
+        MyException deserializedException = objectMapper.readValue(json, MyException.class);
+
+        // Assert that the deserialized exception is not null and has the correct message
+        // The 'cause' should be null because it was ignored.
+        assertEquals("Test message", deserializedException.getMessage());
+        assertEquals(null, deserializedException.getCause());
+    }
+}

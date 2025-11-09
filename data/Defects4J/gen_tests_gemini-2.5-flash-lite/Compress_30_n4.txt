@@ -1,0 +1,28 @@
+public void testBZip2CompressorInputStreamReadToFullBuffer() throws Exception {
+    byte[] rawData = new byte[1024]; // Smaller data for a focused test
+    for (int i = 0; i < rawData.length; ++i) {
+        rawData[i] = (byte) (i % 256); // Predictable data
+    }
+
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    try (BZip2CompressorOutputStream bzipOut = new BZip2CompressorOutputStream(baos)) {
+        bzipOut.write(rawData);
+    }
+    baos.flush();
+
+    ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+    try (BZip2CompressorInputStream bzipIn = new BZip2CompressorInputStream(bais)) {
+        byte[] buffer = new byte[1024];
+        // This read should consume all the compressed data
+        int bytesRead = bzipIn.read(buffer, 0, buffer.length);
+        // Assert that some data was read, but not necessarily the full buffer length
+        // because the compressed data might be smaller than the buffer.
+        assertTrue(bytesRead > 0);
+
+        // Now, attempt to read with offset equal to length, which should return 0 if the stream is empty.
+        // The bug is that it returns -1 in this specific scenario when the buffer is conceptually "full"
+        // from the perspective of the stream having no more data to provide for that read call.
+        // We expect 0 here because we've read all available data.
+        assertEquals("Should return 0 when offset equals length and no more data is available", 0, bzipIn.read(buffer, buffer.length, 0));
+    }
+}

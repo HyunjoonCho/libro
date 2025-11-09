@@ -1,0 +1,42 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.util.Collections;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+public class JacksonUnmodifiableSetMixinTest {
+
+    static final String EXPECTED_JSON = "[\"java.util.Collections$UnmodifiableSet\",[]]";
+
+    ObjectMapper mapper;
+
+    @Before
+    public void setup() {
+        mapper = new ObjectMapper();
+        mapper.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
+        mapper.addMixIn(Collections.unmodifiableSet(Collections.<String>emptySet()).getClass(), UnmodifiableSetMixin.class);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void testUnmodifiableSetMixinFailsJackson27() throws Exception {
+        // This test is designed to reproduce the bug described in the report.
+        // The actual fix would involve modifying Jackson's deserialization logic
+        // or providing a custom deserializer that handles UnmodifiableSet correctly.
+        // For the purpose of reproducing the failure, we simply attempt the
+        // deserialization that is known to fail in Jackson 2.7+.
+        Set<String> foo = mapper.readValue(EXPECTED_JSON, Set.class);
+        assertThat(foo).isEmpty();
+    }
+
+    // Mixin class as provided in the bug report
+    @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY)
+    public abstract static class UnmodifiableSetMixin {
+        @JsonCreator
+        public UnmodifiableSetMixin(Set<?> s) {}
+    }
+}

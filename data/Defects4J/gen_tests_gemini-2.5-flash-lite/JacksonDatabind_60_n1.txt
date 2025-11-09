@@ -1,0 +1,95 @@
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Objects;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class PolymorphicTypeLostTest {
+
+    private static class RemoteCall {
+        private Object[] args;
+
+        @JsonCreator
+        public RemoteCall(@JsonProperty("args") Object[] args) {
+            this.args = args;
+        }
+
+        public Object[] getArgs() {
+            return args;
+        }
+    }
+
+    static class CommandAPDU {
+        private byte[] apdu;
+
+        @JsonValue
+        public byte[] getBytes() {
+            return apdu.clone();
+        }
+
+        @JsonCreator
+        public CommandAPDU(@JsonProperty("bytes") byte[] apdu) {
+            this.apdu = apdu.clone();
+            // parse(); // Assuming parse() is not essential for this test
+            // LOG.v("com.ubitricity.devices.common.pal.CommandAPDU creator (1)");
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CommandAPDU that = (CommandAPDU) o;
+            return Arrays.equals(apdu, that.apdu);
+        }
+
+        @Override
+        public int hashCode() {
+            return Arrays.hashCode(apdu);
+        }
+    }
+
+    @Test
+    public void testPolymorphicTypeLostWhenUsingJsonValue() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+        mapper.enableDefaultTyping();
+
+        byte[] data = {0x01, 0x02, 0x03, 0x04};
+        CommandAPDU commandAPDU = new CommandAPDU(data);
+
+        RemoteCall remoteCall = new RemoteCall(new Object[]{commandAPDU});
+
+        String json = mapper.writeValueAsString(remoteCall);
+
+        // The bug description mentions a specific format for "args" which includes type information.
+        // We need to check if the deserialization correctly reconstructs the CommandAPDU object.
+        // The original bug report shows a structure like:
+        // "args":[["[B","AKQEAAnw8fLz9AAAAgA="],["net.sf.lipermi.call.RemoteInstance",{"instanceId":"b0e15098-f49e-4328-b072-fc5df42799bd","className":"com.ubitricity.devices.common.tasks.ResponseReceiver"}]]
+        // In our simplified case, we only have the CommandAPDU.
+        // The expected behavior is that the deserialized object should be an instance of CommandAPDU,
+        // and its internal byte array should match the original.
+
+        RemoteCall deserializedRemoteCall = mapper.readValue(json, RemoteCall.class);
+
+        Object[] deserializedArgs = deserializedRemoteCall.getArgs();
+        assertEquals(1, deserializedArgs.length, "Deserialized args array should have one element.");
+
+        Object deserializedObject = deserializedArgs[0];
+
+        // The core of the bug is that the deserialized object is a byte array ([B) instead of CommandAPDU.
+        // We assert that it is NOT a byte array and that it IS a CommandAPDU.
+        assert !(deserializedObject instanceof byte[]), "Deserialized object should not be a byte array.";
+        assert deserializedObject instanceof CommandAPDU : "Deserialized object should be an instance of CommandAPDU.";
+
+        CommandAPDU deserializedCommandAPDU = (CommandAPDU) deserializedObject;
+        assertArrayEquals(data, deserializedCommandAPDU.getBytes(), "Deserialized CommandAPDU should have the correct byte array.");
+    }
+}

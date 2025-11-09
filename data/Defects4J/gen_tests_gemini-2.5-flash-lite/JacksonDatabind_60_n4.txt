@@ -1,0 +1,88 @@
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Arrays;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+
+public class PolymorphicTypeTest {
+
+    public static class RemoteCall {
+        private Object[] args;
+
+        @JsonCreator
+        public RemoteCall(@JsonProperty("args") Object[] args) {
+            this.args = args;
+        }
+
+        public Object[] getArgs() {
+            return args;
+        }
+    }
+
+    public static class CommandAPDU {
+        private byte[] apdu;
+
+        @JsonCreator
+        public CommandAPDU(@JsonProperty("bytes") byte[] apdu) {
+            this.apdu = apdu.clone();
+        }
+
+        @JsonValue
+        public byte[] getBytes() {
+            return apdu.clone();
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CommandAPDU that = (CommandAPDU) o;
+            return Arrays.equals(apdu, that.apdu);
+        }
+
+        @Override
+        public int hashCode() {
+            return Arrays.hashCode(apdu);
+        }
+    }
+
+    @Test
+    public void testPolymorphicTypeLostWithJsonValue() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+        mapper.enableDefaultTyping();
+
+        byte[] testBytes = {0x41, 0x4B, 0x51, 0x45, 0x41, 0x41, 0x61, 0x38, (byte) 0x66, (byte) 0x4c, (byte) 0x33, (byte) 0x41, (byte) 0x41, (byte) 0x41, (byte) 0x41, (byte) 0x41};
+        CommandAPDU commandAPDU = new CommandAPDU(testBytes);
+
+        RemoteCall remoteCall = new RemoteCall(new Object[]{commandAPDU});
+
+        String json = mapper.writeValueAsString(remoteCall);
+
+        // The bug report indicates that the type is lost and deserializes to "[B"
+        // We expect the deserialized object to be a CommandAPDU, not just a byte array.
+        // The actual json output from the bug report suggests the type information might be
+        // embedded differently than a simple "[B" for the whole object.
+        // Let's assert that the deserialized object is indeed a CommandAPDU and its content is correct.
+
+        RemoteCall deserializedRemoteCall = mapper.readValue(json, RemoteCall.class);
+        Object[] deserializedArgs = deserializedRemoteCall.getArgs();
+
+        assertEquals("Should have one argument", 1, deserializedArgs.length);
+        Object arg = deserializedArgs[0];
+
+        // Assert that the deserialized argument is an instance of CommandAPDU
+        // This is the crucial part to verify the fix for the polymorphic type.
+        assertEquals("Deserialized argument should be of type CommandAPDU", CommandAPDU.class, arg.getClass());
+
+        CommandAPDU deserializedCommandAPDU = (CommandAPDU) arg;
+        assertArrayEquals("Deserialized CommandAPDU bytes should match original", testBytes, deserializedCommandAPDU.getBytes());
+    }
+}

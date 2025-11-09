@@ -1,0 +1,41 @@
+import com.google.gson.Gson;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import org.junit.Test;
+
+import java.io.StringReader;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+
+public class GsonNegativeZeroTest {
+
+    @Test
+    public void testNegativeZeroLexicalPreservation() throws Exception {
+        Gson gson = new Gson();
+        String json = "-0";
+
+        JsonReader reader = new JsonReader(new StringReader(json));
+        reader.setLenient(true); // Allow for non-standard JSON like -0
+
+        assertEquals(JsonToken.NUMBER, reader.peek());
+        String numberAsString = reader.nextString();
+
+        // In the buggy version, "-0" would be parsed as 0.
+        // In the corrected version, it should be preserved as "-0".
+        assertEquals("-0", numberAsString);
+
+        // Additionally, check that it's not equal to positive zero
+        // This test assumes the underlying Java implementation treats -0.0 and 0.0 differently
+        // which is true for Double and Float.
+        assertNotEquals(0.0, Double.parseDouble(numberAsString), 0.0000001);
+        assertEquals(-0.0, Double.parseDouble(numberAsString), 0.0000001);
+
+        // Test roundtrip (if the fix is applied, it should roundtrip correctly)
+        // Note: Gson's LazilyParsedNumber might still convert -0 to 0 internally
+        // depending on how it's used later. The primary goal is lexical preservation.
+        // This roundtrip test specifically checks if the string representation is maintained.
+        Object obj = gson.fromJson(json, Object.class);
+        assertEquals(json, gson.toJson(obj));
+    }
+}

@@ -1,0 +1,76 @@
+public void testUmlautDirectory() throws Exception {
+    // Create a zip file with a directory containing an umlaut using WinZip
+    // This part would typically involve creating a temporary zip file.
+    // For the purpose of this test method, we'll assume such a zip file exists
+    // and has a known structure.
+    // Let's assume the zip file is named "umlaut_test.zip" and contains:
+    // - "testdir\u00E4/" (directory with umlaut)
+    // - "testdir\u00E4/file.txt" (a file inside that directory)
+
+    // Mocking the creation of such a zip file would be complex for a single test method.
+    // Instead, we'll simulate the input stream that would result from reading such a zip.
+    // In a real test suite, you would create this zip file programmatically or have a
+    // pre-created resource.
+
+    // For demonstration, let's create a minimal zip file in memory
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    ZipArchiveOutputStream zaos = new ZipArchiveOutputStream(baos);
+
+    // Create a directory entry with umlaut
+    ZipArchiveEntry dirEntry = new ZipArchiveEntry("testdir\u00E4/");
+    // WinZip often doesn't set the directory flag explicitly for directories like this
+    // when unicode flag is active. It might rely on the trailing slash.
+    // For the purpose of reproducing the bug, we'll create it without explicitly setting
+    // the directory flag, mimicking the problematic WinZip behavior.
+    zaos.putArchiveEntry(dirEntry);
+    zaos.closeArchiveEntry();
+
+    // Create a file entry inside the umlaut directory
+    ZipArchiveEntry fileEntry = new ZipArchiveEntry("testdir\u00E4/file.txt");
+    zaos.putArchiveEntry(fileEntry);
+    OutputStream fileOs = zaos.createResourceStream(fileEntry);
+    fileOs.write("content".getBytes(StandardCharsets.UTF_8));
+    fileOs.close();
+    zaos.closeArchiveEntry();
+
+    zaos.finish();
+    zaos.close();
+
+    InputStream zipInputStream = new ByteArrayInputStream(baos.toByteArray());
+
+    ArchiveInputStream ais = new ArchiveStreamFactory().createArchiveInputStream(ArchiveEntry.ZIP, zipInputStream);
+
+    // Test the first entry (the directory)
+    ArchiveEntry entry1 = ais.getNextEntry();
+    assertNotNull("First entry should not be null", entry1);
+    // The bug report states the directory is NOT marked as a directory
+    assertFalse("Directory entry should not be marked as a directory", entry1.isDirectory());
+    // The bug report states filenames contain backslashes instead of slashes
+    assertTrue("Directory name should contain backslashes", entry1.getName().contains("\\"));
+    assertFalse("Directory name should not contain forward slashes", entry1.getName().contains("/"));
+    // The name should reflect the umlaut correctly if encoding is handled.
+    // The bug report implies the issue is with directory detection and path separators,
+    // not necessarily the umlaut character itself being corrupted, but let's check.
+    // The expected name based on WinZip's potential output with active unicode flag
+    // and the problematic parsing might be "testdir\u00E4/" but the separator issue is key.
+    // If the umlaut itself was corrupted, the name might look different.
+    // Assuming the umlaut is preserved but the path separator is wrong.
+    assertEquals("testdir\u00E4/", entry1.getName()); // This is what we expect the name to be *after* fixing.
+                                                     // The bug would likely yield something like "testdir\u00E4\"
+
+    // Test the second entry (the file)
+    ArchiveEntry entry2 = ais.getNextEntry();
+    assertNotNull("Second entry should not be null", entry2);
+    assertFalse("File entry should not be marked as a directory", entry2.isDirectory());
+    // The bug report states file names also contain backslashes
+    assertTrue("File name should contain backslashes", entry2.getName().contains("\\"));
+    assertFalse("File name should not contain forward slashes", entry2.getName().contains("/"));
+    // Similar to the directory, the path separator is the issue.
+    assertEquals("testdir\u00E4/file.txt", entry2.getName()); // Expected name after fix.
+                                                             // Bug would likely yield "testdir\u00E4\file.txt"
+
+    // Test that there are no more entries
+    assertNull("Should be no more entries", ais.getNextEntry());
+
+    ais.close();
+}

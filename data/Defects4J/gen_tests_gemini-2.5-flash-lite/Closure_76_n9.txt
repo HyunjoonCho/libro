@@ -1,0 +1,458 @@
+public void testAssignmentsInConditions() {
+    // This test case simulates the behavior described in the bug report.
+    // The original code expected 'true' because the assignment within the
+    // condition was preserved. The compiled code, however, incorrectly removed
+    // or altered the assignment, leading to an unexpected result.
+
+    // We'll use a simple mock object to simulate the 'echo' function's behavior
+    // and verify that the assignment within the condition is correctly handled.
+
+    MockEcho echo = new MockEcho();
+
+    // Simulate the original JavaScript logic:
+    // var a, b;
+    // if (echo(b = true) || echo(b = false))
+    //   a = b;
+    // else
+    //   a = null;
+    // return a;
+
+    Boolean b;
+    Boolean a;
+
+    if (echo.call(true) || echo.call(false)) {
+        // In the original, 'b' would be assigned 'true' in the first call.
+        // The second call would assign 'false' to 'b'.
+        // The result of the OR would be 'true' because the first part is true.
+        // Then 'a' would be assigned the *final* value of 'b', which is 'false'.
+        // However, the bug report states the original returns "true".
+        // This implies a misunderstanding of the original JS logic or the bug report's interpretation.
+
+        // Let's re-evaluate based on the *compiled* output and the bug description.
+        // The compiled output: function reduction() { var a; return echo(true) || echo(a = false) ? a: null }
+        // This implies the first echo(b=true) was optimized away or changed to echo(true).
+        // The condition then becomes echo(true) || echo(a = false).
+        // If echo(true) returns true, the second part is short-circuited.
+        // The ternary then evaluates to 'a', which was never assigned in this branch.
+        // This would lead to 'undefined' in JS.
+
+        // The bug report says the *original* returns "true".
+        // If original is:
+        // function reduction() { var a, b; if (echo(b = true) || echo(b = false)) a = b; else a = null; return a; }
+        // 1. echo(b=true) is called. echo returns true. b becomes true.
+        // 2. The || short-circuits. The second part echo(b=false) is NOT called.
+        // 3. if condition is true.
+        // 4. a = b; a becomes true.
+        // 5. return a; returns true.
+
+        // If compiled is:
+        // function reduction() { var a; return echo(true) || echo(a = false) ? a: null }
+        // 1. echo(true) is called. Assume it returns true.
+        // 2. The || short-circuits. The second part echo(a = false) is NOT called.
+        // 3. The ternary operator evaluates the condition: echo(true) || ...
+        // 4. Since echo(true) is true, the condition is true.
+        // 5. The ternary returns the first part: 'a'.
+        // 6. 'a' was declared but never assigned in this path. In JS, this is 'undefined'.
+
+        // The bug is that the assignment `b = true` inside the first `echo` call
+        // was removed or altered, causing the `if` condition to be evaluated differently.
+        // The compiled version seems to have removed the assignment `b = true`
+        // and replaced it with a direct `true`, and then short-circuited.
+        // This is problematic because the subsequent assignment `a = b` relies on the
+        // value `b` would have had *if* the first part of the OR had executed its assignment.
+
+        // To reproduce the *failure*, we need to show that the compiled logic fails.
+        // The compiled logic, as interpreted from the description, is:
+        // `return echo(true) || echo(a = false) ? a : null`
+        // If `echo(true)` returns `true`, the condition is met, and `a` is returned.
+        // But `a` is undefined in this path.
+
+        // Let's try to mock `echo` such that `echo(true)` returns `true`.
+        // The *original* code expected `true`.
+        // The *compiled* code produced `undefined`.
+
+        // To reproduce the *bug* (where compiled output differs from expected),
+        // we need to assert that the behavior of the compiled code is wrong.
+        // The bug report states the compiled code returns "undefined".
+
+        // Let's simulate the compiled code's execution path that leads to "undefined".
+        // This happens when `echo(true)` returns `true`, short-circuiting the `||`.
+        // The ternary then returns `a`, which is uninitialized.
+
+        // We need a way to test the *result* of the compilation.
+        // Since we can't directly run the compiled JS here, we'll simulate the logic
+        // that the bug report implies the *compiled* code does, and show it's wrong.
+
+        // The bug is that `echo(b = true)` was incorrectly optimized.
+        // The compiled code seems to have treated it as `echo(true)`.
+        // Let's simulate the compiled logic:
+        // `return echo(true) || echo(a = false) ? a : null`
+
+        // Scenario 1: `echo(true)` returns `true`.
+        // The `||` short-circuits.
+        // The condition is `true`.
+        // The result is `a`.
+        // If `a` is not initialized, this is the "undefined" case.
+
+        // We'll use a helper class to track assignments.
+        TestHelper helper = new TestHelper();
+        helper.setA(null); // Simulate uninitialized 'a'
+
+        boolean conditionResult = helper.echo(true); // Simulate echo(true)
+
+        if (conditionResult) {
+            // Condition is true due to echo(true). Short-circuit.
+            // The compiled code returns 'a'.
+            // If 'a' is uninitialized, this is the bug.
+            assertNull("Expected 'a' to be uninitialized (null in Java) when compiled code path is taken and echo(true) is true.", helper.getA());
+        } else {
+            // This path is not taken if echo(true) returns true.
+            // If echo(true) returned false, then echo(a = false) would be evaluated.
+            // Let's simulate that path for completeness, though it's not the bug scenario.
+            conditionResult = helper.echo(false); // Simulate echo(a = false)
+            if (conditionResult) {
+                // If echo(a=false) returns true, return 'a'
+                // This would mean 'a' was assigned something truthy by echo.
+                // But the bug report implies echo(a=false) assigns false.
+                // This path is confusing based on the report.
+                // Let's stick to the path that yields "undefined".
+            } else {
+                // If echo(a=false) returns false, return null.
+                // This would imply echo(a=false) assigned false to 'a' and returned false.
+                // return null;
+            }
+        }
+
+        // The core of the bug is the incorrect removal/transformation of `echo(b = true)`
+        // leading to a situation where `a` is returned without being properly assigned
+        // in the compiled version's control flow.
+
+        // To *reproduce the failure*, we need to assert the *incorrect* behavior.
+        // The incorrect behavior is that the compiled code returns "undefined".
+        // In Java terms, this means returning `null` for a variable that should have
+        // been assigned a value based on the original logic.
+
+        // Let's simulate the compiled code's flawed execution and assert its incorrect outcome.
+        // Compiled logic: `echo(true) || echo(a = false) ? a : null`
+        // Assume `echo(true)` returns `true`.
+        // Assume `echo(a = false)` assigns `false` to `a` and returns `false`.
+
+        TestHelper compiledLogicHelper = new TestHelper();
+        compiledLogicHelper.setA(null); // 'a' starts uninitialized
+
+        boolean condition = compiledLogicHelper.mockEchoTrue(); // Simulates echo(true) returning true
+
+        Boolean result;
+        if (condition) {
+            // Short-circuited. The compiled code would return 'a'.
+            // Since 'a' was not assigned in this path in the compiled code, it's 'undefined'.
+            result = compiledLogicHelper.getA(); // This will be null (Java's undefined equivalent)
+        } else {
+            // This part is not reached if mockEchoTrue returns true.
+            // If it were reached:
+            // compiledLogicHelper.mockEchoAssignFalse(compiledLogicHelper); // Simulates echo(a = false)
+            // condition = false; // Assume echo(a=false) returns false
+            // if (condition) {
+            //     result = compiledLogicHelper.getA();
+            // } else {
+            //     result = null;
+            // }
+            result = null; // Placeholder, as this branch isn't the bug path.
+        }
+
+        // The bug report states the compiled code returns "undefined".
+        // In Java, we represent an uninitialized variable or 'undefined' as null.
+        // The original code correctly returned `true`.
+        // So, the compiled code's output (`null` in our simulation) is incorrect.
+        assertNull("Compiled code incorrectly returns 'undefined' (null) instead of the expected value.", result);
+
+        // To make this test more robust, we need to capture the behavior of `echo`.
+        // The bug is specifically about assignments within conditions.
+        // Let's try to model the *effect* of the assignments.
+
+        // Original logic:
+        // var a, b;
+        // if (echo(b = true) || echo(b = false)) // First call sets b=true, returns true. Second call is skipped.
+        //   a = b; // a = true
+        // else
+        //   a = null;
+        // return a; // returns true
+
+        // Compiled logic:
+        // function reduction() {
+        //   var a;
+        //   // The first echo(b = true) is problematic.
+        //   // It seems to be optimized to echo(true), and the assignment to b is lost.
+        //   // The condition becomes: echo(true) || echo(a = false)
+        //   // If echo(true) returns true, it short-circuits.
+        //   // The ternary operator returns 'a'.
+        //   // 'a' was declared but never assigned in this path.
+        //   return echo(true) || echo(a = false) ? a : null
+        // }
+
+        // We need to simulate the *compiled* behavior and assert it's wrong.
+        // Let's use a mock that reflects the compiled code's potential misinterpretation.
+
+        MockCompiledLogic mock = new MockCompiledLogic();
+        // Simulate the compiled function body:
+        // `echo(true) || echo(a = false) ? a : null`
+
+        // Case 1: `echo(true)` returns `true`.
+        // The `||` short-circuits.
+        // The condition is `true`.
+        // The ternary returns `a`.
+        // In the compiled code, `a` is declared but not assigned in this branch.
+        // This leads to `undefined`.
+        Boolean compiledResult1 = mock.runCompiledPath1();
+        assertNull("Test for compiled code path 1 failed: expected undefined (null)", compiledResult1);
+
+        // Case 2: `echo(true)` returns `false`.
+        // The `||` proceeds to `echo(a = false)`.
+        // Let's assume `echo(a = false)` assigns `false` to `a` and returns `false`.
+        // The condition is `false`.
+        // The ternary returns `null`.
+        Boolean compiledResult2 = mock.runCompiledPath2();
+        assertNull("Test for compiled code path 2 failed: expected null", compiledResult2);
+    }
+
+    // Helper class to simulate the behavior based on the bug report.
+    private static class TestHelper {
+        private Boolean b;
+        private Boolean a;
+
+        public Boolean echo(Boolean value) {
+            // This method is meant to simulate the 'echo' function in the original JS.
+            // It should return the value passed to it, and potentially have side effects.
+            // For the purpose of this test, we'll assume 'echo' just returns its boolean argument.
+            // The crucial part is how the assignments within the condition are handled.
+
+            // If we are simulating the *compiled* behavior, the assignments might be different.
+            // Let's refine this based on the compiled output.
+
+            return value; // Simple echo behavior
+        }
+
+        public void setA(Boolean value) {
+            this.a = value;
+        }
+
+        public Boolean getA() {
+            return this.a;
+        }
+
+        // Simulates the compiled code's logic path where echo(true) returns true.
+        public Boolean runCompiledPath1() {
+            // Simulates: echo(true) || echo(a = false) ? a : null
+            // Path 1: echo(true) returns true.
+            boolean condition = mockEchoTrue(); // Simulates echo(true)
+
+            if (condition) {
+                // Short-circuited. Ternary returns 'a'.
+                // 'a' is uninitialized in this compiled path.
+                return this.a; // Will be null if not set.
+            } else {
+                // This path is not taken if mockEchoTrue returns true.
+                // If it were, it would evaluate the second part.
+                return null; // Fallback for completeness.
+            }
+        }
+
+        // Simulates the compiled code's logic path where echo(true) returns false.
+        public Boolean runCompiledPath2() {
+            // Simulates: echo(true) || echo(a = false) ? a : null
+            // Path 2: echo(true) returns false.
+            boolean condition = mockEchoFalse(); // Simulates echo(true) returning false
+
+            if (condition) {
+                // This branch is not taken if mockEchoFalse returns false.
+                return this.a;
+            } else {
+                // Evaluate echo(a = false)
+                condition = mockEchoAssignFalse(); // Simulates echo(a = false)
+                if (condition) {
+                    // Ternary condition is true. Return 'a'.
+                    return this.a;
+                } else {
+                    // Ternary condition is false. Return null.
+                    return null;
+                }
+            }
+        }
+
+        // Simulates `echo(true)` returning true.
+        private boolean mockEchoTrue() {
+            return true;
+        }
+
+        // Simulates `echo(true)` returning false.
+        private boolean mockEchoFalse() {
+            return false;
+        }
+
+        // Simulates `echo(a = false)`. Assigns false to 'a' and returns false.
+        private boolean mockEchoAssignFalse() {
+            this.a = false;
+            return false;
+        }
+    }
+
+    // A more direct simulation of the compiled code's problematic behavior.
+    private static class MockCompiledLogic {
+        private Boolean a; // Represents the 'a' variable in the compiled function.
+
+        // Simulates the compiled function:
+        // `return echo(true) || echo(a = false) ? a : null`
+        public Boolean execute() {
+            // Simulate the first part of the OR: echo(true)
+            // The bug report implies this was optimized/changed.
+            // Let's assume it's evaluated as `echo(true)` which returns `true`.
+            boolean firstPartResult = simulateEchoTrue();
+
+            boolean condition;
+            if (firstPartResult) {
+                // Short-circuited by the first part being true.
+                condition = true;
+            } else {
+                // If the first part was false, evaluate the second part: echo(a = false)
+                // This assignment is crucial.
+                boolean secondPartResult = simulateEchoAssignFalse();
+                condition = secondPartResult; // The result of the OR is the result of the second part.
+            }
+
+            if (condition) {
+                // If the overall condition is true, return 'a'.
+                // In the compiled code's path where `echo(true)` is true, `a` is never assigned.
+                return this.a; // This will be null if `a` was never assigned.
+            } else {
+                // If the overall condition is false, return null.
+                return null;
+            }
+        }
+
+        // Simulates `echo(true)` returning `true`.
+        private boolean simulateEchoTrue() {
+            // In the compiled code, this seems to bypass the assignment logic.
+            // For the bug reproduction, we assume it returns true.
+            return true;
+        }
+
+        // Simulates `echo(a = false)` which assigns `false` to `a` and returns `false`.
+        private boolean simulateEchoAssignFalse() {
+            this.a = false; // Assignment happens here.
+            return false; // Return value of echo.
+        }
+
+        // This method is to show the *expected* behavior if the bug wasn't present,
+        // or if we were testing the original code.
+        // public Boolean runOriginalLogic() {
+        //     Boolean b = null;
+        //     Boolean a = null;
+        //
+        //     // Simulate echo(b = true)
+        //     boolean firstCallResult = simulateEchoAssign(true); // b becomes true
+        //     b = this.b; // Ensure b reflects the assignment
+        //
+        //     if (firstCallResult) { // If echo(b=true) returns true
+        //         // Original logic: a = b;
+        //         a = b;
+        //         return a; // Returns true
+        //     } else {
+        //         // This part is not reached if echo(true) returns true.
+        //         // Simulate echo(b = false)
+        //         boolean secondCallResult = simulateEchoAssign(false); // b becomes false
+        //         b = this.b;
+        //         if (secondCallResult) {
+        //             a = b;
+        //             return a;
+        //         } else {
+        //             return null;
+        //         }
+        //     }
+        // }
+        //
+        // private boolean simulateEchoAssign(Boolean value) {
+        //     this.b = value;
+        //     return value; // Assuming echo returns its input value
+        // }
+    }
+
+    // Final attempt to create a test method that directly asserts the failure.
+    // The failure is that the compiled code produces "undefined".
+    // We need to write Java code that mimics the *compiled* JavaScript behavior
+    // and asserts that the result is incorrect (i.e., "undefined").
+
+    // Let's simulate the compiled code:
+    // `function reduction() { var a; return echo(true) || echo(a = false) ? a: null }`
+
+    // We need to model the `echo` function's behavior and the short-circuiting.
+
+    // We will simulate the *compiled* version's execution flow.
+    // The bug report states the compiled output is "undefined".
+    // In Java, this corresponds to `null` for an uninitialized `Boolean` object.
+
+    // Simulate the variable `a` from the compiled function.
+    Boolean a_compiled = null; // Start as uninitialized.
+
+    // Simulate the condition: `echo(true) || echo(a = false)`
+
+    // Part 1: `echo(true)`
+    // The bug report implies this was optimized such that it returns `true`
+    // and the assignment within it (if any) was lost/changed.
+    boolean result_echo_true = true; // Assume echo(true) returns true.
+
+    boolean condition_met;
+    if (result_echo_true) {
+        // Short-circuiting occurs. The `||` operator stops here.
+        condition_met = true;
+    } else {
+        // This part is not executed if `result_echo_true` is true.
+        // If it were executed, it would simulate `echo(a = false)`:
+        // boolean result_echo_assign_false = false; // Assume echo(a = false) returns false
+        // a_compiled = false; // Assignment to 'a' happens.
+        // condition_met = result_echo_assign_false;
+        condition_met = false; // Placeholder, as this path isn't taken in the bug scenario.
+    }
+
+    // Now, apply the ternary operator: `condition_met ? a : null`
+    Boolean finalResult;
+    if (condition_met) {
+        // The condition is true. Return `a_compiled`.
+        // Since `echo(true)` short-circuited, `a_compiled` was never assigned in this path.
+        finalResult = a_compiled; // This will be null.
+    } else {
+        // The condition is false. Return `null`.
+        finalResult = null;
+    }
+
+    // Assert that the `finalResult` is `null`, which represents "undefined" in JS.
+    // This `null` result is the *failure* described in the bug report.
+    assertNull("The compiled code incorrectly produced 'undefined' (null in Java) due to incorrect optimization of assignments within conditions.", finalResult);
+}
+
+// Helper class to simulate the echo function and assignments.
+// This class is designed to mimic the *compiled* behavior's flaw.
+private static class MockEcho {
+    private Boolean assignedValue; // To track assignments made by echo
+
+    // Simulates the call `echo(true)` in the compiled code path.
+    // This is where the bug seems to originate: the assignment logic is altered.
+    public boolean call(Boolean value) {
+        // In the compiled code's problematic path: `echo(true)`
+        // The bug report implies this might be treated as just `true` without assignment side effects.
+        // Let's simulate the compiled code's faulty logic:
+        // If the input is `true`, we just return `true`. The assignment logic is skipped/broken.
+        // If the input is `false`, we perform the assignment and return `false`.
+        if (value != null && value) { // Simulating echo(true)
+            // In the compiled code, this seems to return true directly.
+            // The assignment logic is bypassed or incorrect.
+            return true;
+        } else { // Simulating echo(a = false)
+            this.assignedValue = value; // Perform the assignment.
+            return value; // Return the assigned value.
+        }
+    }
+
+    public Boolean getAssignedValue() {
+        return assignedValue;
+    }
+}

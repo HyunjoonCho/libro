@@ -1,0 +1,58 @@
+public void testLongDirectoryNamesInTar() throws IOException {
+    String longDirName = "this_is_a_very_long_directory_name_that_exceeds_the_standard_tar_header_limit_of_100_bytes_and_should_trigger_pax_header_writing_for_directories";
+    File tempDir = null;
+    File tempTarFile = null;
+    try {
+        tempDir = File.createTempFile("tarTest", "");
+        tempDir.delete();
+        tempDir.mkdir();
+
+        File subDir = new File(tempDir, longDirName);
+        subDir.mkdirs();
+
+        tempTarFile = File.createTempFile("archive", ".tar");
+
+        TarArchiveOutputStream taos = new TarArchiveOutputStream(new FileOutputStream(tempTarFile));
+        taos.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX); // Or another appropriate mode
+
+        // Add the directory itself
+        TarArchiveEntry entry = new TarArchiveEntry(subDir, subDir.getName() + "/");
+        taos.putArchiveEntry(entry);
+        taos.closeArchiveEntry();
+
+        taos.close();
+
+        // Verify that the tar file was created without exceptions related to long names
+        assertTrue(tempTarFile.exists());
+        assertTrue(tempTarFile.length() > 0);
+
+        // Optional: Further verification by reading the tar file and checking the entry
+        TarArchiveInputStream tais = new TarArchiveInputStream(new FileInputStream(tempTarFile));
+        TarArchiveEntry readEntry = tais.getNextTarEntry();
+        assertNotNull(readEntry);
+        assertEquals(subDir.getName() + "/", readEntry.getName());
+        assertTrue(readEntry.isDirectory());
+        tais.close();
+
+    } finally {
+        if (tempDir != null && tempDir.exists()) {
+            recursiveDelete(tempDir);
+        }
+        if (tempTarFile != null && tempTarFile.exists()) {
+            tempTarFile.delete();
+        }
+    }
+}
+
+// Helper method to recursively delete directories
+private void recursiveDelete(File file) {
+    if (file.isDirectory()) {
+        File[] entries = file.listFiles();
+        if (entries != null) {
+            for (File entry : entries) {
+                recursiveDelete(entry);
+            }
+        }
+    }
+    file.delete();
+}

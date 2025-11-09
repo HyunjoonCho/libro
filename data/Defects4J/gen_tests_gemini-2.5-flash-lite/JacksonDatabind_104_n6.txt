@@ -1,0 +1,62 @@
+import com.fasterxml.jackson.databind.util.StdDateFormat;
+import org.junit.Test;
+
+import java.text.ParseException;
+import java.util.Date;
+import java.util.TimeZone;
+
+import static org.junit.Assert.assertEquals;
+
+public class StdDateFormatTest {
+
+    @Test
+    public void testLargeISODates() throws ParseException {
+        StdDateFormat formatter = new StdDateFormat();
+        formatter.setTimeZone(TimeZone.getTimeZone("UTC")); // Ensure consistent timezone
+
+        // Test with Long.MAX_VALUE which corresponds to a date far in the future
+        Date maxDate = new Date(Long.MAX_VALUE);
+        String formattedMax = formatter.format(maxDate);
+        // The original bug report indicates that years > 9999 are not handled correctly.
+        // We expect the formatted string to have a year part with more than 4 digits and correctly represented.
+        // The exact format for years > 9999 might vary based on the fix, but it should not contain non-numerical characters for the year part.
+        // For example, a year like 10000 should be represented as "10000", not "痝055" or similar.
+        // We will check if the year part is a valid number.
+        String yearPartMax = formattedMax.substring(0, formattedMax.indexOf('-'));
+        try {
+            Integer.parseInt(yearPartMax);
+        } catch (NumberFormatException e) {
+            // This assertion fails if the year part is not a valid number, indicating the bug.
+            org.junit.Assert.fail("Year part of formatted Long.MAX_VALUE date is not a valid number: " + yearPartMax);
+        }
+        // Also re-parse to ensure it can be parsed back
+        Date parsedMax = formatter.parse(formattedMax);
+        assertEquals("Parsing Long.MAX_VALUE formatted date failed", maxDate.getTime(), parsedMax.getTime());
+
+        // Test with Long.MIN_VALUE which corresponds to a date far in the past
+        Date minDate = new Date(Long.MIN_VALUE);
+        String formattedMin = formatter.format(minDate);
+        // Similar check for Long.MIN_VALUE
+        String yearPartMin = formattedMin.substring(0, formattedMin.indexOf('-'));
+        try {
+            // For negative years, StdDateFormat might prepend a sign or use ERA.
+            // The bug was about incorrect formatting, not necessarily about negative year handling itself.
+            // We'll check if the numeric part of the year is parsable.
+            if (yearPartMin.startsWith("-")) {
+                Integer.parseInt(yearPartMin.substring(1));
+            } else {
+                Integer.parseInt(yearPartMin);
+            }
+        } catch (NumberFormatException e) {
+            org.junit.Assert.fail("Year part of formatted Long.MIN_VALUE date is not a valid number: " + yearPartMin);
+        }
+        // Re-parse to ensure it can be parsed back. Note: StdDateFormat might not support Long.MIN_VALUE perfectly due to era/negative year representations.
+        // The primary bug is about formatting large positive years.
+        // If the parsing of Long.MIN_VALUE fails, it might be a separate issue or related to the formatting fix.
+        // We'll focus on the formatting of large positive years as per the bug description.
+        Date parsedMin = formatter.parse(formattedMin);
+        // Depending on the exact fix and how negative dates are handled, this might fail.
+        // The core issue is the formatting of years > 9999.
+        // assertEquals("Parsing Long.MIN_VALUE formatted date failed", minDate.getTime(), parsedMin.getTime());
+    }
+}

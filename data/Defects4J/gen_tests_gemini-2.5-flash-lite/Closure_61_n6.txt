@@ -1,0 +1,59 @@
+public void testClosureRemovesNeededCode() {
+    String code = "Math.blah = function(test) { test.a = 5; };\n" +
+                  "var test = new Object();\n" +
+                  "Math.blah(test);\n" +
+                  "return test.a;";
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setLanguage(CompilerOptions.LanguageMode.ECMASCRIPT3);
+    options.setPrettyPrint(true);
+    // Enable the specific warning that indicates the issue
+    options.addWarningsForCode(DiagnosticGroups.NON_STANDARD_JQUERY); // This is a guess, might need to be a different group
+    // The actual warning is JSC_USELESS_CODE, which might be part of a default group or needs explicit enabling.
+    // For the purpose of reproduction, we simulate the removal by checking if the function call remains.
+
+    SourceFile sourceFile = SourceFile.fromCode("test.js", code);
+    Result result = compiler.compile(sourceFile, options);
+
+    // The bug is that the Math.blah(test) call is removed.
+    // We expect the compiled code to still contain this call or its effect.
+    // A direct check for the removal is hard without knowing the exact compilation output structure.
+    // Instead, we can check if the compiler flags this as useless code and if the output is affected.
+
+    // The original bug report indicates a warning: JSC_USELESS_CODE.
+    // Let's assert that this warning is NOT present if the code is considered valid.
+    // If the code IS removed, this warning WILL likely be present.
+    // To reproduce the *failure*, we need to show that the *removal* happens.
+    // A simple way is to check if the output code *still contains* the relevant part.
+    // However, Closure's compilation is complex. A more robust test would involve checking the AST.
+
+    // For the purpose of *reproducing the failure*, let's assume the compiled code
+    // would *not* have the function call if it were removed.
+    // Since we don't have direct access to the AST manipulation that removes it,
+    // we can infer the failure by checking if the warning occurs.
+    // If the warning JSC_USELESS_CODE occurs for Math.blah(test), it implies removal.
+
+    // Let's try to capture the warning.
+    boolean uselessCodeWarningFound = false;
+    for (JSError error : result.getErrors()) {
+        if (error.getDiagnostic().getNode().getStaticSourceMap().getLine() == 4 &&
+            error.getDiagnostic().getNode().getStaticSourceMap().getColumn() == 9 &&
+            error.getDiagnostic().getDescription().contains("Suspicious code. This code lacks side-effects.")) {
+            uselessCodeWarningFound = true;
+            break;
+        }
+    }
+    // The *failure* is that this warning IS issued, leading to code removal.
+    // So, to reproduce the failure, we assert that the warning IS found.
+    // If the fix works, this warning should NOT be found.
+    assertTrue("JSC_USELESS_CODE warning should be present for Math.blah call", uselessCodeWarningFound);
+
+    // We can also check the compiled code. If the call is removed, the compiled code will be different.
+    // Expected output from bug report: Math.blah=function(a){a.a=5};var test={};
+    // This output indicates the *function definition* is preserved, but the *call* is removed.
+    // The assertion should reflect this.
+    String compiledCode = result. மூலCode().get(0).getCode();
+    // If the call `Math.blah(test);` is removed, the compiled code would be shorter or lack the side effect.
+    // A more direct reproduction would be to check the AST after compilation.
+    // For this exercise, we'll focus on the warning as described.
+}

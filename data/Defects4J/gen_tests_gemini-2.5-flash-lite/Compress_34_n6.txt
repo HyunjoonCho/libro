@@ -1,0 +1,79 @@
+public void testX7875_NewUnix_ZeroSizedUXField() throws Exception {
+    // Construct a minimal zip file with a 0-sized "ux" extra field
+    // This is a simplified representation based on the debugger output.
+    // In a real scenario, you'd create a zip file programmatically or use a known problematic file.
+    byte[] zipContent = new byte[] {
+            // Local file header signature
+            0x50, 0x4b, 0x03, 0x04,
+            // Version needed to extract
+            0x14, 0x00,
+            // General purpose bit flag
+            0x01, 0x00, // Bit 3 set for Data Descriptor
+            // Compression method
+            0x00, 0x00,
+            // Last modified file date and time (dummy)
+            0x00, 0x00, 0x00, 0x00,
+            // CRC-32 (dummy)
+            0x00, 0x00, 0x00, 0x00,
+            // Compressed size (0)
+            0x00, 0x00, 0x00, 0x00,
+            // Uncompressed size (0)
+            0x00, 0x00, 0x00, 0x00,
+            // File name length
+            0x05, 0x00,
+            // Extra field length
+            0x0d, 0x00,
+            // File name: "test.txt"
+            't', 'e', 's', 't', '.', 't', 'x', 't',
+            // Extra fields:
+            // UT (Unix) extra field - 9 bytes
+            0x55, 0x54, // Tag
+            0x09, 0x00, // Length
+            0x05, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Dummy timestamp and mode
+            // UX (Unix) extra field - 0 bytes (the problematic part)
+            0x55, 0x78, // Tag
+            0x00, 0x00, // Length
+
+            // Data descriptor (since bit 3 is set in flags)
+            // CRC-32
+            0x00, 0x00, 0x00, 0x00,
+            // Compressed size (0)
+            0x00, 0x00, 0x00, 0x00,
+            // Uncompressed size (0)
+            0x00, 0x00, 0x00, 0x00
+    };
+
+    // Tika's detect method internally uses Commons Compress.
+    // We'll use Commons Compress directly to isolate the issue.
+    // The problematic code is within ZipFile.readCentralDirectoryEntry which calls ExtraFieldUtils.parse
+    // and ultimately X7875_NewUnix.parseFromLocalFileData.
+    try (ByteArrayInputStream bais = new ByteArrayInputStream(zipContent);
+         ZipArchiveInputStream zais = new ZipArchiveInputStream(bais)) {
+        
+        ZipArchiveEntry entry = zais.getNextZipEntry();
+        assertNotNull("Should have at least one entry", entry);
+        // The exception is thrown during the process of reading the entry's extra fields.
+        // Accessing the entry's properties or attempting to read its content (even if empty)
+        // would trigger the parsing of extra fields.
+        // Here we just iterate to the next entry to ensure all parsing logic is hit.
+        // If the bug is in reading the local file data, simply getting the entry is enough.
+        // If it's in the central directory, we'd need to read that part.
+        // The stack trace suggests it's during local file data parsing.
+        
+        // We can assert that no exception is thrown.
+        // If an exception is thrown, the test will fail.
+        // We can also try to read a small amount of data, which might trigger the issue.
+        byte[] buffer = new byte[10];
+        int bytesRead = zais.read(buffer);
+        assertTrue("Should not throw exception on reading", true); // If we reach here, no exception was thrown.
+
+    } catch (ArrayIndexOutOfBoundsException e) {
+        // This is the exception we expect to reproduce.
+        // We can add an assertion here if we want to explicitly check for it,
+        // but the test failing is the primary goal.
+        fail("ArrayIndexOutOfBoundsException was thrown as expected, but test should fail if it occurs.");
+    } catch (Exception e) {
+        // Catch other potential exceptions to ensure the test fails if unexpected issues arise.
+        fail("An unexpected exception occurred: " + e.getMessage());
+    }
+}

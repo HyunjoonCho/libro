@@ -1,0 +1,88 @@
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.JsonIdentityReference;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class ObjectIdTest {
+
+    public static class Foo {
+
+        @JsonIdentityReference(alwaysAsId = true)
+        public Bar bar1;
+
+        @JsonIdentityReference()
+        public Bar bar2;
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class)
+    public static class Bar {
+
+    }
+
+    @Test
+    public void testForwardReferences() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        Foo mo = new Foo();
+        mo.bar1 = new Bar();
+        mo.bar2 = mo.bar1;
+
+        String json = mapper.writeValueAsString(mo);
+
+        // The expected output should indicate that bar2 refers to the same object as bar1.
+        // Since bar1 is serialized first and is annotated with alwaysAsId=true, it will be an ID.
+        // bar2 should then reference that ID. The exact ID value (e.g., 1) might vary depending on
+        // the generator's internal state, but the structure should be consistent.
+        // The bug report indicates the output was {"bar1":1,"bar2":{"@id":2}}, which is incorrect.
+        // The correct output should be something like {"bar1":1,"bar2":1} or {"bar1":{"@id":1},"bar2":1}
+        // depending on the exact serialization order and annotations.
+        // Given the description and the expected behavior, the most likely correct serialization
+        // where bar1 is always an ID and bar2 is a reference to it would be {"bar1":1,"bar2":1}.
+        // If bar1 was serialized as an object with an ID, it would be {"bar1":{"@id":1},"bar2":1}.
+        // The bug report's example output has bar1 as an ID (1) and bar2 as a new object with an ID (@id: 2).
+        // Let's assert for the structure that indicates a shared reference.
+        // A more robust test would parse the JSON and check the references, but for a direct reproduction,
+        // checking the string output for the expected pattern is sufficient.
+
+        // The bug description states the output is `{"bar1":1,"bar2":{"@id":2}}`.
+        // The fix implies that it should serialize correctly.
+        // If bar1 is always an ID, and bar2 references the same object, bar2 should also be the same ID.
+        // Thus, the expected output should be {"bar1":1,"bar2":1}.
+        // However, the bug report's example for the incorrect output is `{"bar1":1,"bar2":{"@id":2}}`.
+        // Let's test to ensure it's NOT that incorrect output, and instead shows a shared reference.
+        // The most direct interpretation of the fix is that bar2 should also serialize as '1'.
+
+        // If bar1 is always an ID, it will be serialized as an integer.
+        // If bar2 references the same object, it should also be serialized as that same integer.
+        // This is the behavior that was broken.
+        // So we expect: `{"bar1":1,"bar2":1}` (or similar if the ID starts from a different number).
+
+        // Let's assert for the structure that represents the shared reference correctly.
+        // The most common correct output in such cases is that both fields get the same ID.
+        // The first ID generated is typically 1.
+        // So, we expect `{"bar1":1,"bar2":1}`.
+        // We need to be careful about the exact JSON string as whitespace can vary.
+        // A more robust check would involve parsing the JSON.
+        // For the purpose of reproducing the bug and verifying the fix, let's assume
+        // the simplest correct output.
+
+        // The bug report's example implies that bar1 serializes as an ID (1) because alwaysAsId=true.
+        // Then bar2, pointing to the same object, incorrectly gets a NEW ID (@id: 2).
+        // The fix should make bar2 also serialize as the ID '1'.
+        // Therefore, the corrected output should be `{"bar1":1,"bar2":1}`.
+
+        // Let's make the assertion flexible enough to allow for different starting IDs,
+        // but ensure bar1 and bar2 have the same ID.
+        // A simpler test is to just check that bar2 is NOT serialized as a new object with a new ID.
+        // However, the goal is to reproduce the *failure* and then implicitly show it's fixed.
+        // So, we'll write the test expecting the *correct* behavior, which implies the previous
+        // incorrect behavior would fail this test.
+
+        // Let's assume the ID sequence starts at 1.
+        String expectedJson = "{\"bar1\":1,\"bar2\":1}";
+        // We should normalize whitespace for comparison if needed, but ObjectMapper usually produces consistent spacing.
+        assertEquals(expectedJson, json);
+    }
+}

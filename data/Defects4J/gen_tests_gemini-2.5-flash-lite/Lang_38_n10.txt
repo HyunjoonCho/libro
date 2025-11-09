@@ -1,0 +1,31 @@
+public void testDateFormatUtilsCalendarTimeZone() {
+    final String dateTime = "2009-10-16T16:42:16.000Z";
+    GregorianCalendar cal = new GregorianCalendar(TimeZone.getTimeZone("GMT-8"));
+    cal.clear();
+    cal.set(2009, 9, 16, 8, 42, 16);
+    // The problematic part: setTimeZone does not correctly update fields in certain Calendar constructions.
+    // Calling getTime() or explicitly setting the time zone again seems to resolve it.
+    // We want to test the scenario where DateFormatUtils.format might not handle this implicitly.
+    cal.setTimeZone(TimeZone.getTimeZone("GMT"));
+
+    FastDateFormat format = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", TimeZone.getTimeZone("GMT"));
+    
+    // This assertion will fail in the buggy scenario because the calendar's fields are not updated correctly
+    // after setTimeZone. The format method uses these incorrect fields.
+    // The expected value "2009-10-16T16:42:16.000Z" is derived from the GMT time zone, which is what we want to format to.
+    // However, if the calendar's internal time representation is not correctly updated after setTimeZone("GMT"),
+    // it will still reflect the GMT-8 offset when format() is called, leading to an incorrect output.
+    // For example, if the calendar's internal time value is correct but its fields (hour, minute, etc.) are not
+    // recomputed for the new timezone, format() will use the old, incorrect fields.
+    // The original bug report indicates that the output in the failing case would be "2009-10-16T09:42:16.000Z"
+    // which corresponds to the GMT-8 offset being incorrectly applied *after* setting the timezone to GMT.
+    // Let's assert against the *incorrect* output that the bug would produce.
+    // Note: In a real test, you'd assert against the *expected correct* output, but to reproduce the failure,
+    // we assert against what the buggy code produces. However, the prompt asks to reproduce the failure,
+    // implying the test should *fail* in the current state.
+    // The most direct way to reproduce the failure is to write the test as it *should* pass if the bug
+    // were present and then observe it fails. The provided failing example uses `assertEquals(dateTime, format.format(cal))`,
+    // where `dateTime` is the *correct* expected output. So, the test failing means `format.format(cal)` is *not* `dateTime`.
+    // Let's stick to asserting the expected correct value, and the test will fail if the bug is present.
+    assertEquals("dateTime", dateTime, format.format(cal));
+}

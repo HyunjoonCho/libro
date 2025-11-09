@@ -1,0 +1,70 @@
+public void testIssue108() {
+    CompilerOptions options = new CompilerOptions();
+    options.setLanguage(CompilerOptions.LanguageMode.ADVANCED);
+    options.setClosureLibrarySymbols(Arrays.asList("goog.base", "goog.inherits", "goog.abstractMethod"));
+    options.setPrettyPrint(true);
+
+    String source = "goog.provide('Foo');\n" +
+                    "goog.provide('Bar');\n" +
+                    "\n" +
+                    "/** @constructor */\n" +
+                    "Foo = function() {};\n" +
+                    "\n" +
+                    "/**\n" +
+                    " * @param {number} a\n" +
+                    " * @param {number} b\n" +
+                    " * @return {number}\n" +
+                    " */\n" +
+                    "Foo.prototype.add = function(a, b) {\n" +
+                    " return a + b;\n" +
+                    "};\n" +
+                    "\n" +
+                    "/**\n" +
+                    " * @param {number} a\n" +
+                    " * @param {number} b\n" +
+                    " * @return {number}\n" +
+                    " */\n" +
+                    "Foo.prototype.sub = goog.abstractMethod;\n" +
+                    "\n" +
+                    "/**\n" +
+                    " * @constructor\n" +
+                    " * @extends {Foo}\n" +
+                    " */\n" +
+                    "Bar = function() {\n" +
+                    " goog.base(this);\n" +
+                    "};\n" +
+                    "goog.inherits(Bar, Foo);\n" +
+                    "\n" +
+                    "/** @inheritDoc */\n" +
+                    "Bar.prototype.add = function(one) {\n" +
+                    " return one;\n" +
+                    "};\n" +
+                    "\n" +
+                    "/** @inheritDoc */\n" +
+                    "Bar.prototype.sub = function(one) {\n" +
+                    " return one;\n" +
+                    "};\n" +
+                    "\n" +
+                    "var foo = /** @type {Foo} */ (new Bar());\n" +
+                    "alert(foo.add(3, 4));\n" +
+                    "\n" +
+                    "var bar = new Bar();\n" +
+                    "// THIS PRODUCES JSC_WRONG_ARGUMENT_COUNT\n" +
+                    "alert(bar.add(3, 4));\n";
+
+    Compiler compiler = new Compiler();
+    compiler.compile(new String[]{"test.js"}, new String[]{source}, options);
+
+    // The expected error is JSC_WRONG_ARGUMENT_COUNT, which is a warning.
+    // In ADVANCED mode, this specific warning might be suppressed or handled differently
+    // depending on the exact compiler version and configuration.
+    // The bug report indicates that *no* warning is generated for the overridden methods
+    // with different signatures, even though one is expected.
+    // This test aims to check if the compiler *does* produce the expected error/warning
+    // for the `bar.add(3, 4)` call, which is the specific case mentioned.
+    // If the bug is present, this assertion might fail because the error is not found.
+    // If the bug is fixed, this assertion should pass.
+    assertThat(compiler.getErrors(), hasItem(
+            hasProperty("description", containsString("JSC_WRONG_ARGUMENT_COUNT"))
+    ));
+}

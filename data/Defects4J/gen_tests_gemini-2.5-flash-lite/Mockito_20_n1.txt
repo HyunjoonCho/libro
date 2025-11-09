@@ -1,0 +1,198 @@
+import org.junit.Test;
+import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.*;
+
+// Assuming these interfaces and classes are defined elsewhere as per the bug report
+interface UserAccount {
+    List<String> getEmails();
+    void addEmail(String email);
+}
+
+interface AccountService {
+    void getAccount(String id, AsyncCallback<UserAccount> callback);
+}
+
+// Mockito's Answer interface for callback-style APIs
+interface Answer<T> {
+    T answer(InvocationOnMock invocation) throws Throwable;
+}
+
+// Mockito's AsyncCallback interface
+interface AsyncCallback<T> {
+    void onSuccess(T result);
+    void onFailure(Throwable thrown);
+}
+
+public class MockitoBugTest {
+
+    @Test
+    public void testAbstractClassMocking() {
+        // Example 1: Fake with trivial Logic
+        abstract class FakeUserAccount implements UserAccount {
+            private final List<String> emails = new ArrayList<>();
+
+            @Override
+            public void addEmail(String email) {
+                emails.add(email);
+            }
+
+            @Override
+            public List<String> getEmails() {
+                return new ArrayList<>(emails); // Return a copy to prevent external modification
+            }
+        }
+
+        // This test assumes Mockito has been extended or configured to support @Fake
+        // For demonstration, we'll manually create a mock using Mockito.mock and an Answer
+        // to simulate the desired behavior. In a real scenario with the proposed feature,
+        // you might use @Fake.
+
+        // Simulating the desired behavior without the @Fake annotation
+        UserAccount mockUserAccount = Mockito.mock(UserAccount.class, new Answer<Object>() {
+            private final List<String> emails = new ArrayList<>();
+
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                String methodName = invocation.getMethod().getName();
+                if ("addEmail".equals(methodName)) {
+                    String email = (String) invocation.getArguments()[0];
+                    emails.add(email);
+                    return null; // void method
+                } else if ("getEmails".equals(methodName)) {
+                    return new ArrayList<>(emails); // Return a copy
+                }
+                // Default behavior for other methods if any
+                return Mockito.RETURNS_DEFAULT.answer(invocation);
+            }
+        });
+
+        mockUserAccount.addEmail("test@example.com");
+        mockUserAccount.addEmail("another@example.com");
+        assertEquals(2, mockUserAccount.getEmails().size());
+        assertEquals("test@example.com", mockUserAccount.getEmails().get(0));
+        assertEquals("another@example.com", mockUserAccount.getEmails().get(1));
+
+        // Example 2: Callback-style API
+        abstract class MockAccountService implements AccountService {
+            @Override
+            public void getAccount(String id, AsyncCallback<UserAccount> callback) {
+                callback.onSuccess(getAccount(id));
+            }
+
+            abstract UserAccount getAccount(String id);
+        }
+
+        // Simulating the desired behavior without the @Fake annotation
+        AccountService mockAccountService = Mockito.mock(AccountService.class, new MockAccountService() {
+            private UserAccount accountToReturn;
+
+            // This method will be called by the default implementation in MockAccountService
+            @Override
+            public UserAccount getAccount(String id) {
+                // This is where you'd define the fake account for a specific ID
+                if ("user123".equals(id)) {
+                    return accountToReturn;
+                }
+                return null;
+            }
+
+            // Override the method that takes the callback to use our stubbed getAccount(id)
+            @Override
+            public void getAccount(String id, AsyncCallback<UserAccount> callback) {
+                // Manually invoke the callback logic, simulating the abstract class's behavior
+                callback.onSuccess(getAccount(id));
+            }
+
+            // Helper to set the account to be returned
+            public void setAccountToReturn(UserAccount account) {
+                this.accountToReturn = account;
+            }
+        });
+
+        // Now, we need to set up the behavior for the abstract method `getAccount(String id)`
+        // In a real scenario with @Fake, this would be implicit or handled by Mockito.
+        // Here, we need to configure the concrete mock instance.
+        // This is where the proposed feature shines, as it would handle this more cleanly.
+
+        // For this test, we'll directly mock the abstract method's return value.
+        UserAccount dummyAccount = Mockito.mock(UserAccount.class);
+        // We need to cast the mockAccountService to our anonymous inner class to access setAccountToReturn
+        ((MockAccountService) mockAccountService).setAccountToReturn(dummyAccount);
+
+
+        // Now, simulate the call to the AccountService
+        AsyncCallback<UserAccount> mockCallback = Mockito.mock(AsyncCallback.class);
+        mockAccountService.getAccount("user123", mockCallback);
+
+        // Verify that the callback was called with the correct account
+        verify(mockCallback).onSuccess(dummyAccount);
+
+        // Example 3: Uninteresting parameters
+        // This example is harder to directly test without the proposed feature,
+        // as it requires Mockito to handle the default implementation of methods.
+        // The core idea is that Mockito would generate the RpcContext check
+        // and then call the abstract method.
+
+        // If we were to simulate this, we'd need a mock that overrides the specific method.
+        // Let's assume an interface like this:
+        interface RpcContext {}
+        interface FutureAccount {}
+        interface AccountRpcService {
+            FutureAccount getAccount(RpcContext context, String id);
+        }
+
+        // Simulating the abstract class behavior for testing purposes
+        abstract class MockAccountRpcServiceAbstract implements AccountRpcService {
+            @Override
+            public FutureAccount getAccount(RpcContext context, String id) {
+                // Simulate the check
+                if (context == null) {
+                    throw new NullPointerException("RpcContext cannot be null");
+                }
+                return getAccount(id); // Calls the abstract method
+            }
+            abstract FutureAccount getAccount(String id);
+        }
+
+        AccountRpcService mockRpcService = Mockito.mock(AccountRpcService.class, new MockAccountRpcServiceAbstract() {
+            private FutureAccount accountToReturn;
+
+            @Override
+            public FutureAccount getAccount(String id) {
+                return accountToReturn;
+            }
+
+            public void setAccountToReturn(FutureAccount account) {
+                this.accountToReturn = account;
+            }
+        });
+
+        RpcContext mockContext = Mockito.mock(RpcContext.class);
+        FutureAccount dummyFutureAccount = Mockito.mock(FutureAccount.class);
+
+        // We need to cast to access the setter for the stubbed return value
+        ((MockAccountRpcServiceAbstract) mockRpcService).setAccountToReturn(dummyFutureAccount);
+
+        // Call the method, expecting the default implementation to handle context and call the abstract method
+        FutureAccount result = mockRpcService.getAccount(mockContext, "someId");
+
+        // Verify that the abstract method was called with the correct ID
+        // This requires verifying the call to the *abstract* method, which is tricky with standard Mockito.
+        // The proposed feature would make this verification straightforward.
+        // For now, we verify the result.
+        assertEquals(dummyFutureAccount, result);
+
+        // Additionally, verify that the context was not null (simulating the check in the abstract method)
+        // This would be implicitly tested if the above call didn't throw a NullPointerException.
+        // A more direct test of the check would involve calling with null context,
+        // but that's not directly possible when mocking the service instance itself.
+    }
+}

@@ -1,0 +1,50 @@
+public void testIsSameLocalTime() {
+    Calendar a = Calendar.getInstance();
+    a.setTimeInMillis(1297364400000L); // 2011-02-11 18:00:00 GMT
+    Calendar b = Calendar.getInstance();
+    b.setTimeInMillis(1297321200000L); // 2011-02-11 06:00:00 GMT
+
+    // The original code asserts false, but the bug is that it should be false
+    // because the times are different. The bug description implies that the
+    // failure is when it *should* be true but returns false, or vice-versa.
+    //
+    // Let's test the scenario where the dates are the same but times are different.
+    // The method should return false. If it returns true, it's a bug.
+    // The bug description implies the problem is with HOUR vs HOUR_OF_DAY.
+    // HOUR returns 0-11, HOUR_OF_DAY returns 0-23.
+    //
+    // For the given timestamps:
+    // a: 1297364400000L -> Fri Feb 11 18:00:00 GMT 2011
+    // b: 1297321200000L -> Fri Feb 11 06:00:00 GMT 2011
+    //
+    // a.get(Calendar.HOUR) = 6
+    // b.get(Calendar.HOUR) = 6
+    // If the comparison uses Calendar.HOUR, it will incorrectly return true.
+    // It *should* return false because the times are different (18:00 vs 06:00).
+    //
+    // So, we expect DateUtils.isSameLocalTime(a, b) to return false.
+    // If it returns true, then the bug is reproduced.
+
+    // Let's create a scenario where the dates are the same and the times *should* be different
+    // according to HOUR_OF_DAY but might appear the same according to HOUR.
+    Calendar cal1 = Calendar.getInstance();
+    cal1.set(2023, Calendar.FEBRUARY, 15, 18, 30, 0); // 6:30 PM
+
+    Calendar cal2 = Calendar.getInstance();
+    cal2.set(2023, Calendar.FEBRUARY, 15, 6, 30, 0);  // 6:30 AM
+
+    // cal1.get(Calendar.HOUR) will be 6
+    // cal2.get(Calendar.HOUR) will be 6
+    // If the comparison uses Calendar.HOUR, isSameLocalTime will return true, which is wrong.
+    // It should return false because the times (6 AM vs 6 PM) are different.
+    // We are asserting that it *should* be false. If the test fails (asserts true), the bug is reproduced.
+
+    // The bug report states: "Assert.assertFalse(DateUtils.isSameLocalTime(a, b));"
+    // This implies that the current implementation *incorrectly* returns true for these inputs,
+    // which is why the assertion is assertFalse.
+    // So, to reproduce the failure, we need to check if isSameLocalTime returns true
+    // when it should return false.
+
+    assertTrue("DateUtils.isSameLocalTime should return false for different times of day when using HOUR",
+               DateUtils.isSameLocalTime(cal1, cal2));
+}

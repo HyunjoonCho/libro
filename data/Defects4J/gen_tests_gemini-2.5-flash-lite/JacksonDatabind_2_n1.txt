@@ -1,0 +1,64 @@
+public void testEmbeddedPojoInTree() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(new SimpleModule() {
+        @Override
+        public void setupModule(SetupContext context) {
+            context.addSerializer(ListAttribute.class, new ListAttributeSerializer());
+        }
+    });
+
+    ListAttribute<String> listAttribute = new ListAttribute<>();
+    listAttribute.setItemJsonKey("testItems");
+    listAttribute.setItems(Arrays.asList("item1", "item2"));
+
+    JsonNode tree = mapper.valueToTree(listAttribute);
+
+    // The bug is that "items" should be serialized as JSON array, not an embedded object.
+    // We expect the "items" node to be an ArrayNode, not a POJO node.
+    assertTrue(tree.get("items").isArray());
+    assertEquals("item1", tree.get("items").get(0).asText());
+    assertEquals("item2", tree.get("items").get(1).asText());
+}
+
+// Helper classes to make the test runnable.
+static class ListAttribute<T> {
+    String itemJsonKey;
+    List<T> items;
+
+    public String getItemJsonKey() {
+        return itemJsonKey;
+    }
+
+    public void setItemJsonKey(String itemJsonKey) {
+        this.itemJsonKey = itemJsonKey;
+    }
+
+    public List<T> getItems() {
+        return items;
+    }
+
+    public void setItems(List<T> items) {
+        this.items = items;
+    }
+}
+
+static class ListAttributeSerializer extends JsonSerializer<ListAttribute> {
+    @Override
+    public void serialize(ListAttribute value, JsonGenerator jgen,
+                          SerializerProvider provider) throws IOException {
+        jgen.writeStartObject();
+        jgen.writeStringField("itemType", value.getItemJsonKey());
+        // This is the line causing the issue: writeObjectField serializes the List as an embedded object.
+        // It should be writeArrayField or similar to serialize it as a JSON array.
+        jgen.writeObjectField("items", value.getItems());
+        jgen.writeEndObject();
+    }
+
+    @Override
+    public void serializeWithType(ListAttribute value, JsonGenerator jgen, SerializerProvider provider, TypeSerializer typeSer) throws IOException {
+        typeSer.writeTypePrefixForObject(value, jgen);
+        jgen.writeStringField("itemType", value.getItemJsonKey());
+        jgen.writeObjectField("items", value.getItems());
+        typeSer.writeTypeSuffixForObject(value, jgen);
+    }
+}

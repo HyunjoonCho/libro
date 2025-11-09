@@ -1,0 +1,48 @@
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+
+public class NullArraySerializationTest {
+
+    public static class TestOuter {
+
+        @JsonFormat(shape = JsonFormat.Shape.ARRAY)
+        public ArrayList<TestInner> array;
+
+        public TestOuter() {
+            this.array = new ArrayList<TestInner>();
+            this.array.add(new TestInner(1, "one"));
+            this.array.add(new TestInner(0, null));
+        }
+
+        private static class TestInner {
+            public int i;
+            public String mayBeNull;
+
+            public TestInner(int i, String s) {
+                this.i = i;
+                this.mayBeNull = s;
+            }
+        }
+    }
+
+    @Test
+    public void testNullDuplicationInArraySerialization() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        TestOuter outer = new TestOuter();
+        String json = mapper.writeValueAsString(outer);
+        // Expected: "array": [[1, "one"], [0, null]]
+        // Actual (buggy): "array": [[1, "one"], [0, null, null]]
+        // We are asserting the correct, non-buggy output.
+        assertEquals("{\"array\":[[1,\"one\"],[0,null]]}", json);
+    }
+}

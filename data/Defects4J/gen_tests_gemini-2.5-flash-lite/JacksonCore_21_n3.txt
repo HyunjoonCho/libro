@@ -1,0 +1,41 @@
+public void testIssue248() throws Exception {
+    String input = "{\"a\":123,\"array\":[1,2],\"ob\": {\"value0\":2,\"value\":3,\"value2\":4},\"b\":true}";
+    JsonFactory jf = new JsonFactory();
+    JsonParser p0 = jf.createParser(input);
+    FilteringParserDelegate p = new FilteringParserDelegate(p0,
+            new NameMatchFilter("value"),
+            true, // includePath
+            false // multipleMatches
+    );
+
+    StringBuilder output = new StringBuilder();
+    while (p.nextToken() != null) {
+        if (p.getCurrentTokenId() == JsonTokenId.ID_STRING) {
+            output.append("\"").append(p.getText()).append("\"");
+        } else if (p.getCurrentTokenId() == JsonTokenId.ID_NUMBER_INT) {
+            output.append(p.getIntValue());
+        } else if (p.getCurrentTokenId() == JsonTokenId.ID_BOOLEAN) {
+            output.append(p.getBooleanValue());
+        } else if (p.getCurrentTokenId() == JsonTokenId.ID_START_OBJECT) {
+            output.append("{");
+        } else if (p.getCurrentTokenId() == JsonTokenId.ID_END_OBJECT) {
+            output.append("}");
+        } else if (p.getCurrentTokenId() == JsonTokenId.ID_FIELD_NAME) {
+            output.append("\"").append(p.getCurrentName()).append("\":");
+        } else if (p.getCurrentTokenId() == JsonTokenId.ID_START_ARRAY) {
+            output.append("[");
+        } else if (p.getCurrentTokenId() == JsonTokenId.ID_END_ARRAY) {
+            output.append("]");
+        }
+    }
+
+    // The expected output should have the closing brace for "ob" and "b"
+    // The filtering should result in {"ob":{"value":3},"b":true}
+    // However, the bug report indicates it's missing the final closing brace for the root object.
+    // Let's check for the presence of the last closing brace.
+    String result = output.toString();
+    assertTrue("Output should end with a closing brace", result.endsWith("}"));
+    // A more specific check based on the bug description's partial output:
+    assertTrue("Output should contain the filtered object", result.contains("\"ob\":{\"value\":3}"));
+    assertTrue("Output should contain the filtered boolean", result.contains("\"b\":true"));
+}

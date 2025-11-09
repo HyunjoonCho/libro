@@ -1,0 +1,235 @@
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.utils.IOUtils;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+public class TarArchiveInputStreamTest {
+
+    @Test
+    public void testPaxHeaderEntryNameEndingWithSlash() throws IOException {
+        // Simulate a PAX header entry with a name ending with "/"
+        // The actual PAX header format is complex, so we'll construct a minimal
+        // tar entry that mimics the problematic scenario.
+        // We'll use a null byte separator for the PAX header fields.
+        // The crucial part is the entry name ending with "/" and the 'x' link flag.
+        // A real PAX header might look like:
+        // "\x00\x00\x00\x00\x00\x00\x00\x00" + // magic
+        // "00000000000" + // size
+        // "00000000000" + // mtime
+        // "00000000000" + // checksum
+        // "00000000000" + // typeflag ('x' for PAX)
+        // "00000000000" + // name length
+        // "00000000000" + // link name length
+        // "00000000000" + // magic
+        // "00000000000" + // padding
+        // "path/to/dir/\x00" + // extended header data: name=path/to/dir/
+        // "00000000000" + // padding
+
+        // For testing purposes, we'll create a simplified tar stream.
+        // The critical part is the TarArchiveEntry itself having the correct name
+        // and the internal logic within TarArchiveInputStream that interprets it.
+
+        // A minimal tar header for a regular file, modified to have a name ending with '/'
+        // and simulate the PAX header behavior by setting the link flag to 'x'.
+        // This is a simplified representation. A true PAX header requires specific fields.
+        // However, the bug report suggests the issue arises from the entry name and link flag,
+        // which TarArchiveEntry itself might capture.
+
+        // Let's construct a TarArchiveEntry that *should* be interpreted as a directory
+        // due to the trailing slash, but is a PAX header.
+        TarArchiveEntry entry = new TarArchiveEntry("problematic/dir/\0");
+        entry.setLinkFlag((byte) 'x'); // 'x' indicates a PAX header
+        entry.setSize(0); // No content for this example
+
+        // We need to simulate the stream containing this entry.
+        // Constructing a full valid tar stream with PAX headers is complex.
+        // Instead, we will focus on how TarArchiveInputStream processes an entry
+        // that *might* be created from a problematic PAX header.
+
+        // The core of the bug is likely in how parseTarHeader or subsequent methods
+        // handle an entry where isDirectory() returns true *because* of the trailing slash
+        // when it's actually a PAX header.
+
+        // Let's create a dummy TarArchiveInputStream and add our problematic entry.
+        // This might not be a perfect simulation of the Docker scenario but targets
+        // the described behavior within TarArchiveInputStream's parsing.
+
+        // A simpler approach is to mock the TarArchiveInputStream or directly test
+        // the TarArchiveEntry's behavior if the bug is isolated there.
+        // However, the bug report points to TarArchiveInputStream.
+
+        // Let's create a minimal tar stream containing just this problematic entry.
+        // This requires creating a TarArchiveOutputStream and writing the entry.
+        // Then, we'll read it back with TarArchiveInputStream.
+
+        // This test will attempt to create a tar archive with an entry named "problematic/dir/"
+        // and a link flag 'x' (PAX header), then read it back and assert that it's *not*
+        // treated solely as a directory due to the trailing slash.
+
+        // Construct a TarArchiveOutputStream to create a tar file in memory
+        java.io.ByteArrayOutputStream bout = new java.io.ByteArrayOutputStream();
+        org.apache.commons.compress.archivers.tar.TarArchiveOutputStream taos =
+                new org.apache.commons.compress.archivers.tar.TarArchiveOutputStream(bout);
+
+        // Create the problematic entry
+        TarArchiveEntry paxEntry = new TarArchiveEntry("problematic/dir/");
+        paxEntry.setLinkFlag((byte) 'x'); // Indicate PAX header
+        paxEntry.setSize(0); // No content
+
+        taos.putArchiveEntry(paxEntry);
+        taos.closeArchiveEntry();
+
+        taos.finish();
+        taos.close();
+
+        // Now, read the created tar stream with TarArchiveInputStream
+        InputStream tarInput = new ByteArrayInputStream(bout.toByteArray());
+        TarArchiveInputStream tais = new TarArchiveInputStream(tarInput);
+
+        TarArchiveEntry entryRead = (TarArchiveEntry) tais.getNextEntry();
+
+        // Assert that the entry read is not null
+        assertNotNull(entryRead);
+
+        // The core of the bug: isDirectory() should ideally not be solely determined by the trailing slash
+        // for PAX headers where the content might be relevant or it's a special type.
+        // The bug report states `isDirectory()` returns true and no content can be read.
+        // This implies that the stream is not advanced because it thinks it's a directory and there's no content.
+        // The fix suggested is to handle it such that content *could* be read or it's correctly identified.
+
+        // If it's a PAX header ('x') and ends with '/', it might be a directory, but the
+        // bug implies a misinterpretation leading to stream issues.
+        // The assertion should reflect the *expected correct* behavior after a fix.
+        // A directory entry in tar usually has size 0 and a trailing slash.
+        // However, PAX headers can override standard interpretations.
+
+        // The bug report implies that `entryRead.isDirectory()` is true *incorrectly*
+        // or leading to downstream issues because it's a PAX header.
+        // If it's a PAX header, it might not strictly be a directory.
+        // The key is that the stream doesn't advance correctly.
+
+        // Let's check if it's *not* treated as a simple directory that prevents further reading.
+        // If the entry is a PAX header ('x') and the name ends with '/',
+        // the original code might incorrectly assume it's a directory and stop processing.
+        // A correct implementation should still allow reading the next entry.
+
+        // The bug is that the stream is not advanced. This means `getNextEntry()`
+        // after this problematic entry would fail or return null prematurely.
+        // For this test, we'll assert that we can indeed get the *next* entry,
+        // implying the stream was advanced correctly.
+
+        // Read the next entry to ensure the stream was advanced.
+        TarArchiveEntry nextEntry = (TarArchiveEntry) tais.getNextEntry();
+
+        // If the previous entry was handled correctly (stream advanced),
+        // nextEntry should be null because we only added one entry.
+        // If the stream was *not* advanced due to the bug, this call might
+        // behave unexpectedly or the tar stream might be corrupted.
+        assertNull("The stream should have been advanced correctly after the PAX header entry.", nextEntry);
+
+        // Additionally, let's assert on the isDirectory() behavior.
+        // The bug implies isDirectory() returning true *causes* the problem.
+        // While a name ending in '/' often implies a directory, for PAX headers,
+        // this might be an oversimplification.
+        // The fix suggested is to treat it differently.
+        // If the bug is that isDirectory() returns true inappropriately for PAX,
+        // we might assert that for such an entry, isDirectory() could be false or handled differently.
+        // However, the most direct consequence is the stream not advancing.
+
+        // Let's re-read the entry and check its properties directly.
+        // Reset the stream to re-read the first entry.
+        tarInput.reset();
+        tais = new TarArchiveInputStream(tarInput);
+        entryRead = (TarArchiveEntry) tais.getNextEntry();
+
+        // For a PAX header with a trailing slash, isDirectory() might still be true
+        // if it represents a directory. The problem is the *consequence* of it being true.
+        // The bug is that the stream state is corrupted.
+        // We will assert that the entry itself is recognized.
+        assertTrue("The entry should be recognized.", entryRead != null);
+        assertEquals("Entry name should match.", "problematic/dir/", entryRead.getName());
+        assertTrue("Entry should be identified as a PAX header.", entryRead.is PAXHeader());
+
+        // The critical part is that after reading this entry, the stream is in a valid state.
+        // The test `testPaxHeaderEntryNameEndingWithSlash()` above checks this by trying to get the next entry.
+        // If `nextEntry` is null, it means the stream was successfully read to its end.
+        // If the bug were present, `tais.getNextEntry()` after the problematic entry might
+        // throw an exception or return an incorrect result because the stream was not advanced.
+
+        // A more direct test of the `isDirectory()` behavior might be:
+        // The bug report states: "The TarArchiveEntry.isDirectory() check ends up returning true because of the trailing slash which means no content can be read from the entry."
+        // This implies that if `is PAXHeader()` is true, and the name ends with '/',
+        // `isDirectory()` might be called incorrectly or its return value leads to issues.
+        // The fix suggests modifying `isDirectory()` or `parseTarHeader()`.
+
+        // Let's test the `isDirectory()` method directly on the entry *after* it's been parsed.
+        // The issue is that `isDirectory()` returning true for a PAX header with a trailing slash
+        // is problematic.
+        // The fix could be: if `isPaxHeader()` is true, then `isDirectory()` should not rely *solely*
+        // on the trailing slash.
+
+        // Re-reading the entry for direct `isDirectory()` check.
+        tarInput.reset();
+        tais = new TarArchiveInputStream(tarInput);
+        entryRead = (TarArchiveEntry) tais.getNextEntry();
+
+        // If the bug is present, `entryRead.isDirectory()` might return true,
+        // and this true value causes the stream to not advance.
+        // If the fix is applied, `entryRead.isDirectory()` might still return true
+        // (if it's indeed a directory) but the stream handling is correct.
+        // The most robust test is ensuring the stream state is correct.
+        // The previous assertion `assertNull(nextEntry)` confirms stream state.
+
+        // Let's add an assertion that if it's a PAX header and ends with '/',
+        // it *might* still be considered a directory, but the stream logic must be sound.
+        // The bug is not `isDirectory()` returning true, but what happens *because* it returns true.
+
+        // Final check: The bug is about stream advancement. The test `assertNull(nextEntry)`
+        // is the primary way to verify the stream was processed correctly.
+        // The description implies a state corruption.
+    }
+
+    // Helper method for assertions (if not using standard JUnit imports)
+    private void assertNotNull(Object obj) {
+        if (obj == null) {
+            throw new AssertionError("Expected not null but was null");
+        }
+    }
+
+    private void assertNull(Object obj) {
+        if (obj != null) {
+            throw new AssertionError("Expected null but was not null");
+        }
+    }
+
+    private void assertEquals(long expected, long actual) {
+        if (expected != actual) {
+            throw new AssertionError("Expected " + expected + " but was " + actual);
+        }
+    }
+
+    private void assertEquals(String expected, String actual) {
+        if (!expected.equals(actual)) {
+            throw new AssertionError("Expected \"" + expected + "\" but was \"" + actual + "\"");
+        }
+    }
+
+    private void assertTrue(boolean condition) {
+        if (!condition) {
+            throw new AssertionError("Expected true but was false");
+        }
+    }
+
+    private void assertFalse(boolean condition) {
+        if (condition) {
+            throw new AssertionError("Expected false but was true");
+        }
+    }
+}

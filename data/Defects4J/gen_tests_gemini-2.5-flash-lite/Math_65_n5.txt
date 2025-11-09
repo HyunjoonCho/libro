@@ -1,0 +1,92 @@
+public void testWeightingInChiSquare() {
+    // This test aims to reproduce the issue where weights are incorrectly used in the denominator of getChiSquare().
+    // We'll create a mock scenario to isolate the behavior of getChiSquare and compare it with the expected calculation.
+
+    // Mocking AbstractLeastSquares to control its behavior for this test.
+    AbstractLeastSquares mockSolver = new AbstractLeastSquares() {
+        @Override
+        protected void updateMatrices() {
+            // No-op for this test
+        }
+
+        @Override
+        protected RealMatrix calculateJacobian() {
+            // No-op for this test
+            return null;
+        }
+
+        @Override
+        protected RealVector calculateResiduals(RealVector params) {
+            // Return a simple residual vector for testing
+            return new ArrayRealVector(new double[]{1.0, 2.0, 3.0});
+        }
+
+        @Override
+        protected int getNumParameters() {
+            return 1;
+        }
+
+        @Override
+        protected int getNumObservations() {
+            return 3;
+        }
+    };
+
+    // Set up weights. Let's use weights that are not all 1.0 to see the effect.
+    double[] weightsArray = {0.5, 1.0, 2.0};
+    mockSolver.residualsWeights = new ArrayRealVector(weightsArray);
+    mockSolver.rows = 3; // Number of observations
+
+    // Calculate chi-square using the potentially incorrect method
+    double chiSquareIncorrect = mockSolver.getChiSquare();
+
+    // Manually calculate the expected chi-square with correct weighting
+    // chi-square = sum(weight * residual^2)
+    double expectedChiSquare = 0.0;
+    double[] residuals = {1.0, 2.0, 3.0}; // From calculateResiduals
+    for (int i = 0; i < residuals.length; i++) {
+        expectedChiSquare += weightsArray[i] * residuals[i] * residuals[i];
+    }
+
+    // Assert that the calculated chiSquareIncorrect is not equal to the expectedChiSquare.
+    // This difference demonstrates the bug where weights are in the denominator.
+    // The actual bug description implies that getChiSquare() divides by weights,
+    // so chiSquareIncorrect will likely be smaller than expectedChiSquare if weights are < 1,
+    // and larger if weights are > 1.
+    // The core is that they are not equal.
+    assertNotEquals("The calculated chi-square should not be equal to the expected value due to incorrect weighting.",
+                    expectedChiSquare, chiSquareIncorrect, 1e-9);
+
+    // Additionally, let's test getRMS() as described in the bug report,
+    // assuming it *should* use the corrected chi-square calculation.
+    // The bug report suggests getRMS() uses getChiSquare() and divides by rows.
+    // If getChiSquare() is indeed broken, getRMS() will also be broken.
+    // The bug implies getRMS() is correct *if* getChiSquare() were correct.
+    // So, we'll check if getRMS() calculation aligns with the *expected* chi-square.
+
+    // Let's simulate the fix by calculating RMS based on the *expected* chi-square
+    double expectedRMS = Math.sqrt(expectedChiSquare / mockSolver.rows);
+
+    // Now, let's call the existing getRMS() method on the mock solver.
+    // If getRMS() uses the broken getChiSquare(), this assertion will fail.
+    // If getRMS() is *intended* to be correct after getChiSquare is fixed,
+    // we'd expect its output to match our expectedRMS *if* getChiSquare were fixed.
+    // However, the bug is about getChiSquare. We'll assert that getRMS() based on the *broken*
+    // getChiSquare is not what we'd expect if the weighting were correct throughout.
+
+    // The bug report states: "Once corrected, getRMS() can even reduce".
+    // This implies that getRMS() might be correct in its structure (sqrt(chi2/rows))
+    // but relies on a broken getChiSquare().
+    // So, we expect the RMS calculated using the *broken* chiSquareIncorrect to differ
+    // from the RMS calculated using the *correct* expectedChiSquare.
+    double actualRMS = mockSolver.getRMS(); // This uses the potentially broken getChiSquare() internally.
+
+    assertNotEquals("The calculated RMS should not be equal to the RMS derived from the correctly weighted chi-square.",
+                    expectedRMS, actualRMS, 1e-9);
+
+    // To be more precise about the bug:
+    // The bug states getChiSquare() has weights in the denominator.
+    // Let's assume getChiSquare() calculates something like sum(residual^2) / sum(weight) or sum(residual^2) / weight_avg.
+    // The test above checks that the direct calculation of chiSquareIncorrect is not equal to expectedChiSquare.
+    // This is sufficient to reproduce the issue.
+}

@@ -1,0 +1,38 @@
+public void testDependencySortingWithClosurePassFalse() throws Exception {
+    Compiler compiler = new Compiler();
+    CompilerOptions compilerOptions = new CompilerOptions();
+    compilerOptions.setClosurePass(false);
+    DependencyOptions dependencyOptions = new DependencyOptions();
+    dependencyOptions.setDependencySorting(true);
+    compilerOptions.setDependencyOptions(dependencyOptions);
+
+    SourceFile sf1 = SourceFile.fromCode("sf1.js", "goog.provide('a.b');");
+    SourceFile sf2 = SourceFile.fromCode("sf2.js", "goog.require('a.b'); goog.provide('c.d');");
+    SourceFile sf3 = SourceFile.fromCode("sf3.js", "goog.require('c.d'); console.log('done');");
+
+    List<SourceFile> inputs = new ArrayList<>();
+    inputs.add(sf1);
+    inputs.add(sf2);
+    inputs.add(sf3);
+
+    compiler.compile(Collections.emptyList(), inputs, compilerOptions);
+
+    // Assert that the order of compiled code reflects dependency sorting.
+    // The exact output will depend on how the compiler concatenates,
+    // but sf3 should appear after sf2, and sf2 after sf1.
+    // A simple check is to see if the last provided namespace appears last.
+    String compiledCode = compiler.toSource();
+    assertTrue(compiledCode.contains("goog.provide('a.b');"));
+    assertTrue(compiledCode.contains("goog.require('a.b'); goog.provide('c.d');"));
+    assertTrue(compiledCode.contains("goog.require('c.d'); console.log('done');"));
+
+    // More robust check: verify the order of the actual code blocks.
+    // This might be brittle if the compiler changes its formatting significantly.
+    // For now, we'll assume a basic concatenation order.
+    int index1 = compiledCode.indexOf("goog.provide('a.b');");
+    int index2 = compiledCode.indexOf("goog.require('a.b'); goog.provide('c.d');");
+    int index3 = compiledCode.indexOf("goog.require('c.d'); console.log('done');");
+
+    assertTrue("sf1 should appear before sf2", index1 < index2);
+    assertTrue("sf2 should appear before sf3", index2 < index3);
+}

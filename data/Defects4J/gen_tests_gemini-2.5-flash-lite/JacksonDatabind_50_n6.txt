@@ -1,0 +1,124 @@
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class JacksonIdentityInfoTest {
+
+    // Dummy classes to reproduce the issue.
+    // These classes are simplified versions of what might cause the issue.
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class, property = "@id")
+    public static class Node {
+        public String name;
+        public Node child;
+
+        @JsonCreator
+        public Node(String name) {
+            this.name = name;
+        }
+
+        // Default constructor needed for deserialization
+        public Node() {
+        }
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class, property = "@id")
+    public static class NodeContainer {
+        public String name;
+        public Node node;
+
+        @JsonCreator
+        public NodeContainer(String name, Node node) {
+            this.name = name;
+            this.node = node;
+        }
+
+        // Default constructor needed for deserialization
+        public NodeContainer() {
+        }
+    }
+
+    @Test
+    public void testJsonIdentityInfoWithCreatorAndCycles() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        Node node1 = new Node("Node1");
+        Node node2 = new Node("Node2");
+        node1.child = node2;
+        node2.child = node1; // Cycle
+
+        NodeContainer container = new NodeContainer("Container", node1);
+
+        String json = mapper.writeValueAsString(container);
+
+        // The problem described is in deserialization.
+        // The original bug report indicates that deserialization fails under certain conditions.
+        // This test attempts to deserialize the JSON string.
+        // If the deserialization fails (e.g., throws an exception or results in nulls/incorrect values),
+        // the test will fail, indicating the bug.
+
+        NodeContainer deserializedContainer = mapper.readValue(json, NodeContainer.class);
+
+        assertNotNull(deserializedContainer);
+        assertNotNull(deserializedContainer.node);
+        assertNotNull(deserializedContainer.node.child);
+
+        // Verify the cycle and names are correctly deserialized
+        assertEquals("Container", deserializedContainer.name);
+        assertEquals("Node1", deserializedContainer.node.name);
+        assertEquals("Node2", deserializedContainer.node.child.name);
+
+        // Crucially, verify the cycle is maintained
+        // The deserialized node1's child should be deserialized node2
+        // And deserialized node2's child should be deserialized node1
+        assertEquals(deserializedContainer.node.child.child, deserializedContainer.node);
+        assertEquals(deserializedContainer.node.child, deserializedContainer.node.child.child);
+    }
+
+    @Test
+    public void testJsonIdentityInfoWithCreatorAndCyclesInList() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        Node node1 = new Node("Node1");
+        Node node2 = new Node("Node2");
+        node1.child = node2;
+        node2.child = node1; // Cycle
+
+        List<Node> nodeList = new ArrayList<>();
+        nodeList.add(node1);
+        nodeList.add(node2);
+
+        // Serialize the list containing the cyclic nodes
+        String json = mapper.writeValueAsString(nodeList);
+
+        // Deserialize the list. According to the bug report, this should work.
+        @SuppressWarnings("unchecked")
+        List<Node> deserializedNodeList = mapper.readValue(json, List.class);
+
+        assertNotNull(deserializedNodeList);
+        assertEquals(2, deserializedNodeList.size());
+
+        Node deserializedNode1 = deserializedNode1 = deserializedNodeList.get(0);
+        Node deserializedNode2 = deserializedNodeList.get(1);
+
+        assertNotNull(deserializedNode1);
+        assertNotNull(deserializedNode2);
+
+        // Verify names
+        assertEquals("Node1", deserializedNode1.name);
+        assertEquals("Node2", deserializedNode2.name);
+
+        // Verify the cycle is maintained within the list deserialization
+        // deserializedNode1's child should be deserializedNode2
+        // deserializedNode2's child should be deserializedNode1
+        assertEquals(deserializedNode2, deserializedNode1.child);
+        assertEquals(deserializedNode1, deserializedNode2.child);
+    }
+}

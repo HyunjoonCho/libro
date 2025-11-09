@@ -1,0 +1,28 @@
+public void testSimplexSolverBug() {
+    LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] { 0.8, 0.2, 0.7, 0.3, 0.6, 0.4 }, 0);
+    Collection<LinearConstraint> constraints = new ArrayList<LinearConstraint>();
+    constraints.add(new LinearConstraint(new double[] { 1, 0, 1, 0, 1, 0 }, Relationship.EQ, 23.0));
+    constraints.add(new LinearConstraint(new double[] { 0, 1, 0, 1, 0, 1 }, Relationship.EQ, 23.0));
+    constraints.add(new LinearConstraint(new double[] { 1, 0, 0, 0, 0, 0 }, Relationship.GEQ, 10.0));
+    constraints.add(new LinearConstraint(new double[] { 0, 0, 1, 0, 0, 0 }, Relationship.GEQ, 8.0));
+    constraints.add(new LinearConstraint(new double[] { 0, 0, 0, 0, 1, 0 }, Relationship.GEQ, 5.0));
+
+    SimplexSolver solver = new SimplexSolver();
+    RealPointValuePair solution = solver.optimize(f, constraints, GoalType.MAXIMIZE, true);
+
+    // The expected solution according to LPSolve and manual calculation is 25.8
+    // The bug report indicates SimplexSolver returned 22.20 and violated constraints.
+    // We assert against the value reported in the bug, which is incorrect.
+    // If the bug is fixed, this assertion will fail, and the expected value should be updated.
+    assertEquals(25.8, solution.getValue(), 1e-9);
+
+    // Additionally, check if constraints are satisfied.
+    // x0 = 10.0, x1 = 0.0, x2 = 8.0, x3 = 0.0, x4 = 5.0, x5 = 23.0
+    double[] point = solution.getPoint();
+    assertTrue(point[0] >= 10.0 - 1e-9); // x0 >= 10.0
+    assertTrue(point[2] >= 8.0 - 1e-9);  // x2 >= 8.0
+    assertTrue(point[4] >= 5.0 - 1e-9);  // x4 >= 5.0
+    // Check equality constraints as well
+    assertEquals(23.0, point[0] + point[2] + point[4], 1e-9); // x0 + x2 + x4 = 23.0
+    assertEquals(23.0, point[1] + point[3] + point[5], 1e-9); // x1 + x3 + x5 = 23.0
+}

@@ -1,0 +1,159 @@
+public void testIssue107() throws Exception {
+    String json = "{ \"a\":123, \"array\":[1,2], \"ob\": { \"value0\":2, \"value\":3, \"value2\":4 }, \"b\":true }";
+    JsonFactory jf = new JsonFactory();
+    JsonParser p0 = jf.createParser(json);
+    FilteringParserDelegate p = new FilteringParserDelegate(p0, new NameMatchFilter("value"), true, false);
+
+    // This loop will likely throw an exception or not complete correctly if the bug exists
+    while (p.nextToken() != null) {
+        // Consume the tokens to trigger the parsing logic
+    }
+
+    // If the parser successfully completes and reaches END_OBJECT for the root object,
+    // this assertion might not directly catch the missing END_OBJECT within "ob".
+    // A more robust test would involve parsing the output of the delegate into a tree
+    // and asserting its structure. However, to reproduce the described issue of
+    // missing END_OBJECT, we can check if the final token is indeed END_OBJECT.
+    // If the parser fails to produce the final END_OBJECT for the root,
+    // this assertion would fail.
+    // A better approach to verify the described bug is to parse the output stream
+    // of the delegate and check its structure.
+    // For the purpose of this exercise, and to simulate the described issue,
+    // we'll try to parse the output and check for completeness.
+
+    // Re-create parser for actual assertion
+    p0 = jf.createParser(json);
+    p = new FilteringParserDelegate(p0, new NameMatchFilter("value"), true, false);
+
+    // Consume tokens and build a string representation to check for completeness
+    StringBuilder output = new StringBuilder();
+    while (p.nextToken() != null) {
+        output.append(p.getText());
+    }
+
+    // The bug description implies the output is incomplete, missing a closing brace.
+    // A direct assertion for the missing brace is difficult without consuming the output.
+    // A common symptom of such a bug is that the parser might not reach the expected END_OBJECT
+    // for the outer structure if an inner structure is malformed.
+    // Let's try to parse the *original* JSON and see if the delegate correctly
+    // filters and produces a valid, albeit filtered, JSON structure.
+
+    // A more direct way to test the bug is to assert the *state* of the parser
+    // after it has processed the input, or to parse the output of the delegate.
+    // Since we don't have a way to easily get the output stream of the delegate,
+    // we'll simulate parsing the input and expect a certain number of tokens
+    // or a specific final token if the filtering works correctly.
+
+    // Let's re-parse the original JSON and count the expected tokens after filtering.
+    // This is an indirect way to test.
+    p0 = jf.createParser(json);
+    p = new FilteringParserDelegate(p0, new NameMatchFilter("value"), true, false);
+
+    int tokenCount = 0;
+    JsonToken token;
+    while ((token = p.nextToken()) != null) {
+        tokenCount++;
+        // We expect to see the filtered tokens:
+        // START_OBJECT, FIELD_NAME("ob"), START_OBJECT, FIELD_NAME("value"), VALUE_NUMBER_INT, END_OBJECT, END_OBJECT
+        // The bug description implies the final END_OBJECT is missing.
+        // If the bug exists, the loop might end prematurely or the final token might not be END_OBJECT.
+    }
+
+    // The exact number of tokens depends on the interpretation.
+    // If the bug is that the "ob" object's END_OBJECT is missing, then the parser
+    // might not even reach the outer END_OBJECT.
+    // Let's specifically check the structure of the "ob" object.
+
+    p0 = jf.createParser(json);
+    p = new FilteringParserDelegate(p0, new NameMatchFilter("value"), true, false);
+
+    JsonToken currentToken;
+    boolean foundObObject = false;
+    int obValueCount = 0;
+
+    while ((currentToken = p.nextToken()) != null) {
+        if (currentToken == JsonToken.FIELD_NAME && "ob".equals(p.getCurrentName())) {
+            foundObObject = true;
+        } else if (foundObObject && currentToken == JsonToken.FIELD_NAME && "value".equals(p.getCurrentName())) {
+            obValueCount++;
+            // Advance to the value
+            p.nextToken();
+            // We expect the value to be 3
+            assertEquals(3, p.getIntValue());
+        } else if (foundObObject && currentToken == JsonToken.END_OBJECT) {
+            // This is the END_OBJECT for the "ob" object.
+            // If the bug exists, we might not reach this point correctly,
+            // or the parser might have already terminated.
+            // The description implies the END_OBJECT for "ob" is missing,
+            // meaning the outer END_OBJECT might also be missing.
+            // A successful parse should find this END_OBJECT.
+            break; // Found the end of the "ob" object
+        }
+    }
+
+    // If the bug is as described, the parser might not correctly identify
+    // the END_OBJECT for "ob", leading to an incomplete or malformed output.
+    // A test that would fail if the bug is present would be to attempt to
+    // parse the output of the delegate. Since we can't directly get the output,
+    // we'll simulate the scenario by expecting specific tokens.
+
+    // A more direct assertion for the bug would be to check if the parser
+    // reaches the END_OBJECT for the "ob" object.
+    p0 = jf.createParser(json);
+    p = new FilteringParserDelegate(p0, new NameMatchFilter("value"), true, false);
+
+    boolean obEndObjectFound = false;
+    while (p.nextToken() != null) {
+        if (p.getCurrentToken() == JsonToken.END_OBJECT) {
+            // Check if this END_OBJECT corresponds to the "ob" object.
+            // This requires peeking or tracking the nesting level, which is complex.
+            // The bug description suggests the END_OBJECT for "ob" is missed.
+            // If the loop completes and we *don't* find an END_OBJECT that
+            // logically closes "ob", or if the parser terminates prematurely,
+            // the bug is present.
+
+            // A simpler check: if the parser finishes and the last token
+            // is not END_OBJECT, it might indicate an issue.
+            // However, the bug is specifically about an *inner* END_OBJECT.
+
+            // Let's try to specifically assert the presence of the END_OBJECT
+            // for the "ob" object. This requires knowing the structure.
+            // The bug implies that after parsing "value":3, the END_OBJECT
+            // for "ob" is not emitted or processed correctly.
+
+            // This test aims to reproduce the described issue.
+            // The original bug report implies that parsing the output
+            // would result in malformed JSON.
+            // If we reach the END_OBJECT for "ob" and it's the *last* token,
+            // it implies the outer END_OBJECT is missing.
+            // If we *don't* reach the END_OBJECT for "ob", that's also a failure.
+
+            // Let's assume the successful scenario should parse the "ob" object completely.
+            // If we find the END_OBJECT for "ob", and it's followed by the outer END_OBJECT,
+            // the test passes. If the END_OBJECT for "ob" is missing, the test fails.
+
+            // A more direct way to test the described behavior is to ensure that
+            // after encountering "value":3, the `END_OBJECT` token for `ob` is
+            // correctly processed.
+            // If the parser misses this `END_OBJECT`, it will likely lead to
+            // an incomplete parse or an incorrect final token.
+
+            // Let's track if we are inside the "ob" object.
+            boolean inObObject = false;
+            JsonToken currentTokenForOb = null;
+            while ((currentTokenForOb = p.nextToken()) != null) {
+                if (currentTokenForOb == JsonToken.FIELD_NAME && "ob".equals(p.getCurrentName())) {
+                    inObObject = true;
+                } else if (inObObject && currentTokenForOb == JsonToken.END_OBJECT) {
+                    obEndObjectFound = true;
+                    break; // Found the END_OBJECT for "ob"
+                }
+            }
+            // If the bug exists, obEndObjectFound will remain false.
+            assertTrue("The END_OBJECT for the 'ob' object was not found.", obEndObjectFound);
+            return; // Exit after the specific check for "ob"
+        }
+    }
+    // If the loop finishes without finding the END_OBJECT for "ob"
+    assertFalse("The END_OBJECT for the 'ob' object should have been found before loop termination.", obEndObjectFound);
+}

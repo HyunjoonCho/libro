@@ -1,0 +1,66 @@
+public void testAdvancedOptimizations() throws Exception {
+    String inputJs = "window[\"anchor\"] = function (obj, modifiesProp) {" +
+            " return (function (saved) {" +
+            " return modifiesProp(obj) + saved;" +
+            " })(obj[\"prop\"]);" +
+            " }";
+    String externsJs = "var window; window.prop;";
+
+    CompilerOptions options = new CompilerOptions();
+    options.setLanguageIn(LanguageMode.ECMASCRIPT5);
+    options.setLanguageOut(LanguageMode.ECMASCRIPT5);
+    options.setPrettyPrint(true);
+    options.setCodingConvention(new ClosureCodingConvention());
+    options.setOptimizationLevel(CompilerOptions.OptimizationLevel.ADVANCED_OPTIMIZATIONS);
+    options.setRecordFunctionInformation(true);
+    options.setGenerateExports(true);
+
+    Compiler compiler = new Compiler();
+    compiler.init(new PrintStream(new ByteArrayOutputStream()), new PrintStream(new ByteArrayOutputStream()), new CompilerOptions());
+    compiler.parseInputs([new SourceFile("input.js", inputJs)], [new SourceFile("externs.js", externsJs)], options);
+    compiler.compile();
+
+    String outputJs = compiler.toSource();
+
+    // The expected output is tricky because the original example shows a specific transformation
+    // which might be sensitive to minor changes in the compiler.
+    // Instead of asserting the exact string, we'll assert that the transformation *doesn't*
+    // perform the erroneous optimization.
+    // The erroneous optimization removes the 'saved' variable, which holds obj["prop"].
+    // The correct code should retain a reference to obj["prop"] either directly or via a temporary variable.
+    // The incorrect code directly uses a.prop in the return statement, which is wrong if modifiesProp changes a.prop.
+
+    // A simple check that the original 'saved' variable (or its equivalent) is somehow preserved.
+    // If the optimization occurs, the inner function's saved parameter is lost.
+    // A more robust test would involve checking the generated AST, but for a simple reproduction,
+    // checking the output string for the absence of the problematic pattern is a starting point.
+
+    // The problematic output is: window.foo=function(a,b){return b(a)+a.prop};
+    // We expect the output to preserve the original value of obj["prop"].
+    // This can be checked by ensuring the output is not the simplified, incorrect version.
+    assertFalse("Output should not be the simplified incorrect version.", outputJs.contains("return modifiesProp(obj) + obj[\"prop\"]"));
+    // We also expect the output to be different from the original input (i.e., some optimization did happen)
+    // but not the *wrong* optimization.
+    // The correct transformation might look something like:
+    // window["anchor"] = function(obj, modifiesProp) {
+    //   var saved = obj["prop"];
+    //   return modifiesProp(obj) + saved;
+    // };
+    // Or, depending on the compiler's internal representation, it might be slightly different but semantically equivalent.
+
+    // Given the description, the core issue is that `saved` is lost and `obj["prop"]` is accessed *after* `modifiesProp(obj)`
+    // which might have changed `obj["prop"]`.
+    // The simplest check is to ensure the direct `obj["prop"]` is not used in the return statement of the inner function.
+
+    assertTrue("Output should contain a transformation indicating preservation of original prop value.",
+               outputJs.contains("return modifiesProp(obj) + saved")); // This asserts it's *not* the optimized version, but the original structure.
+                                                                     // This might be too strict if the compiler renames 'saved'.
+                                                                     // A better check would be to look for the AST structure.
+
+    // Let's try to check for the absence of the problematic pattern.
+    String expectedSimplified = "return modifiesProp(obj) + obj[\"prop\"]"; // This is the problematic part.
+    assertFalse("The erroneous optimization should not be present.", outputJs.contains(expectedSimplified));
+
+    // And ensure that the output is actually compiled JS, not identical to input.
+    assertNotEquals("Compiled JS should differ from input JS.", inputJs, outputJs);
+}

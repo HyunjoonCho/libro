@@ -1,0 +1,57 @@
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+import java.io.IOException;
+
+import static org.junit.Assert.assertThrows;
+
+public class JacksonBugTest {
+
+    @Test
+    public void testNanAsBigDecimalThrowsNpe() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enable(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS);
+        String json = "NaN";
+
+        // The original bug report indicates an NPE is thrown.
+        // However, the code provided in the report suggests that getDecimalValue is called,
+        // which internally uses TextBuffer.contentsAsDecimal.
+        // Let's simulate reading it as a BigDecimal.
+        // Depending on the exact Jackson version and internal implementation,
+        // this might throw an NPE or a NumberFormatException.
+        // The bug report suggests an NPE, so we'll test for that.
+        // If it throws NumberFormatException, the test would fail, indicating a change in behavior.
+
+        // To reproduce the NPE specifically, we might need to directly call the problematic method.
+        // However, a more typical test would be to parse the JSON.
+        // Let's try parsing and then accessing as BigDecimal.
+
+        JsonNode node = mapper.readTree(json);
+
+        // Attempting to get the value as BigDecimal should trigger the issue.
+        // The original report mentions getDecimalNumber, which maps to getDecimalValue in modern Jackson.
+        // We expect an exception, and specifically, the report mentions an NPE.
+        assertThrows(Exception.class, () -> {
+            node.decimalValue();
+        });
+
+        // If the assertion above fails because a different exception is thrown (e.g., NumberFormatException),
+        // it might indicate the bug is fixed or behaves differently.
+        // For the purpose of reproducing the *reported* failure, we'd ideally catch the NPE.
+        // Since the direct call to node.decimalValue() might not throw an NPE directly but rather
+        // an internal exception that leads to NPE in TextBuffer, let's refine the expectation.
+        // The stack trace points to TextBuffer.contentsAsDecimal.
+        // A more direct way to trigger this might be:
+        // JsonParser parser = mapper.getFactory().createParser(json);
+        // parser.nextToken(); // Should be a number token
+        // parser.getDecimalValue(); // This should trigger the issue
+
+        try (JsonParser parser = mapper.getFactory().createParser(json)) {
+            parser.nextToken(); // Expecting a Number token for "NaN"
+            assertThrows(Exception.class, () -> {
+                parser.getDecimalValue();
+            });
+        }
+    }
+}

@@ -1,0 +1,71 @@
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class ExternalPropertyEnumPolymorphismTest {
+
+    public enum Invite {
+        CONTACT,
+        EMAIL
+    }
+
+    public static class Base {
+        public Invite kind;
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "kind")
+    @JsonSubTypes({
+            @JsonSubTypes.Type(value = Contact.class, name = "CONTACT"),
+            @JsonSubTypes.Type(value = Email.class, name = "EMAIL")
+    })
+    public static class Event extends Base {
+        public String name;
+    }
+
+    public static class Contact extends Event {
+        // No-arg constructor is necessary for Jackson deserialization
+        public Contact() {}
+    }
+
+    public static class Email extends Event {
+        // No-arg constructor is necessary for Jackson deserialization
+        public Email() {}
+    }
+
+    @Test
+    public void testExternalPropertyPolymorphicDeserializationWithEnums() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\n" +
+                      "  \"kind\": \"CONTACT\",\n" +
+                      "  \"to\": {\n" +
+                      "    \"name\": \"Foo\"\n" +
+                      "  }\n" +
+                      "}";
+
+        // The issue is that the deserializer tries to create an Enum.Invite
+        // but expects the value to be the class name, not the enum constant name.
+        // The fix involves ensuring the correct type information is used.
+        // In this test, we are asserting the expected behavior AFTER a potential fix.
+        // If the original bug is present, this test will fail.
+
+        // To make this test pass, the deserialization logic needs to correctly map
+        // the "kind" property to the Enum.Invite type.
+        // For the purpose of demonstrating the bug, we'll attempt the deserialization
+        // and expect it to fail in a specific way if the bug is present.
+        // However, since we are writing a test that *should* pass after the bug is fixed,
+        // we'll assert the expected outcome.
+
+        // If the bug is present, the following line would throw a JsonMappingException.
+        // We are assuming the bug is fixed for the purpose of writing a passing test.
+        Event event = mapper.readValue(json, Event.class);
+
+        // Assert that the deserialization was successful and the correct type was inferred.
+        assertEquals(Invite.CONTACT, event.kind);
+        assertEquals("Foo", event.name);
+        // We can also assert the concrete type if needed, though the original bug
+        // focused on the Enum mapping itself.
+        // assertEquals(Contact.class, event.getClass());
+    }
+}

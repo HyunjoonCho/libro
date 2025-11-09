@@ -1,0 +1,115 @@
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import com.fasterxml.jackson.core.JsonGenerator;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+public class JacksonBugTest {
+
+    // Dummy Serializer for testing
+    public static class MySerializer extends StdSerializer<Map<String, String>> {
+        public MySerializer() {
+            super(Map.class, false);
+        }
+
+        @Override
+        public void serialize(Map<String, String> value, JsonGenerator gen, com.fasterxml.jackson.databind.SerializerProvider provider) throws IOException {
+            gen.writeStartObject();
+            for (Map.Entry<String, String> entry : value.entrySet()) {
+                gen.writeStringField("serialized_" + entry.getKey(), entry.getValue().toUpperCase());
+            }
+            gen.writeEndObject();
+        }
+    }
+
+    // Dummy Converter for testing
+    public static class MyConverter {
+        public Map<String, JsonNode> convert(Map<String, String> input) {
+            Map<String, JsonNode> output = new HashMap<>();
+            for (Map.Entry<String, String> entry : input.entrySet()) {
+                // In a real scenario, this would involve more complex conversion to JsonNode
+                // For this test, we'll just create a simple text node.
+                output.put("converted_" + entry.getKey(), new com.fasterxml.jackson.databind.node.TextNode(entry.getValue().toLowerCase()));
+            }
+            return output;
+        }
+    }
+
+    // Class under test with JsonAnyGetter and JsonSerialize
+    public static class MyClassWithAnyGetterAndSerializer {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public MyClassWithAnyGetterAndSerializer() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(using = MySerializer.class)
+        @com.fasterxml.jackson.annotation.JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+    // Class under test with JsonAnyGetter and JsonSerialize using converter
+    public static class MyClassWithAnyGetterAndConverter {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public MyClassWithAnyGetterAndConverter() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(converter = MyConverter.class)
+        @com.fasterxml.jackson.annotation.JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+
+    @Test
+    public void testJsonAnyGetterIgnoresJsonSerialize() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        MyClassWithAnyGetterAndSerializer obj = new MyClassWithAnyGetterAndSerializer();
+
+        String json = mapper.writeValueAsString(obj);
+
+        // If JsonSerialize is ignored, we expect the raw key-value pairs, not serialized ones.
+        // The expected behavior based on the bug report is that the serializer is NOT applied.
+        // So, we expect the output to contain "key1": "value1", "key2": "value2" (or similar, depending on how JsonAnyGetter serializes maps).
+        // However, the bug implies that when JsonAnyGetter is present, the JsonSerialize is *ignored*.
+        // This means the output should NOT be processed by MySerializer.
+        // Let's assert that the output does NOT contain the "serialized_" prefix, which indicates MySerializer was NOT used.
+        // The actual output of JsonAnyGetter on a Map<String, String> is usually just the map itself.
+        // So we expect the output to be {"parameters":{"key1":"value1","key2":"value2"}} if JsonAnyGetter was the *only* thing considered.
+        // But the bug states JsonSerialize is ignored. So the output should be the raw map.
+        // Let's refine the expectation: if JsonSerialize is ignored, the output should be the raw map content as defined by JsonAnyGetter.
+        // The JsonAnyGetter will serialize the map directly. The serializer should have transformed the values.
+        // The bug description implies the *serializer is ignored*. So the output should NOT show the effect of the serializer.
+
+        assertFalse("Serializer should have been ignored due to JsonAnyGetter", json.contains("serialized_key1"));
+        assertTrue("JsonAnyGetter should have resulted in parameters being serialized", json.contains("\"key1\":\"value1\""));
+        assertTrue("JsonAnyGetter should have resulted in parameters being serialized", json.contains("\"key2\":\"value2\""));
+        assertFalse("Serializer should have been ignored", json.contains("value1".toUpperCase())); // Check that values are not uppercased by serializer
+    }
+
+
+    @Test
+    public void testJsonSerializeWithConverterAndJsonAnyGetterWorks() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        MyClassWithAnyGetterAndConverter obj = new MyClassWithAnyGetterAndConverter();
+
+        String json = mapper.writeValueAsString(obj);
+
+        // When using converter, the bug report suggests it should work.
+        // The converter converts "value1" to "value1" (lowercase) and prefixes the key.
+        // So we expect to see "converted_key1": "value1"
+        assertTrue("Converter should have been applied", json.contains("\"converted_key1\":\"value1\""));
+        assertTrue("Converter should have been applied", json.contains("\"converted_key2\":\"value2\""));
+    }
+}

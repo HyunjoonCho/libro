@@ -1,0 +1,131 @@
+public void testPolymorphicWithNullTypeId() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(new SimpleModule() {
+        @Override
+        public void setupModule(SetupContext context) {
+            context.registerSubtypes(new NamedType(MyBeanImpl.class, "impl"));
+        }
+    });
+
+    String json = mapper.writeValueAsString(new MyBeanImpl());
+    assertEquals("{\"@type\":\"impl\"}", json);
+
+    // This is the part that would fail without the fix
+    // When the type id is null, it should still be able to deserialize if a defaultImpl is set or if there's only one subtype.
+    // For this test, we'll assume a scenario where it *should* work.
+    // If there were a defaultImpl, it would be handled here.
+    // Since there isn't, and we have a registered subtype, the deserialization should proceed.
+    // The original bug might have thrown an exception or returned null unexpectedly.
+
+    // To simulate the problematic scenario, we'll try to deserialize a JSON that *should* resolve to MyBeanImpl
+    // but without an explicit typeId in the JSON, relying on context.
+    // If the fix is in place, this should deserialize correctly.
+    // If not, it might throw an exception or return a different type, or null.
+
+    // A more direct test for the *fix* would be to see what happens when the typeId is *explicitly* null or missing
+    // and how the deserializer handles it. The description implies that *if* the type id is null,
+    // it should still work under certain conditions.
+
+    // Let's craft a JSON where the type id is present but null, and see if it can be handled (e.g., if a defaultImpl exists)
+    // or if it correctly identifies the type based on other means if possible.
+    // The description is a bit vague on *how* it should be handled when null.
+    // The simplest interpretation is that if the type id field is *present* but its value is null,
+    // it should not cause an error if there's a way to resolve the type.
+
+    // Let's re-evaluate the description: "Handle null type id for polymorphic values that use external type id"
+    // This suggests that the `@type` field might be present but its value is `null`.
+    // Example: `{"@type": null}`
+
+    // Let's create a scenario where we expect `MyBeanImpl` but the JSON has `@type: null`.
+    // If the fix is working, it should still deserialize to `MyBeanImpl` *if* `MyBeanImpl` is the only possible subtype
+    // or if there's a defaultImpl registered. Without a defaultImpl, and with multiple subtypes, this would still be ambiguous.
+
+    // For the sake of demonstrating the *failure*, we need a case that *would* fail.
+    // The description implies that `null` type id is the issue.
+    // Let's assume the original code threw an exception or failed to deserialize when `@type: null` was encountered.
+
+    // We'll test deserializing a JSON where the type id field is present but null.
+    // If the fix is applied, this should correctly deserialize to MyBeanImpl (assuming it's the only option or default).
+    // If not, it might throw an exception or return null.
+    String jsonWithNullTypeId = "{\"@type\":null}";
+
+    // A more robust test would involve a scenario where a defaultImpl is set,
+    // or where there's only one possible subtype.
+    // Let's assume for this test that MyBeanImpl is the only registered subtype,
+    // and thus deserializing `{"@type":null}` should result in `MyBeanImpl`.
+
+    try {
+        // This line is expected to succeed *after* the fix.
+        // Before the fix, it might throw an exception (e.g., NullPointerException, IllegalArgumentException)
+        // or deserialize to null, or deserialize to the wrong type.
+        MyBean actual = mapper.readValue(jsonWithNullTypeId, MyBean.class);
+        assertNotNull(actual);
+        assertTrue(actual instanceof MyBeanImpl);
+    } catch (Exception e) {
+        // If an exception is caught here, it indicates the failure is reproduced.
+        // The specific exception type might vary depending on the exact point of failure.
+        // For the purpose of this test generation, we'll just assert that *some* exception
+        // occurred if the fix is *not* present, and that the above assertion passes if the fix *is* present.
+        // To make this a "reproducing the failure" test, we'd assert the exception.
+        // However, the prompt asks for a method that *reproduces the failure*, implying it should fail.
+        // So, if the code *without* the fix is run, the test should fail.
+        // If the code *with* the fix is run, the test should pass.
+
+        // To fulfill the request of "reproduces the failure", the test should be written
+        // such that it *fails* when the buggy code is present.
+        // Therefore, the assertion should be about the *expected failure*, not the success.
+
+        // Let's assume the original buggy code threw NullPointerException when encountering "@type": null
+        // and there was no defaultImpl.
+
+        // If the fix is *not* applied, the following line would throw an exception.
+        // So, to reproduce the failure, we expect an exception.
+        fail("Expected an exception when deserializing JSON with null type id, but got: " + e.getMessage());
+    }
+
+    // Let's refine this to be a direct test of the *failure* condition.
+    // The description implies that `null` type id is the problem.
+    // We need a scenario where the presence of `{"@type": null}` breaks deserialization.
+
+    // Scenario: Polymorphic type `MyBean` with subtype `MyBeanImpl`.
+    // `MyBeanImpl` is registered with type id "impl".
+    // We are trying to deserialize JSON `{"@type": null}` expecting it to resolve to `MyBeanImpl`.
+    // The bug is that this situation causes an error.
+
+    // To reproduce the failure, we'll write an assertion that *expects* the failure.
+    // If the fix is present, this test will fail (because no exception is thrown).
+    // If the fix is *not* present, this test will pass (because the expected exception is thrown).
+
+    try {
+        // This is the code that is expected to fail with the bug.
+        // We wrap it in a try-catch to assert that an exception *is* thrown.
+        MyBean actual = mapper.readValue(jsonWithNullTypeId, MyBean.class);
+        // If we reach here, the bug is NOT present, so this test should fail.
+        // The description implies a failure, so we should assert that failure.
+        // If the code *without* the fix is run, the exception below will be thrown.
+        // If the code *with* the fix is run, the exception below will NOT be thrown, and the test will fail.
+        fail("Deserialization with null type id should have failed but succeeded.");
+    } catch (Exception e) {
+        // This catch block implies the failure is reproduced.
+        // We can add more specific checks on the exception type if known.
+        // For now, any exception indicates the failure condition was met.
+        assertTrue("Exception type mismatch", e instanceof com.fasterxml.jackson.databind.JsonMappingException || e instanceof NullPointerException);
+    }
+}
+
+// Dummy classes to make the test compilable
+static abstract class MyBean {
+}
+
+static class MyBeanImpl extends MyBean {
+    // Needed for serialization/deserialization
+    public MyBeanImpl() {
+    }
+}
+
+// Need to import these if they are not already in the test class scope
+// import com.fasterxml.jackson.databind.ObjectMapper;
+// import com.fasterxml.jackson.databind.module.SimpleModule;
+// import com.fasterxml.jackson.databind.jsontype.NamedType;
+// import org.junit.Test;
+// import static org.junit.Assert.*;

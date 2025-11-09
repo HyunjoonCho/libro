@@ -1,0 +1,96 @@
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import org.junit.Test;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+
+import java.io.IOException;
+import java.util.Arrays;
+
+public class PolymorphicTypeTest {
+
+    static class RemoteCall {
+        Object[] args;
+
+        @JsonCreator
+        public RemoteCall(@JsonProperty("args") Object[] args) {
+            this.args = args;
+        }
+    }
+
+    static class CommandAPDU {
+        private byte[] apdu;
+
+        @JsonCreator
+        public CommandAPDU(@JsonProperty(value = "bytes") byte[] apdu) {
+            this.apdu = apdu.clone();
+            // In a real scenario, parse() would do something with the bytes
+        }
+
+        @JsonValue
+        public byte[] getBytes() {
+            return apdu.clone();
+        }
+
+        // Needed for deserialization to work correctly when @JsonValue is used on a getter
+        // and there's a @JsonCreator constructor that takes the same type.
+        // Jackson needs a way to map the deserialized value back to the object.
+        // This is often handled implicitly if the @JsonCreator constructor is the only one,
+        // but here, since getBytes() is marked with @JsonValue, Jackson might be confused.
+        // We add a default constructor for Jackson to use during deserialization before
+        // it attempts to use the @JsonCreator constructor.
+        public CommandAPDU() {
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CommandAPDU that = (CommandAPDU) o;
+            return Arrays.equals(apdu, that.apdu);
+        }
+
+        @Override
+        public int hashCode() {
+            return Arrays.hashCode(apdu);
+        }
+    }
+
+    @Test
+    public void testPolymorphicTypeLostWhenUsingJsonValue() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+        mapper.enableDefaultTyping();
+
+        byte[] originalBytes = "AKQEAAnw8fLz9AAAAgA=".getBytes();
+        CommandAPDU command = new CommandAPDU(originalBytes);
+
+        RemoteCall remoteCall = new RemoteCall(new Object[]{command});
+
+        String json = mapper.writeValueAsString(remoteCall);
+
+        // The bug description indicates the JSON might look like this:
+        // "args":[["[B","AKQEAAnw8fLz9AAAAgA="]]
+        // Or with verbose typing:
+        // "args":[["com.ubitricity.devices.common.pal.CommandAPDU","AKQEAAnw8fLz9AAAAgA="]]
+        // The key is that CommandAPDU itself is not being reconstructed.
+
+        RemoteCall deserializedRemoteCall = mapper.readValue(json, RemoteCall.class);
+
+        // Assert that the deserialized object is of the correct type and holds the correct data.
+        // The original bug report implies that deserialization results in a byte array ([B)
+        // instead of a CommandAPDU object.
+        // We expect deserialization to successfully reconstruct the CommandAPDU object.
+        assertEquals(1, deserializedRemoteCall.args.length);
+        Object deserializedArg = deserializedRemoteCall.args[0];
+
+        // Check if the deserialized object is an instance of CommandAPDU
+        assertEquals(CommandAPDU.class, deserializedArg.getClass());
+
+        CommandAPDU deserializedCommand = (CommandAPDU) deserializedArg;
+        assertArrayEquals(originalBytes, deserializedCommand.getBytes());
+    }
+}

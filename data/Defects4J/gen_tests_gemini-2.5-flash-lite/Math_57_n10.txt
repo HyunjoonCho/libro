@@ -1,0 +1,409 @@
+public void testTruncationIssue() {
+    // Create a simple scenario where truncation would be evident
+    // Two points very close to each other, distance < 1
+    List<Double> point1 = Arrays.asList(0.1, 0.1);
+    List<Double> point2 = Arrays.asList(0.2, 0.2);
+    List<Double> point3 = Arrays.asList(10.0, 10.0); // A point far away
+
+    List<List<Double>> points = Arrays.asList(point1, point2, point3);
+
+    // Use a small number of clusters to highlight the issue
+    int k = 2;
+
+    // We need to mock or create a mockable version of KMeansPlusPlusClusterer
+    // to test this specific internal behavior.
+    // For demonstration purposes, let's assume we can directly test the problematic logic.
+    // In a real test, you might need to access a protected method or create a subclass.
+
+    // The core issue is in the calculation of distances and probabilities.
+    // If 'sum' is an int, sqrt(distance) will be truncated.
+    // For example, if distance is 0.01, sqrt(distance) is 0.1, which truncates to 0.
+    // If distance is 0.5, sqrt(distance) is approx 0.707, which truncates to 0.
+    // If distance is 0.99, sqrt(distance) is approx 0.995, which truncates to 0.
+
+    // Let's simulate the problematic calculation with int sum.
+    // Assume we have points p1 and p2, and we are calculating the probability of picking p2
+    // given the current cluster centers.
+    // The buggy code would do something like:
+    // int sum = 0;
+    // for each point p:
+    //   distance = distance(p, nearest_center)
+    //   sum += (int) Math.sqrt(distance); // PROBLEM HERE
+
+    // Let's manually calculate what the buggy code would produce for the first two points.
+    // Assume point1 is the first center.
+    // Distance between point1 and point1 is 0.
+    // Distance between point2 and point1: (0.2-0.1)^2 + (0.2-0.1)^2 = 0.01 + 0.01 = 0.02
+    // sqrt(0.02) approx 0.1414. (int)0.1414 = 0.
+    // Distance between point3 and point1: (10.0-0.1)^2 + (10.0-0.1)^2 = 9.9^2 + 9.9^2 = 98.01 + 98.01 = 196.02
+    // sqrt(196.02) approx 14.0007. (int)14.0007 = 14.
+
+    // If the initial centers were just point1, and we were calculating probabilities for the next center:
+    // The buggy 'sum' would be 0 + 0 + 14 = 14.
+    // The probability of picking point2 would be 0 / 14 = 0.
+    // The probability of picking point3 would be 14 / 14 = 1.
+    // This would lead to poor initial cluster selection, potentially empty clusters.
+
+    // To properly test this, we would need access to the internal method or
+    // create a testable instance. Since we can't directly modify the class here,
+    // we'll assert a known incorrect outcome if the bug is present.
+    // A robust test would involve mocking and checking the probability distribution.
+
+    // Let's assume a scenario where the bug *would* cause an issue.
+    // If the distances are small, the sum of truncated square roots will be 0.
+    // This would mean all points have 0 probability of being chosen as the next center,
+    // which is incorrect.
+
+    // A direct assertion is hard without access to the internal state.
+    // However, we can infer that if the calculation results in a sum of 0 for
+    // non-zero distances, the bug is present.
+
+    // Let's create a minimal case that *should* result in non-zero probabilities
+    // but might result in zero if the bug is present.
+    List<Double> pA = Arrays.asList(0.0, 0.0);
+    List<Double> pB = Arrays.asList(0.5, 0.5); // distance from pA is sqrt(0.5^2 + 0.5^2) = sqrt(0.5) approx 0.707
+    List<Double> pC = Arrays.asList(1.0, 1.0); // distance from pA is sqrt(1.0^2 + 1.0^2) = sqrt(2.0) approx 1.414
+
+    List<List<Double>> testPoints = Arrays.asList(pA, pB, pC);
+
+    // In a fixed version:
+    // dist(pA, pA) = 0
+    // dist(pB, pA) = 0.5
+    // dist(pC, pA) = 2.0
+    // sqrt(0.5) approx 0.707
+    // sqrt(2.0) approx 1.414
+    // Probabilities for next center based on distance from pA:
+    // sum_sqrt_dist = sqrt(0) + sqrt(0.5) + sqrt(2.0) = 0 + 0.707 + 1.414 = 2.121
+    // Prob(pB) = 0.707 / 2.121 approx 0.33
+    // Prob(pC) = 1.414 / 2.121 approx 0.67
+
+    // In the buggy version (if pA is first center):
+    // sum_int_sqrt_dist = (int)sqrt(0) + (int)sqrt(0.5) + (int)sqrt(2.0)
+    //                   = 0 + (int)0.707 + (int)1.414
+    //                   = 0 + 0 + 1 = 1
+    // Prob(pB) = 0 / 1 = 0  <-- PROBLEM
+    // Prob(pC) = 1 / 1 = 1
+
+    // Therefore, if the clusterer selects the next center with probability 0 for a point,
+    // it indicates the bug. We can't directly assert this probability without
+    // modifying the class or using reflection.
+
+    // A practical test would be to check if the clusterer returns empty clusters
+    // under conditions where it shouldn't if the bug were fixed.
+    // However, the prompt asks to reproduce the failure described. The failure is
+    // the *truncation* leading to incorrect probabilities.
+
+    // Since we cannot directly test the internal calculation without modifying the class
+    // or using reflection, and the prompt implies this is a JUnit test *method*
+    // to be inserted, we will simulate the expected *incorrect* behavior if the bug exists.
+    // The bug leads to probabilities being calculated incorrectly, potentially resulting in
+    // an initial sum of 0 when it should be positive, or disproportionately favoring
+    // points with larger distances.
+
+    // Let's assume a scenario where the buggy code would pick the furthest point
+    // with 100% probability due to truncation, when other points should also have
+    // a non-zero probability.
+
+    // We can't directly assert the internal calculation.
+    // A common symptom of this bug is that points with distances < 1 (and their square roots)
+    // are effectively ignored in probability calculations when summed as integers.
+    // This means the selection of initial points becomes heavily skewed towards points
+    // that are farther away.
+
+    // If the bug is present, and we have points A, B, C with distances from the first center
+    // such that sqrt(dist(A)) truncates to 0, sqrt(dist(B)) truncates to 0, and sqrt(dist(C))
+    // is > 0, the sum will be dominated by dist(C).
+
+    // Let's consider the scenario from the description: "distances between points are typically less than 1".
+    // If all distances are less than 1, their square roots are also less than 1.
+    // If all square roots truncate to 0, the sum will be 0. Division by zero or incorrect probabilities.
+
+    // The most direct way to reproduce the *failure* without modifying the class is to
+    // construct input that *would* lead to this incorrect calculation and then assert
+    // an outcome that is only possible with the bug. However, the outcome (empty clusters)
+    // is a *consequence* of the bug, not the bug itself. The bug is the integer truncation.
+
+    // For the purpose of this exercise, and given the constraints, we can only *describe*
+    // how the bug would manifest in a calculation and assert an outcome that is
+    // highly indicative of it.
+
+    // Let's assume we have a way to get the probabilities calculated by the buggy method.
+    // If we call the method with points where distances are small:
+    // List<Double> center = Arrays.asList(0.0, 0.0);
+    // List<Double> p1 = Arrays.asList(0.1, 0.1); // dist = sqrt(0.02) approx 0.14
+    // List<Double> p2 = Arrays.asList(0.2, 0.2); // dist = sqrt(0.08) approx 0.28
+    // List<Double> p3 = Arrays.asList(0.3, 0.3); // dist = sqrt(0.18) approx 0.42
+
+    // Buggy sum = (int)0.14 + (int)0.28 + (int)0.42 = 0 + 0 + 0 = 0.
+    // This would cause a division by zero error or incorrect probability assignment.
+
+    // The bug report mentions that in version 2.2, this bug manifested by making the clusterer return empty clusters.
+    // This is a strong observable symptom. We can try to trigger this symptom.
+
+    // We need a scenario where the initial cluster selection is very poor due to truncated distances.
+    // Let's create points that are very close to each other.
+    List<Double> p1 = Arrays.asList(0.001, 0.001);
+    List<Double> p2 = Arrays.asList(0.002, 0.002);
+    List<Double> p3 = Arrays.asList(0.003, 0.003);
+    List<Double> p4 = Arrays.asList(0.004, 0.004);
+
+    List<List<Double>> points = Arrays.asList(p1, p2, p3, p4);
+    int k = 2; // Small k to emphasize selection issues.
+
+    // If the bug is present, the distances from the first chosen center (e.g., p1)
+    // will have their square roots truncated to 0 for p2, p3, p4.
+    // dist(p1, p1) = 0
+    // dist(p2, p1) = sqrt(0.001^2 + 0.001^2) = sqrt(0.000002) approx 0.0014
+    // dist(p3, p1) = sqrt(0.002^2 + 0.002^2) = sqrt(0.000008) approx 0.0028
+    // dist(p4, p1) = sqrt(0.003^2 + 0.003^2) = sqrt(0.000018) approx 0.0042
+
+    // Buggy sum = (int)0 + (int)0.0014 + (int)0.0028 + (int)0.0042 = 0 + 0 + 0 + 0 = 0.
+    // This would lead to an error or very skewed probabilities.
+
+    // We can't directly assert the sum. The best we can do is assert a symptom.
+    // If the clusterer returns empty clusters in this scenario, it's strong evidence.
+    // However, the specific test method should ideally reproduce the *calculation* issue.
+    // Since we can't directly test the calculation, we'll simulate the scenario that *would* cause it.
+
+    // Let's assume the KMeansPlusPlusClusterer has a method like:
+    // calculateProbabilities(List<List<Double>> points, List<List<Double>> centers)
+    // and we are testing the internal sum calculation.
+
+    // Since we are writing a JUnit test *method* to be inserted, it must call existing code.
+    // We will call the `clusterer.cluster()` method with input that is sensitive to this bug.
+    // If the bug is present, the output might be unexpected (e.g., empty clusters).
+
+    // We need to instantiate the clusterer.
+    // KMeansPlusPlusClusterer<List<Double>> clusterer = new KMeansPlusPlusClusterer<>();
+
+    // If the clusterer is designed to work with generic points, we need a way to provide them.
+    // The bug is in the `chooseInitialClusters` method.
+
+    // Let's try to trigger the condition where distances are small and their square roots truncate to 0.
+    // Create a scenario with points very close to the origin and each other.
+    List<Double> pA = Arrays.asList(0.0001, 0.0001);
+    List<Double> pB = Arrays.asList(0.0002, 0.0002);
+    List<Double> pC = Arrays.asList(0.0003, 0.0003);
+    List<Double> pD = Arrays.asList(0.0004, 0.0004);
+    List<Double> pE = Arrays.asList(0.0005, 0.0005);
+
+    List<List<Double>> pointsForBug = Arrays.asList(pA, pB, pC, pD, pE);
+    int numClusters = 2;
+
+    // The bug is in the calculation of sum of sqrt(distances).
+    // If the first center chosen is pA:
+    // dist(pA, pA) = 0
+    // dist(pB, pA) = sqrt(0.0001^2 * 2) = sqrt(0.00000002) approx 0.00014
+    // dist(pC, pA) = sqrt(0.0002^2 * 2) = sqrt(0.00000008) approx 0.00028
+    // dist(pD, pA) = sqrt(0.0003^2 * 2) = sqrt(0.00000018) approx 0.00042
+    // dist(pE, pA) = sqrt(0.0004^2 * 2) = sqrt(0.00000032) approx 0.00056
+
+    // Buggy sum = (int)0 + (int)0.00014 + (int)0.00028 + (int)0.00042 + (int)0.00056
+    //           = 0 + 0 + 0 + 0 + 0 = 0.
+
+    // This would lead to division by zero when calculating probabilities.
+    // The test should verify that this scenario *does not* lead to a crash or
+    // an obviously incorrect state (like empty clusters if that was a symptom).
+
+    // Since we don't have direct access to the KMeansPlusPlusClusterer class here to instantiate and call its methods,
+    // we will assume a hypothetical call that would trigger this.
+    // The prompt is to write a JUnit test *method*. This implies calling the code under test.
+
+    // Let's assume we have access to KMeansPlusPlusClusterer and a distance calculator.
+    // We need to instantiate the clusterer and call its method.
+    // The `cluster` method is the public entry point.
+
+    // We need a DistanceMeasure. Let's assume Euclidean.
+    // A simple DistanceMeasure implementation for List<Double>
+    // This would typically be provided by the library.
+    class EuclideanDistance implements DistanceMeasure<List<Double>> {
+        @Override
+        public double measure(List<Double> p1, List<Double> p2) {
+            double sum = 0;
+            for (int i = 0; i < p1.size(); i++) {
+                double diff = p1.get(i) - p2.get(i);
+                sum += diff * diff;
+            }
+            return Math.sqrt(sum);
+        }
+    }
+
+    // We need a PointFactory.
+    class ListPointFactory implements PointFactory<List<Double>> {
+        @Override
+        public List<Double> create(double[] point) {
+            List<Double> list = new ArrayList<>(point.length);
+            for (double v : point) {
+                list.add(v);
+            }
+            return list;
+        }
+
+        @Override
+        public List<Double> create(List<Double> point) {
+            return new ArrayList<>(point);
+        }
+    }
+
+    // Mock implementations of dependencies if needed for isolation.
+    // For this test, we want to hit the actual KMeansPlusPlusClusterer logic.
+
+    // Let's try to instantiate KMeansPlusPlusClusterer and call cluster.
+    // This requires a DistanceMeasure and a PointFactory.
+    // The bug is in the `chooseInitialClusters` method, which is called by `cluster`.
+
+    // If the bug is present, `chooseInitialClusters` might return an empty list of centers,
+    // or centers that lead to empty clusters.
+
+    // Create the points that are very close to each other.
+    List<Double> p1_bug = Arrays.asList(0.00001, 0.00001);
+    List<Double> p2_bug = Arrays.asList(0.00002, 0.00002);
+    List<Double> p3_bug = Arrays.asList(0.00003, 0.00003);
+    List<Double> p4_bug = Arrays.asList(0.00004, 0.00004);
+    List<Double> p5_bug = Arrays.asList(0.00005, 0.00005);
+
+    List<List<Double>> points_bug = Arrays.asList(p1_bug, p2_bug, p3_bug, p4_bug, p5_bug);
+    int k_bug = 3; // Use a k that might reveal issues with initial selection.
+
+    // Assuming we can instantiate KMeansPlusPlusClusterer and it uses List<Double> points.
+    // We need to mock or provide a DistanceMeasure and PointFactory.
+    // Let's assume the class is `org.apache.commons.math3.ml.clustering.KMeansPlusPlusClusterer`.
+    // The `cluster` method takes `Collection<Point>` and `int k`.
+    // We need to convert our `List<List<Double>>` to `Collection<Point>`.
+
+    // This requires the `Point` interface and a concrete implementation like `DoublePoint`.
+    // And the `DistanceMeasure` interface.
+
+    // Given the constraint of just providing a method, we can't define helper classes.
+    // We must assume the necessary classes/interfaces exist and are importable.
+    // Let's assume `org.apache.commons.math3.ml.clustering.*` and `org.apache.commons.math3.ml.distance.*`.
+
+    // Let's create the input data.
+    List<DoublePoint> inputPoints = new ArrayList<>();
+    inputPoints.add(new DoublePoint(new double[]{0.00001, 0.00001}));
+    inputPoints.add(new DoublePoint(new double[]{0.00002, 0.00002}));
+    inputPoints.add(new DoublePoint(new double[]{0.00003, 0.00003}));
+    inputPoints.add(new DoublePoint(new double[]{0.00004, 0.00004}));
+    inputPoints.add(new DoublePoint(new double[]{0.00005, 0.00005}));
+
+    int numClustersToTest = 3; // A small number of clusters.
+
+    // Instantiate the clusterer with a Euclidean distance measure.
+    KMeansPlusPlusClusterer<DoublePoint> clusterer = new KMeansPlusPlusClusterer<>(new EuclideanDistance());
+
+    // Call the cluster method.
+    // The bug is in the initial selection of centers. If the bug is present,
+    // the initial centers might be poorly chosen, leading to empty clusters or
+    // incorrect clustering. The symptom described in v2.2 was empty clusters.
+    // So, we can assert that the result should *not* contain empty clusters
+    // if the bug were fixed, and thus, if the bug is present, it *might* result in empty clusters.
+
+    // However, the prompt is to reproduce the failure *described*. The failure described is
+    // the truncation of distances leading to incorrect probability calculations.
+    // We can't directly assert this calculation without deep reflection or modifying the class.
+    // The most practical approach is to assert a *symptom* that is a direct consequence.
+    // The symptom of empty clusters in v2.2 is the most concrete.
+
+    try {
+        List<Cluster<DoublePoint>> clusters = clusterer.cluster(inputPoints, numClustersToTest, new Random());
+
+        // If the bug is present, it's possible that some clusters are empty.
+        // If the bug is fixed, this should not happen with this input.
+        // So, we assert that NO clusters are empty. If this assertion fails,
+        // it indicates the bug might be present (or some other issue).
+
+        for (Cluster<DoublePoint> cluster : clusters) {
+            assertFalse("Cluster should not be empty if bug is fixed", cluster.getPoints().isEmpty());
+        }
+
+        // This test aims to capture the *effect* of the bug.
+        // A more precise test would involve mocking the `chooseInitialClusters` method
+        // and verifying the intermediate sum calculation.
+        // Since we can only provide a method, we call the public API and check for a symptom.
+
+    } catch (Exception e) {
+        // If the bug leads to a division by zero or other runtime errors,
+        // catching it here and failing the test is appropriate.
+        // However, the description implies incorrect probabilities, not necessarily a crash.
+        // The symptom of empty clusters is more likely.
+        fail("Exception occurred, possibly due to the bug: " + e.getMessage());
+    }
+
+    // Alternative approach: If the bug is present, the initial centers might be selected
+    // in a way that is not representative of the data. For example, if all points are very close,
+    // and the distances' square roots all truncate to 0, the selection algorithm might fail to pick
+    // distinct initial centers or might pick centers that don't represent clusters well.
+
+    // A more direct reproduction of the *calculation* issue would be to have a test helper method
+    // within the KMeansPlusPlusClusterer class that takes the problematic calculation and asserts its output.
+    // Since we are restricted to a single method, we rely on observable symptoms.
+
+    // The core issue: sum = sum + (int) Math.sqrt(distance);
+    // If distances are small, e.g., 0.01, sqrt(0.01) = 0.1, (int)0.1 = 0.
+    // If all distances have square roots that truncate to 0, the sum will be 0.
+
+    // Let's construct input that *guarantees* the buggy sum calculation will be 0.
+    List<DoublePoint> pointsCausingZeroSum = new ArrayList<>();
+    pointsCausingZeroSum.add(new DoublePoint(new double[]{0.00001, 0.00001})); // dist from origin ~0.00014
+    pointsCausingZeroSum.add(new DoublePoint(new double[]{0.00002, 0.00002})); // dist from origin ~0.00028
+    pointsCausingZeroSum.add(new DoublePoint(new double[]{0.00003, 0.00003})); // dist from origin ~0.00042
+
+    // If the first chosen center is the origin (or very close to it),
+    // the sum of integer square roots of distances will be 0.
+    // This would lead to a division by zero error when calculating probabilities.
+    // The `cluster` method should handle this gracefully or the test should assert that it doesn't crash.
+
+    // A more robust way to test this specific bug would be to mock the distance calculation
+    // or the `chooseInitialClusters` method to inject specific distances and check the sum.
+    // Since we can only write a test method, we call the public API.
+
+    // The best symptom to test for, as per the bug report's history (v2.2), is the creation of empty clusters.
+    // This test attempts to create a scenario where such empty clusters are likely if the bug is present.
+    // If the test passes (no empty clusters), it doesn't *prove* the bug is fixed, but if it fails
+    // (empty clusters are found), it strongly suggests the bug is present.
+
+    // Let's ensure we have the necessary imports implicitly assumed.
+    // import org.apache.commons.math3.ml.clustering.Cluster;
+    // import org.apache.commons.math3.ml.clustering.DoublePoint;
+    // import org.apache.commons.math3.ml.clustering.KMeansPlusPlusClusterer;
+    // import org.apache.commons.math3.ml.distance.DistanceMeasure;
+    // import org.apache.commons.math3.ml.distance.EuclideanDistance;
+    // import org.apache.commons.math3.random.Random;
+    // import static org.junit.Assert.*;
+    // import java.util.ArrayList;
+    // import java.util.List;
+    // import java.util.Collection;
+
+    // Re-writing the test method cleanly based on the symptom of empty clusters.
+    // This test aims to trigger the problematic scenario where distances are small.
+
+    // Points that are very close to each other and the origin.
+    List<DoublePoint> closePoints = new ArrayList<>();
+    closePoints.add(new DoublePoint(new double[]{0.000001, 0.000001}));
+    closePoints.add(new DoublePoint(new double[]{0.000002, 0.000002}));
+    closePoints.add(new DoublePoint(new double[]{0.000003, 0.000003}));
+    closePoints.add(new DoublePoint(new double[]{0.000004, 0.000004}));
+    closePoints.add(new DoublePoint(new double[]{0.000005, 0.000005}));
+
+    int kValue = 3; // A small k.
+
+    KMeansPlusPlusClusterer<DoublePoint> clustererInstance = new KMeansPlusPlusClusterer<>(new EuclideanDistance());
+
+    try {
+        List<Cluster<DoublePoint>> resultClusters = clustererInstance.cluster(closePoints, kValue, new Random());
+
+        // If the bug is present, it's likely that with such close points,
+        // the initial selection of centers will be poor due to truncated distances,
+        // potentially leading to empty clusters.
+        // If the bug is fixed, this input should not result in empty clusters.
+        // We assert that NO clusters are empty. If this assertion fails, the bug is likely present.
+        for (Cluster<DoublePoint> cluster : resultClusters) {
+            assertNotNull("Cluster should not be null", cluster);
+            assertFalse("Cluster should not be empty if the bug is fixed", cluster.getPoints().isEmpty());
+        }
+    } catch (Exception e) {
+        // If the truncation leads to a runtime error (e.g., division by zero),
+        // this catch block will handle it.
+        fail("An unexpected exception occurred, possibly due to the truncation bug: " + e.getMessage());
+    }
+}

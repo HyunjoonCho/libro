@@ -1,0 +1,53 @@
+public void testHelpFormatterLongDescriptionWrapped() {
+    HelpFormatter formatter = new HelpFormatter();
+    Options options = new Options();
+    Option option = new Option("t", "test", true, "This is a very long description that should definitely wrap multiple times to demonstrate the bug in the HelpFormatter's wrapping logic when dealing with descriptions longer than the specified width and a non-zero start position.");
+    options.addOption(option);
+    
+    // Use a small width and a start position to trigger the bug
+    // The default width is 74, default startPos is 3
+    // Let's use width 30 and startPos 2 for easier testing
+    StringWriter sw = new StringWriter();
+    PrintWriter pw = new PrintWriter(sw);
+    formatter.printHelp(pw, 30, "cmd", "header", options, 2, null, "footer", false);
+    pw.flush();
+    String helpText = sw.toString();
+    
+    // Split the output into lines and check the length of each line beyond the first
+    String[] lines = helpText.split("\n");
+    
+    // The first line might be different due to header/footer/cmd, focus on option description lines
+    boolean foundOptionDescription = false;
+    for (String line : lines) {
+        if (line.contains("This is a very long description")) {
+            foundOptionDescription = true;
+        }
+        if (foundOptionDescription) {
+            // Check lines that are part of the wrapped description
+            // The startPos is 2, so we expect the content to start at column 2
+            // and the effective width for wrapping is 30.
+            // Lines beyond the first should not exceed the intended width.
+            // We expect the wrapped lines to start after the initial indentation
+            // and not go beyond the specified width.
+            // Let's check if any line is significantly longer than width + startPos
+            // A simple check: if a line's content part (after startPos) is longer than width, it's a bug.
+            if (line.length() > 2 && line.startsWith("  ")) { // Heuristic to find description lines
+                int contentStart = 2; // Based on the startPos used in printHelp
+                if (line.length() > contentStart + 30) { // If the content part exceeds the width
+                    // This assertion might need adjustment based on exact expected output,
+                    // but the core idea is that lines *beyond the first* should not be
+                    // incorrectly extended due to the startPos calculation.
+                    // The bug report implies lines become *too long*.
+                    // A more robust test would check the actual wrapping points.
+                    // For now, let's assume that if a line is excessively long, it's a failure.
+                    // Given the bug description, the lines beyond the first wrap incorrectly and are too long.
+                    // The corrected code uses 'width' instead of 'width + startPos'.
+                    // So, the actual content part of the line should not exceed 'width'.
+                    // If the total line length exceeds startPos + width, it's likely a bug.
+                    assertTrue("Line is too long, indicating incorrect wrapping: " + line, line.length() <= 2 + 30);
+                }
+            }
+        }
+    }
+    assertTrue("Option description not found in help text.", foundOptionDescription);
+}

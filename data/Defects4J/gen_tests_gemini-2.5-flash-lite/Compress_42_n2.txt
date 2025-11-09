@@ -1,0 +1,24 @@
+public void testIsUnixSymlinkReturnsTrueForZipEntryWithUnixPermissions177777() throws IOException {
+    File jarFile = new File("invalid-entry.jar");
+    // Create a dummy jar file with the problematic entry for testing purposes
+    try (ZipArchiveOutputStream zipOut = new ZipArchiveOutputStream(jarFile)) {
+        ZipArchiveEntry entry = new ZipArchiveEntry("META-INF/maven/");
+        // Set Unix mode to 177777 (octal) which is 65535 in decimal
+        // This value should not be interpreted as a symlink
+        entry.setUnixMode(0177777);
+        zipOut.putArchiveEntry(entry);
+        zipOut.closeArchiveEntry();
+    }
+    
+    try (ZipFile zipFile = new ZipFile(jarFile)) {
+        ZipArchiveEntry entry = zipFile.getEntry("META-INF/maven/");
+        assertNotNull("Entry should exist", entry);
+        // The issue is that isUnixSymlink returns true for this entry
+        assertFalse("isUnixSymlink should return false for invalid mode 177777", entry.isUnixSymlink());
+    } finally {
+        // Clean up the dummy jar file
+        if (jarFile.exists()) {
+            jarFile.delete();
+        }
+    }
+}

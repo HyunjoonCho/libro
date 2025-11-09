@@ -1,0 +1,56 @@
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.ser.std.SqlDateSerializer;
+import org.junit.Test;
+
+import java.sql.Date;
+import java.text.SimpleDateFormat;
+
+import static org.junit.Assert.assertEquals;
+
+public class JacksonDateTest {
+
+    @Test
+    public void testSqlDateSerializationFormat() throws Exception {
+        // Test case that reproduces the issue described in the bug report.
+        // The goal is to ensure that a custom format can be set for SqlDateSerializer globally.
+
+        final ObjectMapper mapper = new ObjectMapper();
+        // Attempt to set a custom format for java.sql.Date
+        mapper.configOverride(java.sql.Date.class).setFormat(JsonFormat.Value.forPattern("yyyy-MM-dd"));
+
+        // Create a java.sql.Date object
+        long nowMillis = System.currentTimeMillis();
+        java.sql.Date sqlDate = new java.sql.Date(nowMillis);
+
+        // Serialize the date using the ObjectMapper
+        String serializedDate = mapper.writeValueAsString(sqlDate);
+
+        // The expected format is "yyyy-MM-dd", which should be a JSON string.
+        // If the bug is present, it might serialize as a number (timestamp) or use a different format.
+        // We need to verify it's a string and matches the expected pattern.
+
+        // Construct the expected string format based on the current date.
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+        String expectedFormattedDate = "\"" + sdf.format(sqlDate) + "\"";
+
+        // Assert that the serialized date matches the expected string format.
+        // If this assertion fails, it indicates that the custom format was not applied correctly.
+        assertEquals(expectedFormattedDate, serializedDate);
+
+        // Additionally, test the workaround mentioned in the bug report to ensure it works.
+        // This part is not strictly required to reproduce the failure, but it helps confirm the workaround.
+        final ObjectMapper mapperWorkaround = new ObjectMapper();
+        mapperWorkaround.registerModule(new SimpleModule() {
+            {
+                addSerializer(
+                        java.sql.Date.class,
+                        new SqlDateSerializer().withFormat(false, new SimpleDateFormat("yyyy-MM-dd"))
+                );
+            }
+        });
+        String serializedDateWorkaround = mapperWorkaround.writeValueAsString(sqlDate);
+        assertEquals(expectedFormattedDate, serializedDateWorkaround);
+    }
+}

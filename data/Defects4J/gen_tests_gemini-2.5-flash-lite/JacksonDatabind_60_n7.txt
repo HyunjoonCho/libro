@@ -1,0 +1,89 @@
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Arrays;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class PolymorphicTypeTest {
+
+    static class RemoteCall {
+        private Object[] args;
+
+        @JsonCreator
+        public RemoteCall(@JsonProperty("args") Object[] args) {
+            this.args = args;
+        }
+
+        public Object[] getArgs() {
+            return args;
+        }
+    }
+
+    static class CommandAPDU {
+        private byte[] apdu;
+
+        @JsonCreator
+        public CommandAPDU(@JsonProperty("bytes") byte[] apdu) {
+            this.apdu = apdu.clone();
+            // Simulate parsing logic if needed for more complex scenarios
+        }
+
+        @JsonValue
+        public byte[] getBytes() {
+            return apdu.clone();
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CommandAPDU that = (CommandAPDU) o;
+            return Arrays.equals(apdu, that.apdu);
+        }
+
+        @Override
+        public int hashCode() {
+            return Arrays.hashCode(apdu);
+        }
+    }
+
+    @Test
+    public void testPolymorphicTypeLostWhenUsingJsonValue() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+        mapper.enableDefaultTyping();
+
+        byte[] testBytes = {0x41, 0x4B, 0x51, 0x45, 0x41, 0x41, 0x6E, 0x77, 0x38, 0x66, 0x4C, 0x33, 0x41, 0x61, 0x41, 0x3D}; // Example byte array
+        CommandAPDU command = new CommandAPDU(testBytes);
+
+        RemoteCall remoteCall = new RemoteCall(new Object[]{command});
+
+        String json = mapper.writeValueAsString(remoteCall);
+
+        // The bug description implies that the type information for CommandAPDU is lost or misrepresented.
+        // We expect that deserialization should correctly reconstruct the CommandAPDU object,
+        // preserving its type and using the @JsonCreator constructor.
+        // The bug states it deserializes to "[B", which is incorrect for a CommandAPDU object.
+        // Therefore, we assert that the deserialized object is indeed a CommandAPDU and has the correct byte content.
+
+        RemoteCall deserializedRemoteCall = mapper.readValue(json, RemoteCall.class);
+        Object[] deserializedArgs = deserializedRemoteCall.getArgs();
+
+        assertTrue("Deserialized args should not be empty", deserializedArgs != null && deserializedArgs.length > 0);
+        Object deserializedObject = deserializedArgs[0];
+
+        // Assert that the deserialized object is an instance of CommandAPDU
+        assertTrue("Deserialized object should be an instance of CommandAPDU", deserializedObject instanceof CommandAPDU);
+
+        // Assert that the content of the deserialized CommandAPDU is correct
+        CommandAPDU deserializedCommand = (CommandAPDU) deserializedObject;
+        assertEquals("Deserialized CommandAPDU should have the correct byte array", testBytes, deserializedCommand.getBytes());
+    }
+}

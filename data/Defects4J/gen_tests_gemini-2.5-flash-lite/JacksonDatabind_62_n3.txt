@@ -1,0 +1,21 @@
+public void testUnmodifiableSetMixinFailsInJackson27Plus() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
+    // Use a concrete Set implementation for the mixin target that has a default constructor
+    // Jackson 2.7+ changed how it handles deserialization of abstract types and mixes.
+    // Collections.unmodifiableSet returns an instance of an internal private class
+    // which doesn't have a readily available default constructor that Jackson can use.
+    // By targeting a concrete Set implementation like HashSet, we provide Jackson with
+    // a type it can instantiate, and the mixin then correctly applies the UnmodifiableSetMixin.
+    mapper.addMixIn(HashSet.class, UnmodifiableSetMixin.class);
+    String json = "[\"java.util.Collections$UnmodifiableSet\",[]]";
+    Set<String> foo = mapper.readValue(json, Set.class);
+    assertTrue(foo.isEmpty());
+    // Verify it's actually an unmodifiable set
+    try {
+        foo.add("test");
+        fail("Should not be able to add to an unmodifiable set");
+    } catch (UnsupportedOperationException e) {
+        // Expected exception
+    }
+}

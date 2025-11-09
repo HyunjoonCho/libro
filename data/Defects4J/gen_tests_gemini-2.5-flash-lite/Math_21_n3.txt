@@ -1,0 +1,60 @@
+public void testCorrelatedRandomVectorGeneratorWithZeroRows() {
+    // Covariance matrix with a row of zeros
+    double[][] covData = {
+            {0.0, 0.0, 0.0, 0.0, 0.0},
+            {0.0, 0.013445532, 0.01039469, 0.009881156, 0.010499559},
+            {0.0, 0.01039469, 0.023006616, 0.008196856, 0.010732709},
+            {0.0, 0.009881156, 0.008196856, 0.019023866, 0.009210099},
+            {0.0, 0.010499559, 0.010732709, 0.009210099, 0.019107243}
+    };
+    RealMatrix covarianceMatrix = MatrixUtils.createRealMatrix(covData);
+
+    // Create a CorrelatedRandomVectorGenerator with a seed for reproducibility
+    CorrelatedRandomVectorGenerator generator = new CorrelatedRandomVectorGenerator(covarianceMatrix, 100, new MersenneTwister(1234));
+
+    // Attempt to sample a vector. The original bug report indicates this fails silently or produces incorrect results.
+    // We'll assert that it doesn't throw an exception and that the rank is as expected.
+    // The expected rank for this specific matrix should be 4, not 5.
+    // The bug description mentions the rank being 5 for the first matrix, which is incorrect.
+    // The rank of a covariance matrix with linearly dependent rows/columns is less than its dimension.
+    // In this case, the first row being all zeros makes the first dimension linearly dependent.
+    assertEquals(4, generator.getRank());
+
+    // Generate a sample to ensure it doesn't crash.
+    // We don't have a specific expected output value because the issue is with the internal decomposition,
+    // but we can check that it produces a vector of the correct dimension.
+    double[] sample = generator.nextVector();
+    assertEquals(covarianceMatrix.getRowDimension(), sample.length);
+
+    // The bug report also mentions the second matrix (data2) failing.
+    // Let's test that one as well.
+    double[][] covData2 = {
+            {0.013445532, 0.01039469, 0.0, 0.009881156, 0.010499559},
+            {0.01039469, 0.023006616, 0.0, 0.008196856, 0.010732709},
+            {0.0, 0.0, 0.0, 0.0, 0.0},
+            {0.009881156, 0.008196856, 0.0, 0.019023866, 0.009210099},
+            {0.010499559, 0.010732709, 0.0, 0.009210099, 0.019107243}
+    };
+    RealMatrix covarianceMatrix2 = MatrixUtils.createRealMatrix(covData2);
+    CorrelatedRandomVectorGenerator generator2 = new CorrelatedRandomVectorGenerator(covarianceMatrix2, 100, new MersenneTwister(1234));
+
+    // The expected rank for this matrix should also be 4.
+    assertEquals(4, generator2.getRank());
+    double[] sample2 = generator2.nextVector();
+    assertEquals(covarianceMatrix2.getRowDimension(), sample2.length);
+
+    // The third matrix (data3) is supposed to work correctly.
+    double[][] covData3 = {
+            {0.013445532, 0.01039469, 0.009881156, 0.010499559},
+            {0.01039469, 0.023006616, 0.008196856, 0.010732709},
+            {0.009881156, 0.008196856, 0.019023866, 0.009210099},
+            {0.010499559, 0.010732709, 0.009210099, 0.019107243}
+    };
+    RealMatrix covarianceMatrix3 = MatrixUtils.createRealMatrix(covData3);
+    CorrelatedRandomVectorGenerator generator3 = new CorrelatedRandomVectorGenerator(covarianceMatrix3, 100, new MersenneTwister(1234));
+
+    // This matrix is full rank (4).
+    assertEquals(4, generator3.getRank());
+    double[] sample3 = generator3.nextVector();
+    assertEquals(covarianceMatrix3.getRowDimension(), sample3.length);
+}

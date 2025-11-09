@@ -1,0 +1,76 @@
+public void testAdvancedOptimizationsSideEffect() throws IOException {
+    String inputJs = "window[\"anchor\"] = function (obj, modifiesProp) {\n" +
+            " return (function (saved) {\n" +
+            " return modifiesProp(obj) + saved;\n" +
+            " })(obj[\"prop\"]);\n" +
+            "}";
+    String externsJs = "var window; window.prop;";
+
+    CompilerOptions options = new CompilerOptions();
+    options.setCompilationLevel(CompilationLevel.ADVANCED_OPTIMIZATIONS);
+    options.setPrettyPrint(true);
+    options.setLanguageIn(LanguageMode.ECMASCRIPT3);
+    options.setLanguageOut(LanguageMode.ECMASCRIPT3);
+
+    Compiler compiler = new Compiler();
+    compiler.init(new JvmNameResolver(), new DefaultPassConfig(options), options);
+
+    SourceFile externs = SourceFile.fromCode("externs.js", externsJs);
+    SourceFile input = SourceFile.fromCode("input.js", inputJs);
+
+    compiler.compile(externs, input, CustomExternsIncluder.create(options), options);
+
+    String outputJs = compiler.toSource();
+
+    String expected = "window.foo=function(a,b){var HOLD=a.prop;return b(a)+HOLD};";
+    // The actual output might have slight variations in whitespace or variable naming,
+    // but the core logic of preserving the side-effect should be present.
+    // A more robust test might involve parsing the JS and comparing ASTs,
+    // but for reproducing the bug, checking the string output is usually sufficient
+    // if the expected output is precisely known.
+    // For this specific bug, the incorrect output was window.foo=function(a,b){return b(a)+a.prop};
+    // We assert that the output is NOT the incorrect one, and ideally is the correct one.
+    assertFalse(outputJs.contains("return b(a)+a.prop"));
+    // A more precise check if the expected output is consistently generated:
+    // assertEquals(expected, outputJs);
+}
+
+// Helper class to allow custom externs inclusion.
+private static class CustomExternsIncluder implements CompilerInput {
+    private final CompilerOptions options;
+
+    static CustomExternsIncluder create(CompilerOptions options) {
+        return new CustomExternsIncluder(options);
+    }
+
+    private CustomExternsIncluder(CompilerOptions options) {
+        this.options = options;
+    }
+
+    @Override
+    public Set<SourceFile> getExterns() {
+        Set<SourceFile> externs = new LinkedHashSet<>();
+        externs.add(SourceFile.fromCode("window.js", "var window; window.prop;"));
+        return externs;
+    }
+
+    @Override
+    public Set<SourceFile> getInputs() {
+        return Collections.emptySet();
+    }
+
+    @Override
+    public Set<SourceFile> getTransformedInputs() {
+        return Collections.emptySet();
+    }
+
+    @Override
+    public Set<SourceFile> getChangedInputs() {
+        return Collections.emptySet();
+    }
+
+    @Override
+    public Set<SourceFile> getRemovedInputs() {
+        return Collections.emptySet();
+    }
+}

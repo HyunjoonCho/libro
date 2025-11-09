@@ -1,0 +1,50 @@
+public void testTarArchiveOutputStream_getBytesWritten_returnsInvalidValue() throws IOException {
+    File tempFile = File.createTempFile("test", ".tar");
+    tempFile.deleteOnExit();
+    FileOutputStream fos = new FileOutputStream(tempFile);
+    ArchiveOutputStream taos = null;
+    try {
+        taos = new ArchiveStreamFactory().createArchiveOutputStream(ArchiveStreamFactory.TAR, fos);
+        File sourceFile = File.createTempFile("source", ".txt");
+        sourceFile.deleteOnExit();
+        try (OutputStream os = new BufferedOutputStream(new FileOutputStream(sourceFile))) {
+            byte[] data = new byte[8192];
+            for (int i = 0; i < data.length; i++) {
+                data[i] = (byte) (i % 256);
+            }
+            os.write(data);
+        }
+        TarArchiveEntry entry = new TarArchiveEntry(sourceFile.getName(), sourceFile.length());
+        taos.putArchiveEntry(entry);
+        try (InputStream is = new BufferedInputStream(new FileInputStream(sourceFile))) {
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = is.read(buffer)) != -1) {
+                taos.write(buffer, 0, bytesRead);
+            }
+        }
+        taos.closeArchiveEntry();
+        long bytesWrittenBeforeClose = taos.getBytesWritten();
+        taos.close();
+        long bytesWrittenAfterClose = taos.getBytesWritten();
+        assertTrue("Bytes written before close should be positive", bytesWrittenBeforeClose > 0);
+        assertTrue("Bytes written after close should be positive", bytesWrittenAfterClose > 0);
+        assertTrue("Bytes written after close should be greater than or equal to bytes written before close", bytesWrittenAfterClose >= bytesWrittenBeforeClose);
+        assertTrue("Bytes written should be at least the size of the file content", bytesWrittenAfterClose >= sourceFile.length());
+    } finally {
+        if (taos != null) {
+            try {
+                taos.close();
+            } catch (IOException e) {
+                // Ignore
+            }
+        }
+        if (fos != null) {
+            try {
+                fos.close();
+            } catch (IOException e) {
+                // Ignore
+            }
+        }
+    }
+}

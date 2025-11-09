@@ -1,0 +1,119 @@
+public void testTarArchiveInputStreamBigUserId() throws IOException {
+    byte[] header = new byte[512];
+    // Mock a TarArchiveEntry header with a large user ID
+    // User ID field starts at offset 108 and has a length of 8 bytes
+    // We'll set it to a value that exceeds the typical 32-bit integer range when interpreted as octal.
+    // For example, a value like "62410554" could cause issues if not handled correctly.
+    // Let's use a value that is clearly too large for a signed 32-bit integer when parsed as octal.
+    // A simple way to trigger the error in TarUtils.parseOctal is to provide an invalid octal digit.
+    // The error message "Invalid byte 52 at offset 7 in '62410554'" suggests that '52' (which is ASCII for '4')
+    // is being misinterpreted or is part of a number that exceeds limits.
+    // Let's try to replicate the problematic value.
+    // '6' '2' '4' '1' '0' '5' '5' '4'
+    // ASCII for '6' is 54, '2' is 50, '4' is 52, '1' is 49, '0' is 48, '5' is 53, '4' is 52.
+    // The error message points to byte 52 at offset 7. This corresponds to the last '4' in "62410554".
+    // This implies the parsing might be trying to read more digits or is hitting a limit.
+    // Let's set the user ID field to a value that, when interpreted as octal, will be very large.
+    // A common issue is when the value exceeds 2^31 - 1 for signed int, or 2^32 - 1 for unsigned.
+    // In TarUtils.parseOctal, it expects valid octal digits (0-7) and a null terminator or space.
+    // The value "62410554" consists of valid octal digits. The error might be due to exceeding the maximum value
+    // that can be stored in a signed 32-bit integer after parsing.
+    // Let's try to construct a header that would result in a large UID.
+    // The TarUtils.parseOctal method iterates up to 100 bytes or until it finds a non-octal character.
+    // The error "Invalid byte 52 at offset 7 in '62410554'" is peculiar. Byte 52 is ASCII '4'.
+    // Let's assume the TarArchiveEntry constructor or parseTarHeader is expecting a specific format
+    // and the provided value is causing an issue during the conversion.
+    // The description suggests the issue is with "big user-id value".
+    // The TarUtils.parseOctal method has a check `if (b < ZERO && b != SPACE && b != NUL)`
+    // and `if (b > SEVEN)`. Byte 52 is ASCII '4', which is not greater than '7'.
+    // The error message "Invalid byte 52 at offset 7 in '62410554'" is confusing.
+    // Let's try to create a TarArchiveEntry with a large value directly.
+    // The TarArchiveEntry constructor itself might not be the issue, but how it's populated.
+    // The error stack trace points to `TarUtils.parseOctal(TarUtils.java:130)`.
+    // Let's simulate a TarArchiveInputStream that returns a TarArchiveEntry with a large UID.
+    // We can mock the InputStream to return a specific header.
+
+    // Create a byte array for the tar header (512 bytes)
+    byte[] tarHeader = new byte[512];
+
+    // Fill the header with spaces initially
+    for (int i = 0; i < tarHeader.length; i++) {
+        tarHeader[i] = (byte) ' ';
+    }
+
+    // Set the file name (e.g., "testfile")
+    byte[] nameBytes = "testfile".getBytes(StandardCharsets.UTF_8);
+    System.arraycopy(nameBytes, 0, tarHeader, 0, Math.min(nameBytes.length, 100));
+
+    // Set the mode (e.g., 0644) - octal
+    String mode = "0644";
+    byte[] modeBytes = mode.getBytes(StandardCharsets.UTF_8);
+    System.arraycopy(modeBytes, 0, tarHeader, 100, modeBytes.length);
+
+    // Set the user ID (UID) - this is the field that causes the problem
+    // Let's use a value that is known to cause issues, like a very large octal number.
+    // The error message mentions "62410554". Let's try to put this value in the UID field.
+    // The UID field is at offset 108 and is 8 bytes long.
+    String largeUserIdOctal = "62410554"; // This is 8 digits
+    byte[] userIdBytes = largeUserIdOctal.getBytes(StandardCharsets.UTF_8);
+    System.arraycopy(userIdBytes, 0, tarHeader, 108, userIdBytes.length);
+
+    // Set the group ID (GID)
+    String groupIdOctal = "1000";
+    byte[] groupIdBytes = groupIdOctal.getBytes(StandardCharsets.UTF_8);
+    System.arraycopy(groupIdBytes, 0, tarHeader, 116, groupIdBytes.length);
+
+    // Set the size of the file
+    String size = "0"; // For an empty file
+    byte[] sizeBytes = size.getBytes(StandardCharsets.UTF_8);
+    System.arraycopy(sizeBytes, 0, tarHeader, 124, sizeBytes.length);
+
+    // Set the modification time (mtime)
+    String mtime = "0";
+    byte[] mtimeBytes = mtime.getBytes(StandardCharsets.UTF_8);
+    System.arraycopy(mtimeBytes, 0, tarHeader, 8, mtimeBytes.length);
+
+    // Set the type flag (regular file)
+    tarHeader[156] = (byte) '0';
+
+    // Set the link name (empty for regular file)
+    // tarHeader[121] is for link name length
+
+    // Set the magic string
+    byte[] magicBytes = TarConstants.MAGIC_STRING.getBytes(StandardCharsets.US_ASCII);
+    System.arraycopy(magicBytes, 0, tarHeader, 257, magicBytes.length);
+
+    // Set the version
+    tarHeader[264] = TarConstants.VERSION_SYMLINK; // '0'
+    tarHeader[265] = TarConstants.VERSION_SYMLINK; // '0'
+
+    // Set the checksum (can be anything for this test as we mock the stream)
+    // The checksum field is at offset 148 and is 8 bytes long.
+    // Let's set it to spaces, which is common for an uncalculated checksum.
+    for (int i = 0; i < 8; i++) {
+        tarHeader[148 + i] = (byte) ' ';
+    }
+
+    // Add a null terminator for the header
+    // The header is padded with null bytes up to 512.
+
+    // Create a ByteArrayInputStream from the header
+    ByteArrayInputStream bais = new ByteArrayInputStream(tarHeader);
+    // Wrap it in a TarArchiveInputStream
+    TarArchiveInputStream tais = new TarArchiveInputStream(bais);
+
+    // The error occurs when getNextTarEntry is called.
+    // We expect an IllegalArgumentException to be thrown.
+    try {
+        tais.getNextTarEntry();
+        fail("Expected IllegalArgumentException for invalid user ID");
+    } catch (IllegalArgumentException e) {
+        // Check if the exception message is related to the parsing issue.
+        // The original error was "Invalid byte 52 at offset 7 in '62410554'".
+        // We are trying to replicate the condition that leads to this.
+        // The specific message might change with fixes, so a general check for the UID parsing is good.
+        assertTrue(e.getMessage().contains("Invalid byte") || e.getMessage().contains("Cannot parse octal"));
+    } finally {
+        IOUtils.closeQuietly(tais);
+    }
+}

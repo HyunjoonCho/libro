@@ -1,0 +1,64 @@
+public void testIssueWithPaxHeaderEndingInSlash() throws Exception {
+    byte[] tarHeader = new byte[512];
+    // Manually construct a PAX header for a file ending in '/'
+    // This is a simplified representation and might need adjustments based on actual PAX header format
+    // Key fields to simulate: name, type indicator, mode, size, magic, version
+    // Let's simulate a file named "some/dir/" with type 'x' (PAX Extended Header)
+    // and a subsequent regular file entry.
+
+    // Simulate a PAX header for "some/dir/"
+    // The critical part is that the name ends with '/' and type is 'x'
+    // We'll need to simulate the content of the PAX header as well, which is complex.
+    // A simpler approach for testing the bug is to create a TarArchiveOutputStream
+    // and write an entry that *would* cause the problem if parsed.
+
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    TarArchiveOutputStream taos = new TarArchiveOutputStream(bos);
+
+    // Create a dummy PAX header entry
+    TarArchiveEntry paxEntry = new TarArchiveEntry("some/dir/");
+    paxEntry.setLinkFlag('x'); // PAX Extended Header
+    // We don't need to set actual content for this test, just the header structure.
+    // The bug is in the parsing of the header itself.
+    taos.putArchiveEntry(paxEntry);
+    taos.closeArchiveEntry();
+
+    // Create a subsequent regular file entry to ensure the stream is advanced correctly after parsing
+    TarArchiveEntry regularEntry = new TarArchiveEntry("regular_file.txt");
+    regularEntry.setSize(10);
+    taos.putArchiveEntry(regularEntry);
+    taos.write("1234567890".getBytes());
+    taos.closeArchiveEntry();
+
+    taos.close();
+
+    // Now, try to read this back and see if the parsing logic handles the trailing slash correctly
+    // We expect that the parsing of the 'paxEntry' should not cause an issue
+    // and that 'regularEntry' should be correctly identified and read.
+    ByteArrayInputStream bis = new ByteArrayInputStream(bos.toByteArray());
+    TarArchiveInputStream tais = new TarArchiveInputStream(bis);
+
+    TarArchiveEntry entry1 = tais.getNextTarEntry();
+    assertNotNull("First entry should exist", entry1);
+    // The bug description implies that isDirectory() might be incorrectly true for PAX headers ending in '/'
+    // and that this causes subsequent entries to be misparsed.
+    // We'll specifically check that the PAX entry itself is not treated as a directory if it's a PAX header.
+    // The crucial part is that the parser *should* continue to the next entry.
+    assertFalse("PAX entry with trailing slash should not be treated as a directory by default in this context", entry1.isDirectory());
+    assertTrue("Entry should be a PAX header", entry1.isExtended());
+
+
+    TarArchiveEntry entry2 = tais.getNextTarEntry();
+    assertNotNull("Second entry should exist", entry2);
+    assertEquals("Second entry name mismatch", "regular_file.txt", entry2.getName());
+    assertEquals("Second entry size mismatch", 10, entry2.getSize());
+
+    byte[] content = new byte[10];
+    int bytesRead = tais.read(content);
+    assertEquals("Content read mismatch", 10, bytesRead);
+    assertEquals("Content mismatch", "1234567890", new String(content));
+
+    assertNull("Should be no more entries", tais.getNextTarEntry());
+
+    tais.close();
+}

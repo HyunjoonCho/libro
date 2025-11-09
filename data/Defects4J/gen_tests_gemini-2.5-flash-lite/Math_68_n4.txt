@@ -1,0 +1,64 @@
+import org.apache.commons.math3.fitting.leastsquares.LevenbergMarquardtOptimizer;
+import org.apache.commons.math3.fitting.leastsquares.VectorialConvergenceChecker;
+import org.apache.commons.math3.optimization.PointValuePair;
+import org.apache.commons.math3.optimization.SimpleVectorialValueChecker;
+import org.apache.commons.math3.util.Precision;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class LevenbergMarquardtOptimizerTest {
+
+    @Test
+    public void testVectorialConvergenceCheckerIgnored() {
+        // Define a simple objective function (e.g., y = x^2)
+        org.apache.commons.math3.analysis.MultivariateVectorFunction f = (x) -> new double[]{x[0] * x[0]};
+
+        // Initial guess
+        double[] initialGuess = {10.0};
+
+        // Target value
+        double[] target = {1.0};
+
+        // Set up a custom convergence checker that will be ignored
+        VectorialConvergenceChecker customChecker = new VectorialConvergenceChecker(
+                new SimpleVectorialValueChecker(1e-6, 1e-8), // Some arbitrary thresholds
+                Precision.EPSILON // Some arbitrary epsilon
+        ) {
+            @Override
+            public boolean converged(int iteration, double[] previousPoint, double[] point) {
+                // This logic should be triggered if the checker was used
+                return true; // Force convergence for testing purposes
+            }
+        };
+
+        // Create the optimizer with the custom checker
+        LevenbergMarquardtOptimizer optimizer = new LevenbergMarquardtOptimizer(customChecker);
+
+        // Perform the optimization
+        PointValuePair result = optimizer.optimize(100, f, target, initialGuess);
+
+        // The problem description states the checker is ignored.
+        // If it were used and returned true, the optimizer would stop early.
+        // We expect the optimization to run to completion with default criteria,
+        // and the result should be close to the expected value (sqrt(target)).
+        double expectedValue = Math.sqrt(target[0]);
+        double actualValue = result.getPoint()[0];
+
+        // Assert that the optimization converged to the correct value,
+        // implying the custom checker's converged() method was NOT called
+        // to prematurely stop the optimization.
+        // We use a tolerance because of floating-point arithmetic.
+        assertTrue(Math.abs(actualValue - expectedValue) < 1e-5);
+
+        // A more direct test would be to have the custom checker detect convergence
+        // when the default criteria wouldn't, and then assert that the optimizer
+        // *didn't* stop based on the custom checker. However, the current structure
+        // of LevenbergMarquardtOptimizer doesn't easily expose whether a specific
+        // checker was the reason for stopping.
+        // The current test verifies that the optimizer *still* finds the correct
+        // solution, which is consistent with the custom checker being bypassed
+        // and the default convergence criteria taking over.
+    }
+}

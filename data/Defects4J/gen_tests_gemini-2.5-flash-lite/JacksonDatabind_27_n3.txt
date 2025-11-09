@@ -1,0 +1,40 @@
+public void testExternalTypeIdBeforePojo() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(new SimpleModule().addAbstractTypeResolver(new SimpleAbstractTypeResolver() {
+        @Override
+        public JavaType resolveAbstractType(final TypeResolutionContext context, final JavaType type) {
+            if (type.getRawClass().equals(MyBaseType.class)) {
+                return context.resolveType(MyConcreteType.class);
+            }
+            return null;
+        }
+    }));
+
+    // The problematic JSON structure
+    String json = "{\"@type\":\"com.example.MyConcreteType\",\"id\":1,\"name\":\"test\"}";
+
+    try {
+        MyBaseType result = mapper.readValue(json, MyBaseType.class);
+        assertNotNull(result);
+        assertTrue(result instanceof MyConcreteType);
+        assertEquals(1, result.getId());
+        assertEquals("test", result.getName());
+    } catch (JsonProcessingException e) {
+        fail("Deserialization failed: " + e.getMessage());
+    }
+}
+
+// Dummy classes for the test
+static abstract class MyBaseType {
+    private int id;
+    private String name;
+
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+}
+
+static class MyConcreteType extends MyBaseType {
+    // Specific fields if any
+}

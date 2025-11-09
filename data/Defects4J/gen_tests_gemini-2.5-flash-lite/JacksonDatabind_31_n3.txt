@@ -1,0 +1,41 @@
+public void testConvertAndWriteContext() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.setFilterProvider(new SimpleFilterProvider().addFilter("myFilter", SimpleBeanPropertyFilter.filterOutAllExcept("name")));
+    mapper.addMixIn(MyObject.class, MyObjectMixIn.class);
+
+    MyObject obj = new MyObject("value1", "value2");
+
+    // Using writeValueAsString
+    String jsonAsString = mapper.writerWithView(MyObject.MyObjectView.class).writeValueAsString(obj);
+    assertFalse(jsonAsString.contains("field2"));
+    assertTrue(jsonAsString.contains("field1"));
+
+    // Using convertValue
+    Object convertedValue = mapper.convertValue(obj, Object.class);
+    assertTrue(convertedValue instanceof Map);
+    Map<?, ?> map = (Map<?, ?>) convertedValue;
+    assertTrue(map.containsKey("field1"));
+    assertFalse(map.containsKey("field2")); // This assertion fails in the described scenario
+}
+
+// Helper classes for the test case (assuming they are defined elsewhere or can be defined locally for the test)
+public static class MyObject {
+    public String field1;
+    public String field2;
+
+    public MyObject(String field1, String field2) {
+        this.field1 = field1;
+        this.field2 = field2;
+    }
+
+    public static class MyObjectView {
+    }
+}
+
+public static abstract class MyObjectMixIn {
+    @JsonView(MyObject.MyObjectView.class)
+    public abstract String getField1();
+
+    @JsonView(MyObject.MyObjectView.class)
+    public abstract String getField2();
+}

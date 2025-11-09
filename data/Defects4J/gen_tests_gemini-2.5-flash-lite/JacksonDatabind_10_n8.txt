@@ -1,0 +1,80 @@
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class JsonAnyGetterAndSerializeTest {
+
+    // Custom serializer
+    public static class MySerializer extends JsonSerializer<String> {
+        @Override
+        public void serialize(String value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+            gen.writeString("serialized_" + value);
+        }
+    }
+
+    // Class with JsonAnyGetter and JsonSerialize
+    public static class MyClass {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public MyClass() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(using = MySerializer.class)
+        @JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+    @Test
+    public void testJsonAnyGetterAndSerialize() throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+        module.addSerializer(String.class, new MySerializer());
+        objectMapper.registerModule(module);
+
+        MyClass obj = new MyClass();
+        String json = objectMapper.writeValueAsString(obj);
+
+        // Expected JSON if JsonSerialize worked correctly with JsonAnyGetter
+        // Note: The order of keys in the map might vary, so we check for presence of serialized values.
+        // However, the bug report implies the entire JsonSerialize is ignored.
+        // A more direct test would be to check if "value1" and "value2" are present without "serialized_".
+        // If the bug is present, the output will be: {"key1":"value1","key2":"value2"}
+        // If the bug is fixed, the output should be: {"key1":"serialized_value1","key2":"serialized_value2"}
+
+        // Asserting based on the described bug: JsonSerialize is ignored.
+        // Therefore, the original values should appear in the JSON.
+        // If the test fails (passes the serialization), it means the bug is fixed.
+        // To specifically reproduce the failure, we assert that serialization did NOT happen.
+        // A more robust test would involve checking the JSON string for the *absence* of "serialized_"
+        // or checking if the values are exactly "value1" and "value2".
+
+        // Let's assume the bug causes the output to be {"key1":"value1","key2":"value2"}
+        // If the test passes, it means the bug is fixed and the output is {"key1":"serialized_value1","key2":"serialized_value2"}
+        // To reproduce the failure, we assert the *absence* of the serialized form.
+        // This test is designed to *fail* if the bug is fixed, and *pass* if the bug is present.
+
+        // The bug description implies that the output will be without serialization.
+        // So, we check for the *unserialized* values.
+        // If this assertion passes, it means the bug is reproduced.
+        // If this assertion fails, it means the bug is fixed.
+        assertEquals("{\"key1\":\"value1\",\"key2\":\"value2\"}", json.replace(" ", ""), "JsonAnyGetter should ignore JsonSerialize according to the bug report.");
+
+        // If you want a test that *fails* when the bug is present and *passes* when fixed:
+        // This would assert the expected behavior *after* the bug is fixed.
+        // assertEquals("{\"key1\":\"serialized_value1\",\"key2\":\"serialized_value2\"}", json.replace(" ", ""), "JsonSerialize should work with JsonAnyGetter.");
+    }
+}

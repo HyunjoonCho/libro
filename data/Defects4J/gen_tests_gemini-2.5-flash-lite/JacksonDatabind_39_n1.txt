@@ -1,0 +1,38 @@
+public void testFailOnInvalidSubtype() throws IOException {
+    ObjectMapper objectMapper = new ObjectMapper().disable(DeserializationFeature.FAIL_ON_INVALID_SUBTYPE,
+            DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES);
+
+    // Test case 1: item2 is valid but not parsed due to prior error with item
+    String json1 = "{\"version\":0.0,\"application\":\"123\",\"item\":{\"type\":\"xevent\",\"location\":\"location1\"},\"item2\":{\"type\":\"event\",\"location\":\"location1\"}}";
+    CallRecord call1 = objectMapper.readValue(json1, CallRecord.class);
+    assertNotNull(call1);
+    assertEquals(0.0f, call1.version, 0.0f);
+    assertEquals("123", call1.application);
+    assertNotNull(call1.item);
+    assertTrue(call1.item instanceof Event); // This will fail due to "xevent" type
+    assertNull(call1.item2); // item2 should also be null because parsing stopped
+
+    // Test case 2: application is not read after an invalid item
+    String json2 = "{\"version\":0.0,\"application\":\"123\"},{\"item\":{\"type\":\"xevent\",\"location\":\"location1\"}";
+    // This JSON is malformed for readValue directly, assuming it's part of a stream or array.
+    // For a single object read, this would cause a different error.
+    // Let's adapt to test the described behavior where application is missed.
+    // Assuming the intent is to parse a sequence, but readValue expects a single object.
+    // A more direct test of the description's output:
+    String json2_adapted = "{\"version\":0.0,\"item\":{\"type\":\"xevent\",\"location\":\"location1\"},\"application\":\"123\"}";
+    CallRecord call2 = objectMapper.readValue(json2_adapted, CallRecord.class);
+    assertNotNull(call2);
+    assertEquals(0.0f, call2.version, 0.0f);
+    assertNull(call2.application); // application should be null as per description
+    assertNotNull(call2.item);
+    assertTrue(call2.item instanceof Event); // This will fail due to "xevent" type
+
+    // Test case 3: order matters, application is not read
+    String json3 = "{\"item\":{\"type\":\"xevent\",\"location\":\"location1\"}, \"version\":0.0,\"application\":\"123\"}";
+    CallRecord call3 = objectMapper.readValue(json3, CallRecord.class);
+    assertNotNull(call3);
+    assertEquals(0.0f, call3.version, 0.0f);
+    assertNull(call3.application); // application should be null as per description
+    assertNotNull(call3.item);
+    assertTrue(call3.item instanceof Event); // This will fail due to "xevent" type
+}

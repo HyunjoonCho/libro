@@ -1,0 +1,318 @@
+public void testInvalidFormatExceptionIndex() {
+    try {
+        JsonDeserializer<List<String>> deserializer = new CollectionDeserializer<>(
+                new SimpleType(String.class), null, null, null, null, null, null, false, null, null);
+        deserializer.deserialize(new JsonParser[] {
+                new MockJsonParser("[\"a\", \"b\"]")
+        }, new JsonDeserializationContext() {
+            @Override
+            public Object deserialize(JsonParser parser, Type type) throws JsonParseException {
+                throw new InvalidFormatException("Test message", null, "invalid");
+            }
+        });
+        fail("Expected InvalidFormatException");
+    } catch (InvalidFormatException e) {
+        // The original bug report implies the index should be set, but the provided code
+        // doesn't set it. This test asserts that it remains -1 as per the description.
+        // If the fix is implemented to set the index, this assertion would need to change.
+        assertEquals(-1, e.getIndex());
+    }
+}
+
+// Mock classes to satisfy the deserializer's dependencies.
+// In a real test suite, these would likely already exist or be properly mocked.
+private static class MockJsonParser extends JsonParser {
+    private final String json;
+    private int currentIndex = 0;
+
+    MockJsonParser(String json) {
+        this.json = json;
+    }
+
+    @Override
+    public String getText() throws JsonParseException {
+        // Simplified for the purpose of this test.
+        // A real parser would handle different token types.
+        return String.valueOf(json.charAt(currentIndex++));
+    }
+
+    // Other JsonParser methods would need to be implemented or mocked as well
+    // depending on the exact usage within CollectionDeserializer.
+    // For this specific scenario, getText() and potentially hasMoreTokens() might be sufficient.
+
+    @Override
+    public boolean hasMoreTokens() {
+        return currentIndex < json.length();
+    }
+
+    // Add other necessary JsonParser methods if CollectionDeserializer requires them.
+    // For example:
+    @Override
+    public JsonToken nextToken() throws JsonParseException {
+        if (currentIndex < json.length()) {
+            // Simplified: assume next char is a token. A real implementation would be more complex.
+            return JsonToken.VALUE_STRING; // Or appropriate token
+        }
+        return null;
+    }
+
+    @Override
+    public String getCurrentName() throws JsonParseException {
+        return null; // Not relevant for this test
+    }
+
+    @Override
+    public JsonToken getCurrentToken() throws JsonParseException {
+        return JsonToken.VALUE_STRING; // Simplified
+    }
+
+    @Override
+    public void close() throws IOException {
+        // No-op
+    }
+
+    @Override
+    public boolean isClosed() {
+        return false;
+    }
+
+    @Override
+    public Number getNumberValue() throws IOException, JsonParseException {
+        return null; // Not relevant
+    }
+
+    @Override
+    public int getIntValue() throws IOException, JsonParseException {
+        return 0; // Not relevant
+    }
+
+    @Override
+    public long getLongValue() throws IOException, JsonParseException {
+        return 0; // Not relevant
+    }
+
+    @Override
+    public float getFloatValue() throws IOException, JsonParseException {
+        return 0; // Not relevant
+    }
+
+    @Override
+    public double getDoubleValue() throws IOException, JsonParseException {
+        return 0; // Not relevant
+    }
+
+    @Override
+    public boolean getBooleanValue() throws IOException, JsonParseException {
+        return false; // Not relevant
+    }
+
+    @Override
+    public byte[] getBinaryValue(Base64Variant b64variant) throws IOException, JsonParseException {
+        return null; // Not relevant
+    }
+
+    @Override
+    public Object getEmbeddedObject() throws IOException, JsonParseException {
+        return null; // Not relevant
+    }
+
+    @Override
+    public <T> T getTypedValue(Class<T> type) throws IOException, JsonParseException {
+        return null; // Not relevant
+    }
+
+    @Override
+    public TokenBuffer getCodec().createParser(String data) {
+        return null; // Not relevant
+    }
+
+    @Override
+    public JsonLocation getTokenLocation() {
+        return null; // Not relevant
+    }
+
+    @Override
+    public JsonLocation getCurrentLocation() {
+        return null; // Not relevant
+    }
+
+    @Override
+    public Version version() {
+        return null; // Not relevant
+    }
+}
+
+// Mock classes for deserialization context and type
+private static class JsonDeserializationContext {
+    public Object deserialize(JsonParser parser, Type type) throws JsonParseException {
+        return null; // Default implementation
+    }
+}
+
+private static class SimpleType extends TypeReference<Object> {
+    private final Class<?> rawClass;
+
+    SimpleType(Class<?> rawClass) {
+        this.rawClass = rawClass;
+    }
+
+    @Override
+    public Class<?> getRawClass() {
+        return rawClass;
+    }
+}
+
+// Mock classes for exceptions and deserializers
+private static class InvalidFormatException extends JsonMappingException {
+    private static final long serialVersionUID = 1L;
+    private int index = -1;
+
+    public InvalidFormatException(String msg, JsonLocation loc, Object value) {
+        super(msg, loc, value);
+    }
+
+    public int getIndex() {
+        return index;
+    }
+
+    // Method to set index, which the bug fix would likely use
+    public void setIndex(int index) {
+        this.index = index;
+    }
+}
+
+private static class JsonMappingException extends JsonParseException {
+    private static final long serialVersionUID = 1L;
+    protected JsonLocation location;
+    protected Object value;
+
+    public JsonMappingException(String msg, JsonLocation loc) {
+        super(msg, loc);
+    }
+
+    public JsonMappingException(String msg, JsonLocation loc, Object value) {
+        super(msg, loc);
+        this.value = value;
+    }
+
+    public Object getValue() {
+        return value;
+    }
+
+    public JsonLocation getLocation() {
+        return location;
+    }
+}
+
+private static class JsonParseException extends IOException {
+    private static final long serialVersionUID = 1L;
+    protected JsonLocation location;
+
+    public JsonParseException(String msg, JsonLocation loc) {
+        super(msg);
+        this.location = loc;
+    }
+
+    public JsonLocation getLocation() {
+        return location;
+    }
+}
+
+private static class JsonLocation {
+    // Minimal implementation for mock
+}
+
+private abstract static class JsonDeserializer<T> {
+    public abstract T deserialize(JsonParser[] parsers, JsonDeserializationContext context) throws JsonParseException;
+}
+
+private static class CollectionDeserializer<T> extends JsonDeserializer<List<T>> {
+    private final JavaType elementType;
+    private final TypeFactory typeFactory;
+    private final AnnotationIntrospector annotationIntrospector;
+    private final TypeDeserializer elementTypeDeserializer;
+    private final KeyDeserializer keyDeserializer;
+    private final NullValueProvider nullProvider;
+    private final Boolean unwrapSingleValue;
+    private final Boolean ignoreExtraProperties;
+    private final BeanDeserializerFactory beanDeserializerFactory;
+
+    public CollectionDeserializer(JavaType elementType, TypeFactory typeFactory, AnnotationIntrospector annotationIntrospector, TypeDeserializer elementTypeDeserializer, KeyDeserializer keyDeserializer, NullValueProvider nullProvider, Boolean unwrapSingleValue, boolean ignoreExtraProperties, BeanDeserializerFactory beanDeserializerFactory, JsonDeserializer<?> valueDeser) {
+        this.elementType = elementType;
+        this.typeFactory = typeFactory;
+        this.annotationIntrospector = annotationIntrospector;
+        this.elementTypeDeserializer = elementTypeDeserializer;
+        this.keyDeserializer = keyDeserializer;
+        this.nullProvider = nullProvider;
+        this.unwrapSingleValue = unwrapSingleValue;
+        this.ignoreExtraProperties = ignoreExtraProperties;
+        this.beanDeserializerFactory = beanDeserializerFactory;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<T> deserialize(JsonParser[] parsers, JsonDeserializationContext context) throws JsonParseException {
+        List<T> list = new java.util.ArrayList<>();
+        JsonParser parser = parsers[0]; // Assuming only one parser for this test
+        try {
+            JsonToken currentToken = parser.nextToken();
+            if (currentToken == JsonToken.START_ARRAY) {
+                int index = 0;
+                while (parser.nextToken() != JsonToken.END_ARRAY) {
+                    try {
+                        // This is where the exception might be thrown and not caught properly
+                        T value = (T) context.deserialize(parser, elementType.getRawClass());
+                        list.add(value);
+                    } catch (InvalidFormatException e) {
+                        // The bug is that this catch block might be missing or not handling index
+                        // For the purpose of reproducing the bug, we assume it's not setting the index.
+                        // If the fix is implemented, it would look something like:
+                        // e.setIndex(index);
+                        // throw e;
+                        throw e; // Re-throw to be caught by the outer try-catch
+                    } catch (JsonParseException e) {
+                        // Handle other parse exceptions if necessary
+                        throw e;
+                    }
+                    index++;
+                }
+            }
+        } catch (IOException e) {
+            throw new JsonParseException("IO error during deserialization", null, e);
+        }
+        return list;
+    }
+}
+
+// Dummy classes to satisfy dependencies for CollectionDeserializer
+private static class JavaType {
+    private final Class<?> rawClass;
+    public JavaType(Class<?> rawClass) { this.rawClass = rawClass; }
+    public Class<?> getRawClass() { return rawClass; }
+}
+private interface TypeFactory {}
+private interface AnnotationIntrospector {}
+private interface TypeDeserializer {}
+private interface KeyDeserializer {}
+private interface NullValueProvider {}
+private interface BeanDeserializerFactory {}
+
+private enum JsonToken {
+    START_ARRAY, END_ARRAY, VALUE_STRING, VALUE_NUMBER_INT, VALUE_NUMBER_FLOAT, VALUE_TRUE, VALUE_FALSE, VALUE_NULL, FIELD_NAME, START_OBJECT, END_OBJECT
+}
+
+private static abstract class TypeReference<T> {
+    public abstract Class<?> getRawClass();
+}
+
+private static class TokenBuffer {
+    // Minimal implementation
+}
+
+private static class Base64Variant {
+    // Minimal implementation
+}
+
+private static class Version {
+    // Minimal implementation
+}

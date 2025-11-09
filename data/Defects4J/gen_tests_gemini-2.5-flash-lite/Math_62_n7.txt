@@ -1,0 +1,65 @@
+public void testBrentOptimizerConvergenceChecker() {
+    BrentOptimizer optimizer = new BrentOptimizer(1e-5, 1e-8);
+    // The bug report indicates that BrentOptimizer requires a specific convergence checker.
+    // This test aims to verify that attempting to use it without one, or with an incompatible one,
+    // would lead to a NullPointerException or similar issue.
+    // However, the current implementation *does* have a default if none is set explicitly.
+    // The issue seems to be more about the *meaning* of the points passed to the checker.
+    // To reproduce a *potential* failure related to an incompatible checker, we'd need
+    // to create a custom checker that misinterprets the data.
+    // For now, we'll test the default behavior and highlight the potential semantic issue.
+
+    // Test with a dummy function and interval
+    UnivariateRealFunction f = new Sin();
+    double lo = 0;
+    double hi = Math.PI;
+
+    // BrentOptimizer has a default ConvergenceChecker, so this won't NPE.
+    // The issue is that the checker might not understand the 'point' data correctly.
+    // We'll assert that it finds a minimum, implying *some* form of convergence.
+    // The actual bug is likely in how a *custom* checker would behave.
+    optimizer.optimize(f, GoalType.MINIMIZE, lo, hi);
+
+    // To truly test the bug, we'd need to mock or create a ConvergenceChecker
+    // that specifically misinterprets the values passed to its 'converged' method.
+    // For example, if the checker expects a PointValuePair but receives something else,
+    // or if it expects a certain type of value and gets another.
+    // Since the bug report doesn't give a concrete example of such a checker,
+    // we'll focus on the fact that the optimizer *itself* doesn't enforce
+    // a *specific* type of checker, leading to potential semantic issues.
+
+    // Let's try to set a checker that might be semantically problematic if not handled carefully.
+    // This is speculative as the bug description is conceptual.
+    ConvergenceChecker<UnivariateRealPointValuePair> dummyChecker =
+        new ConvergenceChecker<UnivariateRealPointValuePair>() {
+            @Override
+            public boolean converged(int iteration, UnivariateRealPointValuePair previous, UnivariateRealPointValuePair result) {
+                // This checker would consider convergence if the result's value is NaN,
+                // which is unlikely to be the intended behavior for a real checker.
+                // This demonstrates the potential for a misinterpretation.
+                return Double.isNaN(result.getValue());
+            }
+        };
+
+    BrentOptimizer optimizerWithDummyChecker = new BrentOptimizer(1e-5, 1e-8);
+    optimizerWithDummyChecker.setConvergenceChecker(dummyChecker);
+
+    // This call *should not* throw an exception if the optimizer is robust,
+    // but it highlights the semantic gap if the checker is poorly designed.
+    // If the bug was that it *required* a specific checker and didn't allow others,
+    // then this test would look different. Based on the description, it's about
+    // the *interface* and potential misuse.
+    try {
+        optimizerWithDummyChecker.optimize(f, GoalType.MINIMIZE, lo, hi);
+        // If no exception is thrown, it means the optimizer didn't crash,
+        // but the convergence logic might be flawed if the dummy checker
+        // was intended to represent a problematic scenario.
+        // The bug is more about the design allowing such semantic issues.
+    } catch (Exception e) {
+        // Depending on the exact implementation, this *could* fail.
+        // The report suggests a lack of checks and potential NPEs.
+        // We'll catch any exception to indicate that *something* might be wrong,
+        // even if it's not a direct NPE.
+        fail("BrentOptimizer failed with a potentially semantically incorrect convergence checker: " + e.getMessage());
+    }
+}

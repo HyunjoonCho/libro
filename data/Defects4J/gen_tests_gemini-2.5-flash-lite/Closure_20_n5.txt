@@ -1,0 +1,219 @@
+public void testStringConversionOptimization() {
+    // Mock object that returns undefined for valueOf()
+    Object obj = new Object() {
+        @Override
+        public String toString() {
+            // Simulate the behavior described in the bug report where valueOf() returns undefined
+            // In Java, we can't directly return 'undefined'. We'll use a representation
+            // that would likely lead to similar issues if not handled correctly.
+            // A null String might cause a NullPointerException or be treated as "null"
+            // depending on the context. Here, we'll aim to reproduce the "undefined"
+            // string conversion issue.
+            // In JavaScript, String(undefined) is "undefined".
+            // The bug describes String(f) where f.valueOf() returns undefined.
+            // The compiler optimizes String(f) to f + "".
+            // So the issue is that f + "" results in "undefined" instead of "[object Object]".
+            //
+            // In Java, we don't have a direct equivalent of JavaScript's undefined.
+            // The closest analogy for the *problem* is when toString() itself
+            // doesn't produce the expected object representation, or if some
+            // intermediate step fails.
+            //
+            // However, the core of the bug is about how String() or string concatenation
+            // handles a specific return value from valueOf().
+            //
+            // Let's try to simulate the *effect* of the optimization.
+            // If String(f) becomes f + "", and f.valueOf() returns undefined,
+            // then f + "" becomes undefined + "" which is "undefined".
+            //
+            // In Java, if we had an object where a method *intended* to return
+            // a string representation returned something that got *lost* or
+            // misinterpreted during concatenation, that would be analogous.
+            //
+            // The bug report specifically mentions String(f) where f.valueOf() is undefined.
+            // Java's String.valueOf(Object) calls Object.toString() if Object is not null.
+            // If valueOf() were to return null, String.valueOf(null) returns "null".
+            //
+            // The problem is specifically with the JS runtime's String() function and
+            // the '+' operator for string concatenation.
+            //
+            // Let's try to create a scenario where a custom toString that *could*
+            // be misinterpreted if concatenation logic is flawed.
+            //
+            // A more direct approach to mimic the *symptom* in Java would be to
+            // see if a custom toString() that returns a specific, potentially
+            // problematic string, causes issues with concatenation if the compiler
+            // were to optimize it incorrectly.
+            //
+            // Given the description, the optimization is String(f) -> f + "".
+            // If f.valueOf() returns undefined, then f + "" -> "undefined".
+            // Expected: "[object Object]"
+            //
+            // In Java, String.valueOf(obj) relies on obj.toString().
+            // If we want to test the *spirit* of the bug, we need an object
+            // whose `toString` method, when implicitly called by string context,
+            // doesn't yield the expected object representation, and where
+            // a flawed optimization might lead to a wrong result.
+            //
+            // The most direct way to reproduce *a* failure related to string conversion
+            // and potential optimization issues in Java might be to test a case
+            // where toString() returns something unexpected, and see if standard
+            // Java string conversion handles it correctly.
+            //
+            // Let's assume the underlying issue is that the compiler *incorrectly*
+            // assumes `valueOf()` is always the primary way to get a string,
+            // and bypasses `toString()` in some optimization, or handles the
+            // `undefined` return value poorly.
+            //
+            // In Java, the closest we can get to "undefined" is perhaps `null`.
+            // If `valueOf` returned `null`, and `String(f)` was optimized to `f + ""`,
+            // then `null + ""` would be `"null"` in Java. The expected would be `"[object Object]"`.
+            //
+            // Let's try to mock that scenario.
+
+            // This mock object simulates an object where `valueOf` might return null,
+            // and we want to see how `String(obj)` or `obj + ""` handles it.
+            // Standard Java `String.valueOf(null)` is "null".
+            // Standard Java `null + ""` is "null".
+            // The bug implies the *expected* output for an object is its class name representation.
+            return "simulated_undefined_value"; // This is not directly 'undefined'
+        }
+    };
+
+    // If we were to directly translate the JS:
+    // Object f = new Object() {
+    //     public Object valueOf() { // In JS, valueOf can return any type
+    //         return null; // Simulating 'undefined' with null for Java
+    //     }
+    //     // In Java, toString is implicitly called by String.valueOf(Object)
+    //     // if the object is not null and valueOf doesn't provide a string.
+    //     // However, the JS bug is specifically about valueOf() returning undefined.
+    // };
+    //
+    // If the compiler optimized String(f) to f + "", and f.valueOf() returns undefined,
+    // then f + "" becomes "undefined".
+    //
+    // Let's test the Java behavior directly:
+    // String result = String.valueOf(obj); // This will call obj.toString()
+    // String concatResult = obj + "";      // This will also call obj.toString()
+
+    // The bug is about the *optimization* String(f) -> f + "".
+    // And how the *result* of f.valueOf() is handled.
+    // If f.valueOf() returns undefined, f + "" becomes "undefined".
+    // Expected: "[object Object]"
+
+    // Let's create a class that returns null from valueOf and see the behavior.
+    class ValueOfReturningNull {
+        public Object valueOf() {
+            return null;
+        }
+
+        @Override
+        public String toString() {
+            // Standard Java toString for Object
+            return getClass().getName() + "@" + Integer.toHexString(hashCode());
+        }
+    }
+
+    ValueOfReturningNull testObj = new ValueOfReturningNull();
+
+    // Standard Java behavior:
+    // String.valueOf(testObj) will call testObj.toString() because testObj is not null.
+    // So, String.valueOf(testObj) should return something like "ValueOfReturningNull@..."
+
+    // The optimization String(f) -> f + "" is key.
+    // If we assume a flawed optimization that *only* considers valueOf, and valueOf returns null:
+    // testObj + "" -> null + "" -> "null" (in Java)
+    // This is *not* the expected "[object Object]" which is the default toString() output.
+
+    // So, the test should assert that the *actual* behavior (which is likely correct in Java)
+    // does NOT match the flawed behavior described in the bug.
+    // Or, we need to find a Java scenario where a similar optimization *would* fail.
+
+    // Let's assume the bug report implies that `String(obj)` should *always*
+    // fall back to `obj.toString()` if `obj.valueOf()` doesn't yield a useful string.
+    // And the optimization `String(obj) -> obj + ''` fails when `obj.valueOf()`
+    // returns `undefined` (or `null` in Java equivalent).
+
+    // Let's craft a test that *would* fail if the optimization were applied naively.
+    // We need an object where `valueOf()` returns `null`.
+
+    Object objWithNullValueOf = new Object() {
+        public Object valueOf() {
+            return null;
+        }
+        // toString is implicitly called by String.valueOf(Object) if valueOf doesn't return a primitive
+        // or if the conversion process needs it.
+        // In Java, if valueOf returns null, String.valueOf() returns "null".
+        // If the compiler *incorrectly* optimized String(obj) to obj + "" and
+        // obj.valueOf() returned null, then obj + "" would result in "null".
+        // The expected output for an object is its toString representation.
+    };
+
+    // Test the standard Java behavior first.
+    // String.valueOf(objWithNullValueOf) correctly calls toString()
+    // because objWithNullValueOf is not null and valueOf() returns null.
+    String standardJavaResult = String.valueOf(objWithNullValueOf);
+    // The expected output for an object in Java is typically its toString representation.
+    // We don't know the exact hashCode, so we can't assert the full string.
+    // However, we know it should *not* be "null" or "undefined".
+    assertTrue("Standard Java String.valueOf should not return 'null'", !standardJavaResult.equals("null"));
+    assertTrue("Standard Java String.valueOf should not return 'undefined'", !standardJavaResult.equals("undefined"));
+    assertTrue("Standard Java String.valueOf should represent the object", standardJavaResult.startsWith(objWithNullValueOf.getClass().getName()));
+
+    // Now, let's simulate the *buggy* optimization.
+    // If the compiler did String(obj) -> obj + "" AND mishandled null from valueOf:
+    // The result would be `null + ""` which is `"null"`.
+    String buggyOptimizationResult = "null"; // This is what the buggy optimization would produce.
+
+    // The test should assert that the *actual* result is NOT the buggy result.
+    // Since standard Java handles this correctly, the actual result `standardJavaResult`
+    // should NOT be equal to `buggyOptimizationResult`.
+    assertNotEquals("The actual String conversion should not produce the 'null' result expected from a buggy optimization",
+            buggyOptimizationResult, standardJavaResult);
+
+    // The original JS bug expected "[object Object]". This is the default toString() for JS objects.
+    // In Java, the default toString() for Object is "ClassName@hashCode".
+    // So, the equivalent expectation in Java would be that `String.valueOf(obj)` returns
+    // something that *looks like* a default object representation, not "null" or "undefined".
+    // Our `standardJavaResult` already asserts this.
+
+    // To specifically reproduce the *failure* described:
+    // The failure is that String(f) results in "undefined" instead of "[object Object]".
+    // This happens because String(f) is optimized to f + "", and f.valueOf() returns undefined.
+    // So, f + "" becomes undefined + "" -> "undefined".
+    //
+    // In Java, let's make an object whose `valueOf` returns `null`.
+    // And assume a hypothetical faulty compiler optimization: `String(obj) -> obj + ""`.
+    // Then `obj + ""` would evaluate to `null + ""` which is `"null"`.
+    // The *expected* output for an object is its `toString()` representation.
+    //
+    // So, we need to test that `String.valueOf(obj)` (the correct behavior)
+    // does *not* produce `"null"` when `obj.valueOf()` returns `null`.
+
+    Object faultyObject = new Object() {
+        public Object valueOf() {
+            return null; // Simulates the 'undefined' return value for valueOf
+        }
+        // toString() will be called by String.valueOf()
+    };
+
+    // Expected behavior in Java: String.valueOf(faultyObject) calls faultyObject.toString()
+    // Actual behavior in Java: String.valueOf(faultyObject) returns something like "SomeClassName@hashcode"
+    String actualJavaResult = String.valueOf(faultyObject);
+
+    // The *buggy* scenario from the report:
+    // If String(obj) was optimized to obj + "" and obj.valueOf() returned null,
+    // the result would be null + "" which is "null".
+    String buggyJsResultEquivalent = "null"; // The Java equivalent of the buggy JS output
+
+    // The test should assert that the actual Java result is NOT the buggy result.
+    assertNotEquals("The String conversion should not yield 'null' when valueOf() returns null, mimicking the JS bug.",
+            buggyJsResultEquivalent, actualJavaResult);
+
+    // Additionally, the expected output in the JS bug was "[object Object]".
+    // In Java, the default toString() is ClassName@hashcode.
+    // So, we expect the actual Java result to conform to this.
+    assertTrue("The actual String conversion should produce a valid object string representation.",
+               actualJavaResult != null && actualJavaResult.contains("@"));
+}

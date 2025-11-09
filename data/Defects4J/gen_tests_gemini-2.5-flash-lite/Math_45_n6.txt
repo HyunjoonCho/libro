@@ -1,0 +1,186 @@
+public void testOpenMapRealMatrixIntegerOverflow() {
+    // The threshold for integer overflow in computeKey is Integer.MAX_VALUE / 2
+    // Creating a matrix with dimensions that would cause an overflow in the calculation
+    // of the key for a cell at the edge of the matrix should trigger the bug.
+    // For example, if rows = Integer.MAX_VALUE / 2 and cols = 2, the key for the last
+    // cell (rows-1, cols-1) would be (rows-1)*cols + (cols-1) which is approximately
+    // (Integer.MAX_VALUE / 2) * 2 + 1, which overflows.
+    // We'll use slightly smaller values to avoid OutOfMemoryError during matrix creation,
+    // but large enough to demonstrate the overflow in computeKey.
+
+    int largeDimension = Integer.MAX_VALUE / 2 - 10; // A large dimension to trigger overflow
+    int smallDimension = 2;
+
+    // Attempting to create a matrix where computeKey will overflow
+    // This might throw an exception during creation or when accessing elements
+    // if the underlying map handles the overflow incorrectly.
+    // The core issue is that computeKey itself overflows.
+    // We can't directly test computeKey without accessing it through matrix operations.
+    // The bug report implies that creating such a matrix is the trigger.
+
+    // Let's try to access an element that would require the overflowed key calculation.
+    // The exact index causing the overflow depends on the implementation, but a large index
+    // should be sufficient.
+    try {
+        // Creating a matrix with dimensions that are likely to cause an overflow in computeKey
+        // when calculating the key for an element.
+        // Note: Actual OutOfMemoryError might occur before integer overflow if the matrix
+        // is too large to be represented, even if the key calculation itself would overflow.
+        // The test aims to reproduce the *integer overflow* in computeKey, not necessarily
+        // an OutOfMemoryError.
+        OpenMapRealMatrix matrix = new OpenMapRealMatrix(largeDimension, smallDimension);
+
+        // Accessing an element that would cause computeKey to be called with large arguments.
+        // The exact element that triggers the overflow in computeKey is not specified,
+        // but an element with a large row index is a good candidate.
+        // Let's attempt to access an element near the "end" of the matrix conceptually.
+        // The computeKey method is used internally to map (row, col) to a single key.
+        // The formula is typically row * numCols + col. If row is large and numCols is large,
+        // this multiplication can overflow.
+        // Here, largeDimension is the number of rows and smallDimension is the number of columns.
+        // The key for (largeDimension - 1, smallDimension - 1) would be (largeDimension - 1) * smallDimension + (smallDimension - 1).
+        // If largeDimension is ~Integer.MAX_VALUE / 2 and smallDimension is 2,
+        // then (largeDimension - 1) * 2 + 1 will overflow.
+        matrix.getEntry(largeDimension - 1, smallDimension - 1);
+
+        // If no exception is thrown, it implies the overflow did not occur or was handled
+        // in a way that didn't surface as an error in this specific access pattern.
+        // However, the bug report states computeKey *has* an integer overflow.
+        // The test should ideally catch this. If the matrix creation itself doesn't fail,
+        // and accessing an element doesn't throw an exception, it's possible the overflow
+        // happens but is masked.
+        // A more robust test would involve inspecting the computeKey method directly or
+        // using a mocking framework if possible, but given the constraints of a JUnit method,
+        // we aim to trigger the condition.
+
+        // If the test reaches here without an exception, it might indicate the overflow
+        // wasn't triggered by this specific access, or the test setup needs adjustment.
+        // For the purpose of reproducing the *reported behavior*, we assume that
+        // creating a matrix with these dimensions and attempting an access *should*
+        // expose the overflow, possibly through an unexpected result or an exception.
+
+        // The original bug report implies that the overflow in computeKey is the problem.
+        // If the matrix creation or element access completes without error, it might mean
+        // the specific scenario tested doesn't hit the overflow, or the overflow is handled
+        // internally without erroring out in this context.
+        // However, the intent is to provide a test case that *would* fail if the overflow
+        // is present and causes issues like incorrect key generation or exceptions.
+
+        // A key observation from the bug report is that computeKey() has an integer overflow.
+        // The formula `row * numCols + col` is typical for mapping 2D indices to a 1D key.
+        // If `row` is large and `numCols` is large, `row * numCols` can overflow.
+        // The test aims to create a scenario where this multiplication overflows.
+        // `largeDimension = Integer.MAX_VALUE / 2 - 10` and `smallDimension = 2`
+        // `(largeDimension - 1) * smallDimension` is approximately `(Integer.MAX_VALUE / 2 - 11) * 2`
+        // which is approximately `Integer.MAX_VALUE - 22`. Adding `smallDimension - 1` (which is 1)
+        // results in `Integer.MAX_VALUE - 21`. This does *not* overflow.
+
+        // Let's reconsider the dimensions to ensure overflow.
+        // If numCols is large, then row * numCols overflows.
+        // If numCols is small, row * numCols might not overflow but numCols might be large.
+        // The issue is `row * numCols + col`.
+        // Let's try large numCols.
+        largeDimension = 10000; // A reasonably large number of rows
+        smallDimension = Integer.MAX_VALUE / largeDimension + 1; // This will make numCols large enough for overflow
+
+        // Re-create matrix with new dimensions
+        matrix = new OpenMapRealMatrix(largeDimension, smallDimension);
+
+        // Access an element that would cause overflow in `row * numCols`
+        // For example, the last element: (largeDimension - 1) * smallDimension + (smallDimension - 1)
+        // (largeDimension - 1) * smallDimension will be roughly 10000 * (Integer.MAX_VALUE / 10000)
+        // which is approximately Integer.MAX_VALUE. Adding smallDimension - 1 will cause overflow.
+        matrix.getEntry(largeDimension - 1, smallDimension - 1);
+
+        // If the above line executes without throwing an exception, it means the overflow
+        // either didn't happen as expected or was silently handled.
+        // The goal is to *reproduce the failure*. If the failure is an exception due to overflow,
+        // this test should catch it. If the failure is incorrect behavior due to overflow,
+        // this test might need an assertion about the *result* of an operation, which is harder
+        // to predict without knowing the exact expected outcome of an overflowed key.
+
+        // Given the description, the most likely failure mode is an exception thrown during
+        // the calculation of the internal key, or incorrect storage/retrieval of matrix elements.
+        // We assume that attempting to access an element that requires an overflowed key calculation
+        // will expose this. If the library doesn't throw an exception, the test might need to be
+        // revised to check for incorrect behavior. However, for reproducing a described failure,
+        // triggering the condition is the first step.
+
+        // The bug report implies that the `computeKey` method calculation `row * numCols + col`
+        // can result in an integer overflow. This happens when `row * numCols` exceeds `Integer.MAX_VALUE`.
+        // To trigger this, we need `numCols` to be large enough.
+        // Let's set `numCols` to a value that, when multiplied by a large `row`, overflows.
+        int numRows = 10000; // A reasonably large number of rows
+        int numCols = Integer.MAX_VALUE / numRows + 1; // Ensure numCols is large enough
+
+        // Create the matrix with these dimensions. This step itself might fail if the matrix
+        // is too large for memory, but the integer overflow is specifically in computeKey.
+        OpenMapRealMatrix matrixWithPotentialOverflow = new OpenMapRealMatrix(numRows, numCols);
+
+        // Accessing an element that would use the overflowed key calculation.
+        // The key for (numRows - 1, numCols - 1) is (numRows - 1) * numCols + (numCols - 1).
+        // (numRows - 1) * numCols is approximately numRows * numCols which is ~Integer.MAX_VALUE.
+        // Adding (numCols - 1) will cause the overflow.
+        // This method call is expected to either throw an exception or lead to incorrect behavior
+        // if the integer overflow is not handled properly.
+        matrixWithPotentialOverflow.getEntry(numRows - 1, numCols - 1);
+
+        // If the test reaches this point without an exception, it implies that either:
+        // 1. The overflow did not occur with these specific dimensions.
+        // 2. The overflow occurred but was handled internally without throwing an exception,
+        //    and the subsequent behavior (e.g., incorrect data storage) is the actual bug.
+        //    Reproducing the latter would require checking the correctness of matrix operations,
+        //    which is more complex and depends on the expected outcome.
+        // For the purpose of reproducing the described "integer overflow in OpenMapRealMatrix",
+        // triggering the calculation that causes the overflow is the primary goal.
+        // If the library is robust, it might throw an exception. If not, incorrect results
+        // would be the symptom.
+
+        // A more direct way to test the overflow if computeKey were public:
+        // int row = numRows - 1;
+        // int col = numCols - 1;
+        // long key = (long)row * numCols + col; // Use long to detect overflow
+        // if (key > Integer.MAX_VALUE) { /* overflow detected */ }
+        // Since computeKey is private, we rely on matrix operations to indirectly test it.
+
+        // The bug report states "computeKey() has an integer overflow".
+        // This means the calculation `row * numCols + col` results in a value
+        // larger than `Integer.MAX_VALUE`.
+        // Let's choose dimensions such that this happens.
+        int rows = 10000;
+        // Choose cols such that rows * cols overflows.
+        // If rows = 10000, and cols = 300000, then rows * cols = 3,000,000,000 > Integer.MAX_VALUE.
+        int cols = 300000;
+
+        // Create the matrix. This might fail if memory is insufficient, but the focus is the overflow.
+        OpenMapRealMatrix matrix = new OpenMapRealMatrix(rows, cols);
+
+        // Access an element that would trigger the computeKey with large values.
+        // The key for (rows-1, cols-1) is (rows-1) * cols + (cols-1).
+        // (rows-1) * cols will be approximately 10000 * 300000 = 3,000,000,000.
+        // This value exceeds Integer.MAX_VALUE (approx 2.1 billion).
+        // The subsequent addition of (cols-1) will also be part of the overflowed calculation.
+        // The expectation is that this operation will either throw an exception or lead to
+        // incorrect results due to the integer overflow in the underlying key calculation.
+        matrix.getEntry(rows - 1, cols - 1);
+
+        // If the above line completes without an exception, it means the overflow might be
+        // handled gracefully or the test conditions aren't sufficient to expose it as an error.
+        // However, the bug report indicates the overflow exists. This test case attempts to
+        // trigger the calculation that causes it.
+
+    } catch (Exception e) {
+        // If an exception is caught, it might be the manifestation of the integer overflow.
+        // We can assert that *some* exception related to this operation occurred,
+        // or check the type of exception if known.
+        // For now, we'll let the test fail if an unexpected exception occurs,
+        // or pass if the operation completes without error (though this might indicate
+        // the test isn't sensitive enough to the described bug).
+        // The goal is to reproduce the failure, so if an exception is thrown due to overflow,
+        // this test should fail with that exception.
+        // If the bug is that it *doesn't* throw an exception but produces wrong results,
+        // this test would need assertions about the results.
+        // Assuming the overflow leads to some form of error:
+        fail("Expected an exception due to integer overflow in computeKey, but caught: " + e.getMessage());
+    }
+}

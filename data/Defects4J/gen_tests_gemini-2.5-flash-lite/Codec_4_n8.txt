@@ -1,0 +1,33 @@
+public void testBase64InstanceEncodeChunking() throws Exception {
+    Base64 b64 = new Base64();
+    String s = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; // 82 'a's
+    byte[] b = s.getBytes("UTF-8");
+    byte[] result = b64.encode(b);
+    String encoded = new String(result, "UTF-8");
+    assertFalse("Instance encode() should not chunk output", encoded.contains("\r\n"));
+    assertEquals(82, s.length()); // Original string length
+    // The expected length for 82 bytes encoded in Base64 is ceil(82/3)*4 = 28*4 = 112 characters.
+    // With chunking, it would be 76 + (112-76) = 76 + 36 = 112 characters, but with CRLF.
+    // Without chunking, it's just 112 characters.
+    // The bug description implies that the output *is* chunked, so we are testing that it *shouldn't* be.
+    // The output for 82 'a's in 1.4 with instance encode is:
+    // "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh\r\nYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ==\r\n"
+    // This means it's chunked at 76 characters, and has trailing CRLF.
+    // The test should verify this behavior if it's the bug, or the opposite if it's a fix.
+    // The bug report states "Commons-Codec-1.3 did not do this." and shows the 1.4 output *with* CRLF.
+    // So, we expect the CRLF to be present if we are reproducing the bug.
+
+    // Let's check for the presence of CRLF to confirm the bug behavior.
+    // The output from the description for 1.4 instance encode is:
+    // [YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh
+    // YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ==
+    // ]
+    // This indicates the CRLF is present and the output is chunked.
+    // We'll assert that the encoded string contains the CRLF.
+    assertTrue("Instance encode() should append CRLF and chunk output", encoded.contains("\r\n"));
+    // Also check the length to be sure it reflects chunking.
+    // The example output shows a split. Let's check the length of the first line.
+    int crlfIndex = encoded.indexOf("\r\n");
+    assertTrue("CRLF should be found", crlfIndex != -1);
+    assertEquals("First chunk should be 76 characters", 76, crlfIndex);
+}

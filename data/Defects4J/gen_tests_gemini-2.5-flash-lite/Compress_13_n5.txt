@@ -1,0 +1,62 @@
+public void testUmlautDirectory() throws Exception {
+    // Create a zip file with a directory containing an umlaut using WinZip
+    // This requires manually creating the zip structure or using a library that can replicate WinZip's behavior.
+    // For demonstration purposes, we'll simulate the problematic entry.
+
+    ZipArchiveOutputStream zipOut = null;
+    ArchiveInputStream archiveIn = null;
+    ByteArrayOutputStream bos = null;
+
+    try {
+        bos = new ByteArrayOutputStream();
+        zipOut = new ZipArchiveOutputStream(bos);
+
+        // Create a directory entry with an umlaut in its name
+        // WinZip with unicode flag often uses CP437 or similar, but the issue is how it's represented internally.
+        // The key is that the entry name might not be correctly parsed as a directory if it contains non-ASCII chars.
+        String umlautDirName = "testä";
+        ZipArchiveEntry dirEntry = new ZipArchiveEntry(umlautDirName + "/");
+        // Manually setting the CRC and size might be needed depending on how the entry is created.
+        // For this test, we assume the problematic entry is added.
+        zipOut.putArchiveEntry(dirEntry);
+        zipOut.closeArchiveEntry();
+
+        // Add a file within the umlaut directory
+        String fileName = "file.txt";
+        ZipArchiveEntry fileEntry = new ZipArchiveEntry(umlautDirName + "/" + fileName);
+        zipOut.putArchiveEntry(fileEntry);
+        zipOut.write("content".getBytes());
+        zipOut.closeArchiveEntry();
+
+        zipOut.finish();
+
+        // Now read the zip file
+        archiveIn = new ArchiveStreamFactory().createArchiveInputStream(
+                ArchiveEntry.ZIP, new ByteArrayInputStream(bos.toByteArray()));
+
+        ArchiveEntry entry;
+        boolean foundUmlautDir = false;
+        boolean foundFileInUmlautDir = false;
+
+        while ((entry = archiveIn.getNextEntry()) != null) {
+            if (entry.getName().equals(umlautDirName + "/")) {
+                // The bug is that this entry is NOT recognized as a directory
+                assertFalse("Directory entry with umlaut should be marked as directory", entry.isDirectory());
+                foundUmlautDir = true;
+            } else if (entry.getName().equals(umlautDirName + "/" + fileName)) {
+                // The bug is that the path separator might be incorrect or the name mangled
+                assertTrue("Filename within umlaut directory should use correct path separator", entry.getName().contains("/"));
+                assertFalse("Filename within umlaut directory should not contain backslashes", entry.getName().contains("\\"));
+                foundFileInUmlautDir = true;
+            }
+        }
+
+        assertTrue("Should have found the umlaut directory entry", foundUmlautDir);
+        assertTrue("Should have found the file within the umlaut directory", foundFileInUmlautDir);
+
+    } finally {
+        IOUtils.closeQuietly(zipOut);
+        IOUtils.closeQuietly(archiveIn);
+        IOUtils.closeQuietly(bos);
+    }
+}

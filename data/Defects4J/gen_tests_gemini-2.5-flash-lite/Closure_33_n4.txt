@@ -1,0 +1,68 @@
+import com.google.javascript.jscomp.CompilationLevel;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class WeirdObjectLiteralInvalidPropertyErrorTest {
+
+    @Test
+    public void testWeirdObjectLiteralInvalidPropertyError() {
+        String jsCode = "
+            function temp1(opt_data) {
+              return opt_data.text;
+            }
+
+            function temp2(opt_data) {
+              function __inner() {
+                return temp1(opt_data.activity);
+              }
+              return __inner();
+            }
+
+            function temp3(opt_data) {
+              return 'n: ' + opt_data.n + ', t: ' + opt_data.text + '.';
+            }
+
+            function callee() {
+              var output = temp3({
+                n: 0,
+                text: 'a string',
+                b: true
+              });
+              alert(output);
+            }
+
+            callee();
+        ";
+
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setCompilationLevel(CompilationLevel.ADVANCED_OPTIMIZATIONS);
+        options.addErrorsForName("accessControls");
+        options.addErrorsForName("checkTypes");
+        options.addErrorsForName("checkVars");
+
+        SourceFile sourceFile = SourceFile.fromCode("repro.js", jsCode);
+        compiler.compile(SourceFile.NO_TRANSPILED_SOURCES, new SourceFile[]{sourceFile}, options);
+
+        // The bug is indicated by the presence of a specific error message.
+        // We are checking if the compiler reports an error related to parameter mismatch.
+        // The exact error message might change between compiler versions, so we check for a pattern.
+        String errors = compiler.getErrors().stream()
+                .map(diagnostic -> diagnostic.format(null))
+                .collect(java.util.stream.Collectors.joining("\n"));
+
+        // The original bug report mentions an error like:
+        // "actual parameter 1 of temp3 does not match formal parameter"
+        // We'll assert that such an error (or a similar type mismatch error) is present.
+        // If no errors are found, the test will fail because the bug is not reproduced.
+        // If the bug is fixed, the error will not be present, and this assertion will fail.
+        // This is how we confirm the bug is reproduced.
+        org.junit.Assert.assertTrue("Expected type mismatch error for temp3 parameter, but found none. Bug might be fixed or test setup is incorrect.",
+                errors.contains("actual parameter 1 of temp3 does not match formal parameter") ||
+                errors.contains("Required: {b: boolean, n: number, text: string}") ||
+                errors.contains("Found: {b: boolean, n: number, text: (string|undefined)}"));
+    }
+}

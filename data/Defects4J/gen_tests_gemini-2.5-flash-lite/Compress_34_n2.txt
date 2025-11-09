@@ -1,0 +1,121 @@
+public void testZipWithZeroSizedUXField() throws Exception {
+    // Construct a minimal zip file with a zero-sized "ux" extra field.
+    // This requires understanding the zip file format and the specific extra field structure.
+    // For simplicity and to avoid external dependencies for zip creation,
+    // we will create a byte array that mimics the problematic data structure
+    // as described in the bug report.
+
+    // Data as described in the bug report:
+    // 'UT' extended field with timestamp (9 bytes), followed by 0-sized 'ux' field (bytes 9-12)
+    byte[] problematicExtraData = new byte[] {
+        (byte)0x55, (byte)0x54, // 'UT' signature
+        (byte)0x05, (byte)0x00, // Length of UT data (5 bytes)
+        (byte)0x07, (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x00, // UT data (timestamp) - example values
+
+        (byte)0x75, (byte)0x78, // 'ux' signature
+        (byte)0x00, (byte)0x00  // Length of UX data (0 bytes)
+    };
+
+    // Create a minimal zip archive structure that includes this problematic extra data.
+    // This is a simplified representation and might not be a fully valid zip file for all scenarios,
+    // but it should be enough to trigger the bug in Commons Compress.
+
+    // Local file header for a dummy entry
+    byte[] localFileHeader = new byte[] {
+        (byte)0x50, (byte)0x4b, (byte)0x03, (byte)0x04, // Local file header signature
+        (byte)0x0a, (byte)0x00, // Version needed to extract
+        (byte)0x00, (byte)0x00, // General purpose bit flag
+        (byte)0x00, (byte)0x00, // Compression method
+        (byte)0x00, (byte)0x00, // Last mod file time and date
+        (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x00, // CRC-32
+        (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x00, // Compressed size
+        (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x00, // Uncompressed size
+        (byte)0x05, (byte)0x00, // File name length
+        (byte)0x0d, (byte)0x00, // Extra field length (5 bytes for filename + 13 bytes for our extra data)
+        'f', 'i', 'l', 'e', '.', 't', 'x', 't', // File name (e.g., "file.txt" - 8 bytes, but we need 5 for this example)
+    };
+    // Adjust file name length and extra field length based on the actual filename used
+    localFileHeader[26] = 8; // File name length (e.g., "file.txt")
+    localFileHeader[28] = (byte) (problematicExtraData.length + 8); // Extra field length = UT + UX + filename length
+
+    // Dummy file data (empty for this test)
+    byte[] fileData = new byte[0];
+
+    // Combine parts to form a minimal zip file
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    baos.write(localFileHeader);
+    baos.write(problematicExtraData);
+    baos.write(fileData);
+
+    // Central Directory File Header (simplified, might be needed for some parsers)
+    byte[] centralDirHeader = new byte[] {
+        (byte)0x50, (byte)0x4b, (byte)0x01, (byte)0x02, // Central directory file header signature
+        (byte)0x00, (byte)0x00, // Version made by
+        (byte)0x0a, (byte)0x00, // Version needed to extract
+        (byte)0x00, (byte)0x00, // General purpose bit flag
+        (byte)0x00, (byte)0x00, // Compression method
+        (byte)0x00, (byte)0x00, // Last mod file time and date
+        (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x00, // CRC-32
+        (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x00, // Compressed size
+        (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x00, // Uncompressed size
+        (byte)0x05, (byte)0x00, // File name length
+        (byte)0x0d, (byte)0x00, // Extra field length
+        (byte)0x00, (byte)0x00, // File comment length
+        (byte)0x00, (byte)0x00, // Disk number where file starts
+        (byte)0x00, (byte)0x00, // Internal file attributes
+        (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x00, // External file attributes
+        (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x00, // Relative offset of local file header
+        'f', 'i', 'l', 'e', '.', 't', 'x', 't' // File name
+    };
+    // Adjust lengths in central directory header as well
+    centralDirHeader[28] = 8; // File name length
+    centralDirHeader[30] = (byte) (problematicExtraData.length + 8); // Extra field length
+
+    // End of Central Directory Record
+    byte[] eocd = new byte[] {
+        (byte)0x50, (byte)0x4b, (byte)0x05, (byte)0x06, // End of central directory signature
+        (byte)0x00, (byte)0x00, // Number of this disk
+        (byte)0x00, (byte)0x00, // Disk where central directory starts
+        (byte)0x01, (byte)0x00, // Number of central directory records on this disk
+        (byte)0x01, (byte)0x00, // Total number of central directory records
+        (byte) (centralDirHeader.length + 8), (byte)0x00, (byte)0x00, (byte)0x00, // Size of central directory
+        (byte) (localFileHeader.length + problematicExtraData.length + fileData.length), (byte)0x00, (byte)0x00, (byte)0x00, // Offset of start of central directory
+        (byte)0x00, (byte)0x00 // .ZIP file comment length
+    };
+
+    baos.write(centralDirHeader);
+    baos.write(eocd);
+
+    byte[] zipContent = baos.toByteArray();
+
+    // Use Commons Compress directly to test the specific component
+    ZipArchiveInputStream zipInputStream = null;
+    try {
+        zipInputStream = new ZipArchiveInputStream(new ByteArrayInputStream(zipContent));
+        ZipArchiveEntry entry = zipInputStream.getNextZipEntry();
+        assertNotNull("Should have at least one zip entry", entry);
+
+        // The crucial part: accessing extra fields might trigger the bug.
+        // We don't need to assert specific values, just that it doesn't throw an exception.
+        // The bug report indicates the exception happens during parsing.
+        // If getNextZipEntry() or reading the entry's data completes without exception,
+        // the bug is fixed.
+        
+        // Attempting to read the entry data or its extra fields might be necessary
+        // depending on how Commons Compress parses.
+        // For this specific bug, the parsing of extra fields happens when iterating entries.
+        // So, just successfully getting the next entry and checking its properties
+        // should be enough to verify the fix.
+
+        // We can also explicitly try to get the extra fields to be sure.
+        // The bug occurs in X7875_NewUnix.parseFromLocalFileData, which is called
+        // internally by ZipArchiveEntry.getExtraFields().
+        entry.getExtraFields();
+
+    } catch (ArrayIndexOutOfBoundsException e) {
+        // If this exception is caught, the bug is still present.
+        fail("ArrayIndexOutOfBoundsException occurred while parsing zip entry with zero-sized 'ux' field: " + e.getMessage());
+    } finally {
+        IOUtils.closeQuietly(zipInputStream);
+    }
+}

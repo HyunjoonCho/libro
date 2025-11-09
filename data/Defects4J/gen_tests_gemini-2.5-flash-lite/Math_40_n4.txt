@@ -1,0 +1,39 @@
+public void testBracketingNthOrderBrentSolverExceedsMaxIterationCount() {
+    BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver(1e-10, 1e-10, 1e-10, 100);
+    // Mock a function where one boundary is extremely close to zero and the other is not
+    // This setup should trigger the described issue where the solver always updates the same boundary
+    // and potentially exceeds max iterations.
+    UnivariateFunction function = new UnivariateFunction() {
+        public double value(double x) {
+            // A function that has a root very close to 12500.0
+            // For x close to 12500, the value should be close to zero.
+            // Let's simulate the scenario described: yA is very close to zero, yB is not.
+            if (Math.abs(x - 12500.0) < 1e-6) {
+                return 1e-16 * (x - 12500.0); // Very small value near the root
+            } else if (x > 12500.0) {
+                return (x - 12500.0) * -1000; // Negative value for x > 12500
+            } else {
+                return (x - 12500.0) * 1000; // Positive value for x < 12500
+            }
+        }
+    };
+
+    // Set up initial bracket that reflects the bug description
+    double xA = 12500.0;
+    double yA = 3.7e-16; // Very close to zero
+    double xB = 12500.03;
+    double yB = -7.0e-5; // Not as close to zero
+
+    // The solver might throw ConvergenceException or MaxCountExceededException
+    // We expect it to fail to converge within max iterations due to the described issue.
+    try {
+        solver.solve(100, function, xA, xB, GoalType.MAXIMIZE); // Using MAXIMIZE to match the yB sign
+        fail("Expected an exception to be thrown due to solver issue.");
+    } catch (Exception e) {
+        // We expect an exception, but the exact type might vary.
+        // The key is that it fails to converge as described.
+        // For robustness, check if the exception indicates a failure to converge.
+        assertTrue("Exception should indicate a convergence failure.",
+                   e instanceof ConvergenceException || e instanceof MaxCountExceededException);
+    }
+}

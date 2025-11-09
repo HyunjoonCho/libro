@@ -1,0 +1,110 @@
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class TarArchiveInputStreamAixSymlinkTest {
+
+    @Test
+    public void testAixSymlinkHandling() throws IOException {
+        // This is a simplified representation of the problematic AIX tar header for a symlink.
+        // In a real scenario, this would be read from a file.
+        // The key issue is the 'NUL' byte at the beginning of the mode field, which TarUtils.parseOctal fails on.
+        // The following byte array simulates a tar entry with a symlink.
+        // The actual content of the symlink and the file it points to are not critical for this test.
+        // The critical part is the header structure that causes the parseOctal error.
+        byte[] tarHeaderWithAixSymlink = new byte[512]; // Standard tar header size
+
+        // Simulate fields that would lead to the error.
+        // This is a simplified and potentially incomplete representation of a real AIX tar header.
+        // The goal is to trigger the parseOctal exception with a leading NUL.
+
+        // Name (e.g., "symlink_name") - padded to 100 bytes
+        String name = "symlink_name";
+        System.arraycopy(name.getBytes(), 0, tarHeaderWithAixSymlink, 0, name.length());
+
+        // Mode - This is the critical part. AIX tar might include a NUL byte here or in a way
+        // that TarUtils.parseOctal interprets as invalid for octal.
+        // For demonstration, we'll try to mimic a problematic mode field.
+        // The original error message suggests: Invalid byte 0 at offset 0 in '{NUL}1722000726 ' len=12
+        // This implies the mode field might be corrupted or malformed in a way that TarUtils.parseOctal cannot handle.
+        // We'll set a mode that might be interpreted incorrectly, focusing on triggering the specific exception.
+        // A common mode for symlinks is 0120000 (octal) for S_IFLNK.
+        // Let's try to simulate a header that might cause TarUtils.parseOctal to fail.
+        // The original error message points to the mode field.
+        // Let's set a placeholder for mode that might be incorrectly parsed.
+        // The TarUtils.parseOctal method expects a null-terminated string of octal digits.
+        // If the first byte is NUL, it will fail.
+        // We'll manually place a NUL byte followed by some octal-like characters.
+        tarHeaderWithAixSymlink[100] = (byte) 0; // NUL byte at the start of mode
+        String modeStr = "1722000726"; // Example string, likely not a valid mode but to trigger parseOctal
+        System.arraycopy(modeStr.getBytes(), 0, tarHeaderWithAixSymlink, 101, modeStr.length());
+
+
+        // Other fields would normally be present, like UID, GID, size, mtime, etc.
+        // For this test, we only need to ensure the structure leads to the parseOctal error.
+        // Size (0 for symlinks usually, but the error is in mode parsing)
+        // Mtime
+        // Checksum
+
+        // Create a ByteArrayInputStream from the simulated tar header.
+        // We need to ensure the stream contains enough data to be read as a tar entry.
+        // TarArchiveInputStream reads 512 bytes for the header.
+        InputStream is = new ByteArrayInputStream(tarHeaderWithAixSymlink);
+
+        TarArchiveInputStream tarIn = null;
+        try {
+            tarIn = new TarArchiveInputStream(is);
+            ArchiveEntry entry = tarIn.getNextTarEntry();
+            // The test should fail at getNextTarEntry() if the issue is not fixed.
+            // If it passes, it means the parsing was successful.
+            // For this bug reproduction, we expect an exception.
+            // If no exception is thrown, the test might be considered to pass incorrectly
+            // if the goal is to *reproduce* the failure.
+            // To *reproduce* the failure, we'd typically assert that an exception is thrown.
+            // However, the prompt asks for a method that *reproduces* the failure behavior,
+            // implying the test itself would fail if run against the buggy code.
+            // If run against fixed code, this test would pass.
+            // Let's structure it to verify the fix: it should NOT throw an exception.
+
+            // If we reach here, the parsing did not throw the expected exception.
+            // This part of the test verifies the fix.
+            assertTrue("Should have been able to parse the tar entry", entry != null);
+            assertTrue("Entry should be a TarArchiveEntry", entry instanceof TarArchiveEntry);
+            TarArchiveEntry tarEntry = (TarArchiveEntry) entry;
+
+            // Further assertions to check if the entry was correctly identified as a symlink
+            // based on the *corrected* parsing.
+            // This part depends on how the fix is implemented and what the expected outcome is.
+            // For example, checking the mode or type field after successful parsing.
+
+        } catch (IOException e) {
+            // If an IOException occurs, and it's the specific one related to parsing,
+            // this test would fail if run against the buggy version.
+            // To assert the *failure* reproduction, we would check the exception type.
+            // For example:
+            // assertTrue(e.getMessage().contains("Invalid byte 0 at offset 0"));
+            // However, the prompt asks for a method that *reproduces* the failure,
+            // which implies the test itself would fail on the buggy code.
+            // If the test *passes* on the fixed code, it means it correctly handles the case.
+
+            // Let's assume the goal is to write a test that *would* fail on the buggy code,
+            // and pass on the fixed code.
+            // If we catch the specific error, it means the buggy code was triggered.
+            // We can re-throw or assert failure here.
+            // For clarity, let's re-throw to make the test fail if the buggy behavior occurs.
+            throw e;
+        } finally {
+            if (tarIn != null) {
+                tarIn.close();
+            }
+        }
+    }
+}

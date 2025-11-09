@@ -1,0 +1,50 @@
+public void testZipFileCorruptionOnHashCollision() throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ZipArchiveOutputStream zaos = new ZipArchiveOutputStream(baos);
+
+        // Create entries with names that are likely to collide (e.g., different casing)
+        // The exact collision depends on the hash function implementation,
+        // but using similar strings increases the probability.
+        String baseName = "file";
+        String suffix1 = "A";
+        String suffix2 = "a"; // Likely to cause a hash collision with suffix1 depending on case sensitivity
+
+        // Add first entry
+        ZipArchiveEntry entry1 = new ZipArchiveEntry(baseName + suffix1 + ".txt");
+        zaos.putArchiveEntry(entry1);
+        zaos.write(("Content of " + baseName + suffix1).getBytes());
+        zaos.closeArchiveEntry();
+
+        // Add second entry with a name that might collide
+        ZipArchiveEntry entry2 = new ZipArchiveEntry(baseName + suffix2 + ".txt");
+        zaos.putArchiveEntry(entry2);
+        zaos.write(("Content of " + baseName + suffix2).getBytes());
+        zaos.closeArchiveEntry();
+
+        zaos.finish();
+        zaos.close();
+
+        // Now, try to read the zip file and verify entries.
+        // The corruption manifests as missing or incorrect entries when unzipping.
+        // We can simulate this by checking the number of entries and their names.
+        ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+        ZipArchiveInputStream zais = new ZipArchiveInputStream(bais);
+
+        int count = 0;
+        java.util.List<String> entryNames = new java.util.ArrayList<>();
+        ArchiveEntry entry;
+        while ((entry = zais.getNextEntry()) != null) {
+            count++;
+            entryNames.add(entry.getName());
+        }
+        zais.close();
+
+        // Assert that both entries are present. If corruption occurred, one might be missing
+        // or replaced by the other due to incorrect offset handling.
+        assertEquals(2, count);
+        assertTrue(entryNames.contains(baseName + suffix1 + ".txt"));
+        assertTrue(entryNames.contains(baseName + suffix2 + ".txt"));
+
+        // A more robust test might involve trying to extract and verify content,
+        // but verifying presence and names is a good start for this specific bug.
+    }

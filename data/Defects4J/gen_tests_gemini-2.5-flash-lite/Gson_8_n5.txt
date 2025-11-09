@@ -1,0 +1,132 @@
+import com.google.gson.Gson;
+import org.junit.Test;
+import static org.junit.Assert.assertNotNull;
+
+public class GsonAndroidBugTest {
+
+    // Dummy classes to represent the structure of the JSON
+    // In a real test, these would be your actual domain objects.
+    static class FeedItem {
+        String feedItemChannel;
+        EstimatedData estimatedData;
+        HashedObjects hashedObjects;
+        boolean isDeleted;
+        int isDeletingEventually;
+        Object mutex; // This is the problematic field
+        OperationSetQueue[] operationSetQueue;
+        SaveEvent saveEvent;
+        State state;
+        TaskQueue taskQueue;
+    }
+
+    static class EstimatedData {
+        String feedTopic;
+        int feedComments;
+        String createdBy;
+        String feedQuestion;
+        String feedDesc;
+    }
+
+    static class HashedObjects {
+        // Assuming this is an empty object in the example
+    }
+
+    static class OperationSetQueue {
+        // Assuming this is an empty object in the example
+    }
+
+    static class SaveEvent {
+        Object[] callbacks; // Assuming this is an empty array
+    }
+
+    static class State {
+        String className;
+        long createdAt;
+        boolean isComplete;
+        String objectId;
+        ServerData serverData;
+        long updatedAt;
+    }
+
+    static class ServerData {
+        String feedTopic;
+        String createdBy;
+        int feedComments;
+        String feedQuestion;
+        String feedDesc;
+    }
+
+    static class TaskQueue {
+        Lock lock;
+    }
+
+    static class Lock {
+        Sync sync;
+    }
+
+    static class Sync {
+        int state;
+    }
+
+    @Test
+    public void testJniErrorWithGsonOnAndroid() {
+        Gson gson = new Gson();
+        String jsonString = "{\n" +
+                "   \"feedItemChannel\":\"mdldsrgXN1\",\n" +
+                "   \"estimatedData\":{\n" +
+                "      \"feedTopic\":\"Testing\",\n" +
+                "      \"feedComments\":2,\n" +
+                "      \"createdBy\":\"KXTQtpfBSW\",\n" +
+                "      \"feedQuestion\":\"Test Question \",\n" +
+                "      \"feedDesc\":\"Test \"\n" +
+                "   },\n" +
+                "   \"hashedObjects\":{ \n" +
+                "   },\n" +
+                "   \"isDeleted\":false,\n" +
+                "   \"isDeletingEventually\":0,\n" +
+                "   \"mutex\":{ \n" + // This field is causing issues
+                "   },\n" +
+                "   \"operationSetQueue\":[\n" +
+                "      {\n" +
+                "      }\n" +
+                "   ],\n" +
+                "   \"saveEvent\":{\n" +
+                "      \"callbacks\":[\n" +
+                "      ]\n" +
+                "   },\n" +
+                "   \"state\":{\n" +
+                "      \"className\":\"FeedItem\",\n" +
+                "      \"createdAt\":1458798818385,\n" +
+                "      \"isComplete\":true,\n" +
+                "      \"objectId\":\"mdldsrgXN1\",\n" +
+                "      \"serverData\":{\n" +
+                "         \"feedTopic\":\"TestTopic\",\n" +
+                "         \"createdBy\":\"KXTQtpfBSW\",\n" +
+                "         \"feedComments\":2,\n" +
+                "         \"feedQuestion\":\"Test Question \",\n" +
+                "         \"feedDesc\":\"Test \"\n" +
+                "      },\n" +
+                "      \"updatedAt\":1458803553636\n" +
+                "   },\n" +
+                "   \"taskQueue\":{\n" +
+                "      \"lock\":{\n" +
+                "         \"sync\":{\n" +
+                "            \"state\":0\n" +
+                "         }\n" +
+                "      }\n" +
+                "   }\n" +
+                "}";
+
+        // The error occurs when Gson tries to instantiate objects like 'Lock'
+        // which are internal Java concurrency classes, especially on Android's ART runtime.
+        // This test aims to trigger that instantiation attempt.
+        // A successful test would be one that *doesn't* crash and returns a non-null object.
+        // If this test throws an exception, it reproduces the reported bug.
+        FeedItem item = gson.fromJson(jsonString, FeedItem.class);
+
+        // Assert that the object was created successfully.
+        // If the JNI error occurs, this line will not be reached.
+        assertNotNull("FeedItem should not be null", item);
+        assertNotNull("FeedItem.mutex should not be null", item.mutex); // Even if empty, it should be instantiated
+    }
+}

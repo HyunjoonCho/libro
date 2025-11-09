@@ -1,0 +1,36 @@
+public void testProcessCommonJSModules_checkTypesEnabled() throws Exception {
+    String echoJs = "define(function() { return { echo: function(val) { window.console.log(val); } }});";
+    String echoMainJs = "var echo = require('echo'); echo.echo('hello world');";
+
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setPrettyPrint(true);
+    options.setErrorPassing(CheckLevel.ERROR, "checkTypes");
+    options.setClosurePass(true);
+    options.setAngularPass(true);
+    options.setProcessCommonJSModules(true);
+    options.setTransformAMDToModuleRelationship(true);
+    options.setCommonJSEntryModule("echo-main.js");
+
+    List<SourceFile> inputs = new ArrayList<>();
+    inputs.add(SourceFile.fromCode("echo.js", echoJs));
+    inputs.add(SourceFile.fromCode("echo-main.js", echoMainJs));
+
+    // The original bug report describes an error during compilation,
+    // so we'll assert that compilation fails with a specific error.
+    // The exact error message might vary slightly depending on the compiler version,
+    // but the core issue is the "module$exports never defined" error.
+    // We are simulating the scenario that leads to this error.
+
+    try {
+        compiler.compile(inputs, Collections.emptyList(), options);
+        // If compilation succeeds unexpectedly, fail the test.
+        fail("Compilation should have failed due to module$exports error.");
+    } catch (RuntimeException e) {
+        // Check if the exception message contains the expected error.
+        // The exact error message can be brittle, so we check for a key part.
+        String errorMessage = e.getMessage();
+        assertTrue("Expected error message related to 'module$exports' not found in: " + errorMessage,
+                   errorMessage.contains("module$exports never defined"));
+    }
+}

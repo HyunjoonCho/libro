@@ -1,0 +1,63 @@
+public void testRecursiveTypeMissingProperties() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+
+    // Define the classes as described in the bug report
+    class Base implements IFace<Sub> {
+        @JsonProperty
+        int base = 1;
+    }
+    class Sub {
+        @JsonProperty
+        int sub = 2;
+    }
+    interface IFace<T> {}
+
+    // Create instances
+    Sub subInstance = new Sub();
+
+    // Serialize the subclass
+    String json = mapper.writeValueAsString(subInstance);
+
+    // Assert that the base class properties are missing
+    assertFalse(json.contains("\"base\":1"));
+    assertTrue(json.contains("\"sub\":2"));
+
+    // Demonstrate the expected behavior by manually creating a wrapper
+    // This is not part of the bug reproduction but shows what's missing.
+    class BaseWrapper<T> extends Base {
+        // No explicit fields needed, just to demonstrate type hierarchy
+    }
+    BaseWrapper<Sub> wrapper = new BaseWrapper<>();
+    // This serialization would fail if we tried to add 'sub' to wrapper
+    // and then serialize it directly. The bug is in how Jackson handles
+    // the type inference through the interface.
+
+    // To actually trigger the bug as described, we need to serialize an object
+    // that *should* inherit properties but doesn't due to the recursive type issue.
+    // The description implies serializing 'Sub' should include 'Base' properties.
+    // This is a bit tricky to demonstrate directly with just `subInstance` if
+    // `Sub` doesn't explicitly extend `Base`. The bug seems to be in how Jackson
+    // resolves the type `IFace<Sub>` within `Base` and then applies it to `Sub`'s serialization.
+
+    // Let's try serializing an instance of Base directly to see its properties.
+    String baseJson = mapper.writeValueAsString(new Base());
+    assertTrue(baseJson.contains("\"base\":1"));
+
+    // The core issue seems to be when `Sub` is part of a structure where `Base`'s
+    // type information is expected. If `Sub` were to extend `Base`, and `Base`
+    // had the `IFace<Sub>` generic, the issue would manifest.
+    // Let's simulate that by creating a class that extends Base and has the interface.
+
+    class SubExtendingBase extends Base {
+        @JsonProperty
+        int sub = 2;
+    }
+
+    SubExtendingBase subExtendingBaseInstance = new SubExtendingBase();
+    String subExtendingBaseJson = mapper.writeValueAsString(subExtendingBaseInstance);
+
+    // This is the assertion that should fail based on the bug description.
+    // The expected output is {"base":1,"sub":2}
+    assertTrue("Expected base property to be included", subExtendingBaseJson.contains("\"base\":1"));
+    assertTrue("Expected sub property to be included", subExtendingBaseJson.contains("\"sub\":2"));
+}

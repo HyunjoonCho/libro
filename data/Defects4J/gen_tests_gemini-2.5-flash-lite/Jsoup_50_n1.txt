@@ -1,0 +1,170 @@
+public void testUtf16Bom() throws Exception {
+    byte[] utf16Bom = {(byte) 0xFE, (byte) 0xFF}; // UTF-16 Big Endian BOM
+    byte[] data = {(byte) 0x00, (byte) 0x61}; // "a" in UTF-16 BE
+    InputStream stream = new ByteArrayInputStream(ArrayUtils.addAll(utf16Bom, data));
+    ByteString byteString = ByteString.read(stream, 1024); // Use a reasonable buffer size
+    String html = DataUtil.parseByteData(byteString, "UTF-8", "http://example.com").getWholeDocument(); // Force UTF-8 for testing the bug
+    // The bug is that it should detect UTF-16 BE, but due to incorrect BOM handling,
+    // it might misinterpret the characters or fail to parse correctly.
+    // We expect it to not parse 'a' correctly if it's treated as UTF-8.
+    // A correct UTF-16 BE parse of "a" would result in "a".
+    // If it's incorrectly parsed as UTF-8, the null bytes might cause issues.
+    // The exact failure mode can vary, but a common outcome is incorrect character representation or an exception.
+    // For this test, we'll assert that it doesn't produce the expected character 'a'
+    // if the UTF-8 assumption is made incorrectly.
+
+    // If the code correctly identifies UTF-16 BE, it should produce "a".
+    // If it incorrectly assumes UTF-8 and processes the bytes, it might produce something else or throw an error.
+    // The bug description implies it *assumes* UTF-8 when it sees a BOM.
+    // Let's test for the outcome of that incorrect assumption.
+
+    // A more robust test would involve checking the actual bytes or a specific exception,
+    // but given the description, we'll check the parsed string.
+    // If it was correctly parsed as UTF-16 BE, it would be "a".
+    // If it was incorrectly parsed as UTF-8, the null bytes would likely lead to a different representation or error.
+    // Let's assume the bug leads to an incorrect character representation.
+    // For simplicity, we'll assert it's NOT the expected character 'a' if the bug is present and UTF-8 is assumed.
+    // This might need adjustment based on the exact failure behavior observed.
+
+    // The intention of the test is to trigger the faulty BOM detection.
+    // The code attempts to parse the stream. If the BOM is misidentified,
+    // the subsequent character decoding will be wrong.
+    // The description implies the code *always* assumes UTF-8 if a BOM is detected,
+    // which is the core of the bug.
+    // A correct parse of the UTF-16 BE bytes {(byte) 0x00, (byte) 0x61} should yield "a".
+    // If it's treated as UTF-8, it's likely to produce garbage or an error.
+
+    // Let's try to parse it and see what happens. The bug is in DataUtil.parseByteData.
+    // It checks for BOM, finds one, and then uses the provided charset (UTF-8 in this case)
+    // to decode the bytes *after* the BOM. The problem is that the BOM itself
+    // is part of the byte stream, and its bytes are interpreted according to the
+    // *assumed* charset.
+
+    // The fix involves checking the BOM bytes *before* assuming a charset.
+    // The current code:
+    // 1. Reads bytes.
+    // 2. Checks for BOM. Finds FE FF.
+    // 3. Assumes UTF-8 (incorrectly).
+    // 4. Uses UTF-8 to decode the *entire* byte stream (including BOM bytes).
+    // This will corrupt the data.
+
+    // Let's construct a scenario that should highlight this.
+    // We are providing UTF16 BE BOM and UTF16 BE data.
+    // The code should ideally detect it's UTF16 BE and decode accordingly.
+    // Instead, it detects *a* BOM and *assumes* UTF-8.
+    // So, it tries to decode FE FF 00 61 as UTF-8.
+    // UTF-8 decoding of FE FF is invalid. This might lead to an exception or replacement characters.
+
+    // Let's refine the test to specifically check for the incorrect UTF-8 assumption.
+    // We'll use a known UTF-16 BE sequence and expect it to be mangled if treated as UTF-8.
+
+    byte[] utf16BeBom = {(byte) 0xFE, (byte) 0xFF};
+    // The character 'A' in UTF-16 BE is 0x0041
+    byte[] utf16BeData = {(byte) 0x00, (byte) 0x41}; // 'A'
+    InputStream inputStream = new ByteArrayInputStream(ArrayUtils.addAll(utf16BeBom, utf16BeData));
+
+    // The bug: DataUtil.parseByteData will detect the BOM, *assume* it's UTF-8,
+    // and then try to decode the entire byte stream (including the BOM bytes) as UTF-8.
+    // The UTF-8 interpretation of FE FF is invalid.
+    // If the code were correct, it would detect UTF-16 BE and decode (byte)0x00, (byte)0x41 as 'A'.
+    // Because it incorrectly assumes UTF-8, the output will likely be garbage or an exception.
+
+    // We'll test the outcome of this incorrect assumption.
+    // The `parseByteData` method returns a `Document`. We'll get the whole document content.
+    // The `DataUtil.parseByteData` method internally uses `DataUtil.load(inputStream, charset, baseUri)`
+    // where `charset` is determined by the BOM detection logic.
+    // If the BOM is detected, it overrides the provided `charset` argument.
+    // The bug is that it overrides it with an incorrect assumption (UTF-8).
+
+    // Let's simulate the call and check the output.
+    // The `parseByteData` signature is `parseByteData(ByteString byteData, String charset, String baseUri)`
+    // The `charset` argument here is the *default* if no BOM is found.
+    // The bug is that if a BOM *is* found, it incorrectly assumes UTF-8, regardless of the actual BOM type.
+
+    ByteString byteStringData = ByteString.of(ArrayUtils.addAll(utf16BeBom, utf16BeData));
+    String resultHtml = DataUtil.parseByteData(byteStringData, "UTF-8", "http://example.com").getWholeDocument();
+
+    // If the code worked correctly:
+    // BOM FE FF detected.
+    // It should identify this as UTF-16 BE.
+    // It should then decode the bytes 00 41 as 'A'.
+    // The resultHTML should contain "A".
+
+    // With the bug:
+    // BOM FE FF detected.
+    // It incorrectly assumes UTF-8.
+    // It tries to decode FE FF 00 41 as UTF-8.
+    // FE FF is not valid UTF-8. This will likely result in replacement characters or an exception during decoding.
+    // The description implies it *processes* it as UTF-8, not necessarily throws an exception immediately.
+    // So, the output string will likely contain incorrect characters.
+
+    // Let's assert that the output is NOT the expected character 'A'.
+    // This is a negative assertion to catch the bug.
+    // If the bug is fixed, this assertion will fail, indicating the fix is working.
+    assertFalse("UTF16 stream with BOM was incorrectly processed as UTF-8", resultHtml.contains("A"));
+
+    // A more direct test might involve checking the detected encoding if that were exposed.
+    // Since it's not directly exposed, we test the outcome of the incorrect encoding assumption.
+    // The key is that the BOM bytes themselves are then decoded by the wrong charset.
+    // For UTF-16 BE, BOM is FF FE. For UTF-8, it's EF BB BF.
+    // The bytes FE FF are not valid UTF-8 start bytes.
+    // When `java.nio.charset.Charset.forName("UTF-8").newDecoder().decode(buffer)` is called
+    // with the buffer containing FE FF 00 41, it will encounter invalid sequences.
+    // The default behavior for invalid sequences in Java's decoders is often to replace them with a placeholder character (like '?').
+    // So, we expect the output to not be 'A'.
+
+    // To be more precise, let's check what the incorrect UTF-8 decoding of FE FF might look like.
+    // FE (binary 11111110) is not a valid start byte in UTF-8.
+    // FF (binary 11111111) is not a valid start byte in UTF-8.
+    // So, the decoder will likely insert replacement characters for these bytes.
+    // For example, if the decoder replaces invalid bytes with '?', we might see something like "??A" or just garbage.
+    // The crucial part is that it's NOT "A".
+
+    // The `DataUtil.load` method is where the charset is determined and used.
+    // `Charset charset = DataUtil.getCharsetFromBom(inputStream);`
+    // `if (charset == null) { charset = Charset.forName(charsetArg); }`
+    // The bug is in `getCharsetFromBom`. It reads the first two bytes.
+    // If they are FF FE -> UTF-16 LE
+    // If they are FE FF -> UTF-16 BE
+    // If they are EF BB BF -> UTF-8
+    // If it's *any* other BOM (or no BOM), it uses the provided `charsetArg`.
+    // The description says: "if it finds one, incorrectly assumes that this was a UTF-8 BOM."
+    // This implies that *any* detected BOM leads to an UTF-8 assumption, which contradicts the standard BOM checks.
+    // The provided test case uses FE FF, which *is* the UTF-16 BE BOM.
+    // The bug description seems to suggest that even for FE FF, it assumes UTF-8.
+    // This is the behavior we need to test.
+
+    // Let's re-read the description carefully:
+    // "The handling of the character encoding in org.jsoup.helper.DataUtil.parseByteData(...) is bugged when the input is an UTF16 stream with unicode BOM. This method does a check for presence of a BOM and, if it finds one, incorrectly assumes that this was a UTF-8 BOM."
+
+    // This implies `DataUtil.getCharsetFromBom` is flawed. It should return the correct charset based on the BOM bytes.
+    // Instead, it seems to return UTF-8 for *any* BOM it finds, or at least for the UTF-16 BOMs.
+
+    // Let's construct the input bytes to trigger this.
+    // UTF-16 Big Endian BOM is FE FF.
+    // Let's add a simple character: 'X' in UTF-16 BE is 00 58.
+    byte[] inputBytes = {(byte) 0xFE, (byte) 0xFF, (byte) 0x00, (byte) 0x58}; // UTF-16 BE BOM + 'X'
+    ByteString byteStringInput = ByteString.of(inputBytes);
+
+    // Call parseByteData. The second argument is the default charset if no BOM is found.
+    // The bug is that if a BOM *is* found (like FE FF), it will incorrectly use UTF-8.
+    // So, it will try to decode FE FF 00 58 as UTF-8.
+    // FE FF are invalid UTF-8 sequences.
+    // The expected correct output would be 'X'.
+    // The buggy output will likely be garbage or replacement characters.
+
+    Document doc = DataUtil.parseByteData(byteStringInput, "UTF-8", "http://example.com");
+    String wholeDocument = doc.getWholeDocument();
+
+    // The crucial part is that the BOM bytes themselves are decoded by the wrong charset.
+    // If it was correctly decoded as UTF-16 BE, the bytes 00 58 would become 'X'.
+    // If it's incorrectly decoded as UTF-8:
+    // FE (11111110) - invalid UTF-8 start byte.
+    // FF (11111111) - invalid UTF-8 start byte.
+    // This will likely result in replacement characters.
+
+    // We assert that the resulting document does NOT contain the character 'X'.
+    // This test passes if the bug is present and the UTF-16 BOM is misinterpreted as UTF-8.
+    // If the bug is fixed, the test will fail, indicating the fix is working.
+    assertFalse("UTF16 stream with BOM was incorrectly processed as UTF-8", wholeDocument.contains("X"));
+}

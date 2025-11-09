@@ -1,0 +1,109 @@
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.JsonIdentityReference;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class ObjectIdTest {
+
+    public static class Foo {
+
+        @JsonIdentityReference(alwaysAsId = true)
+        public Bar bar1;
+
+        @JsonIdentityReference()
+        public Bar bar2;
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class)
+    public static class Bar {
+
+    }
+
+    @Test
+    public void testForwardReferences() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        // create structure to serialize
+        Foo mo = new Foo();
+        mo.bar1 = new Bar();
+        mo.bar2 = mo.bar1;
+
+        // serialize it
+        String result = mapper.writeValueAsString(mo);
+        
+        // Expected: {"bar1":1,"bar2":1} - both fields should reference the same id
+        // Actual in bug report: {"bar1":1,"bar2":{"@id":2}}
+        // We assert based on the *expected* correct behavior, assuming the test is to verify the fix.
+        // If the test is to reproduce the *bug*, then the assertion would be different.
+        // Based on the prompt "reproduces the failure behavior", we should assert the buggy output.
+        // However, the description implies a fix is needed, so let's assume the test verifies the fix.
+        // Re-reading the prompt: "reproduces the failure behavior". So we should assert the buggy output.
+        // The bug report shows the output `{"bar1":1,"bar2":{"@id":2}}`. Let's use that.
+        // However, the assertion needs to be more robust than a string match.
+        // Let's deserialize and check the structure.
+        
+        // To truly reproduce the failure, we'd need to check the *output string* of the buggy version.
+        // Since we are writing a test *method* to be inserted, it should ideally *fail* if the bug is present.
+        // Thus, we should assert the *correct* behavior, and the test will pass *only* if the bug is fixed.
+        // Let's re-evaluate the prompt: "Write a JUnit test method that reproduces the failure described in the bug report."
+        // This means the test should *fail* when the bug is present, and *pass* when the bug is fixed.
+        // So, we need to assert the *expected correct* behavior.
+
+        // Let's assume the fix makes it serialize as {"bar1":1,"bar2":1} or similar referencing the same ID.
+        // A more precise check would be to deserialize and verify the object graph.
+        
+        // For the sake of reproducing the *failure*, the test should assert the *buggy* output.
+        // But the instruction is to write a test *method* that *reproduces the failure*. This implies the test method *itself* demonstrates the problem.
+        // If the test method fails, it means the bug is present.
+
+        // Let's try to assert the buggy behavior.
+        // The output is {"bar1":1,"bar2":{"@id":2}}
+        // This implies bar1 gets ID 1, and bar2 *should* also be 1, but instead gets a new ID 2.
+
+        // To test this, we can serialize and then deserialize.
+        // The deserialization should result in bar1 and bar2 pointing to the same Bar object.
+        
+        Foo deserializedFoo = mapper.readValue(result, Foo.class);
+        
+        // The core of the bug is that bar1 and bar2 are treated as different instances during serialization
+        // even though they point to the same object.
+        // This leads to them getting different IDs or one being serialized as an object instead of an ID.
+        
+        // Let's assert that bar1 and bar2 are the same instance after deserialization.
+        // This will pass if the serialization *correctly* handles the identity,
+        // and will *fail* if the serialization fails to assign the same ID.
+        // This seems to be the most robust way to test the *effect* of the bug.
+        
+        // However, the prompt asks to reproduce the *failure behavior*.
+        // The failure behavior is that the output JSON is incorrect.
+        // Let's stick to asserting the *expected correct* behavior, which will fail if the bug is present.
+        
+        // The bug report shows `{"bar1":1,"bar2":{"@id":2}}`.
+        // The *correct* behavior should be `{"bar1":1,"bar2":1}`.
+
+        // Let's try to assert the correct serialization output.
+        // This is tricky because the IDs are generated.
+        // A better approach: deserialize and check object identity.
+        
+        assertEquals("bar1 and bar2 should reference the same Bar object after deserialization",
+                     deserializedFoo.bar1, deserializedFoo.bar2);
+        
+        // This test will pass if the serialization/deserialization round trip correctly preserves object identity.
+        // If the bug is present, the serialization will be faulty, and thus deserialization might also be faulty,
+        // or the assertion `deserializedFoo.bar1 == deserializedFoo.bar2` would correctly fail.
+        
+        // Let's consider the direct serialization output as described in the bug.
+        // The bug states output is `{"bar1":1,"bar2":{"@id":2}}`.
+        // The desired output is `{"bar1":1,"bar2":1}`.
+        // Asserting the *deserialized* object identity is the most reliable way to test the *effect* of the bug.
+        
+        // If the bug is present, Jackson will serialize `bar1` as `1` and `bar2` as `{"@id":2}`.
+        // When deserialized, `bar1` will be a `Bar` object with ID 1, and `bar2` will be a *new* `Bar` object with ID 2.
+        // Thus, `deserializedFoo.bar1 != deserializedFoo.bar2`.
+        // So, the assertion `assertEquals(deserializedFoo.bar1, deserializedFoo.bar2)` will fail if the bug is present.
+        // This fulfills the requirement of "reproduces the failure behavior" by providing a test that *fails* due to the bug.
+    }
+}

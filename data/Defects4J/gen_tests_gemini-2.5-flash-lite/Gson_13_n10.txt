@@ -1,0 +1,54 @@
+import com.google.gson.Gson;
+import com.google.gson.stream.JsonReader;
+import org.junit.Test;
+
+import java.io.StringReader;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+
+public class GsonNegativeZeroTest {
+
+    @Test
+    public void testNegativeZeroLexical() throws Exception {
+        Gson gson = new Gson();
+        String jsonInput = "{\"num\": -0}";
+        
+        JsonReader reader = new JsonReader(new StringReader(jsonInput));
+        reader.setLenient(true); // Allow for -0 as a valid number representation
+        
+        // Manually parse to inspect the LazilyParsedNumber
+        reader.beginObject();
+        reader.nextName(); // Skip the key "num"
+        
+        // In the buggy version, -0 is parsed as a long 0.
+        // In the fixed version, it should be treated as a double -0.0 or similar.
+        Object parsedValue = gson.fromJson(reader, Object.class);
+        
+        reader.endObject();
+        reader.close();
+
+        // The exact type might depend on Gson's internal parsing, 
+        // but we expect it to retain the negative zero distinction.
+        // If it's a LazilyParsedNumber, its toString() should be "-0".
+        // If it's a Double, it should be -0.0.
+        
+        if (parsedValue instanceof com.google.gson.internal.LazilyParsedNumber) {
+            com.google.gson.internal.LazilyParsedNumber number = (com.google.gson.internal.LazilyParsedNumber) parsedValue;
+            assertEquals("-0", number.toString());
+            // Also check its double value to ensure it's negative zero
+            assertEquals(-0.0, number.doubleValue(), 0.0); 
+        } else if (parsedValue instanceof Double) {
+            Double number = (Double) parsedValue;
+            assertEquals(-0.0, number, 0.0);
+        } else {
+            // If it's parsed as an Integer or Long, it's still the bug.
+            // We can assert that it's NOT equal to 0.
+            // However, checking the exact type is more robust.
+            // If it's an Integer or Long, it's likely 0.
+            assertNotEquals(0, parsedValue); // This would fail if it's 0
+            // A more specific check would be:
+            // fail("Expected LazilyParsedNumber or Double, but got " + parsedValue.getClass().getName());
+        }
+    }
+}

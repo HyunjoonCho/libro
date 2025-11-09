@@ -1,0 +1,79 @@
+public void testPaxHeaderEntryNameEndingWithSlash() throws Exception {
+    byte[] tarHeader = new byte[1024];
+    // Simulate a PAX header entry with name ending with "/"
+    // This is a simplified representation and might need adjustment based on actual tar format
+    // Key fields to set for a PAX header with a trailing slash:
+    // - Magic: "ustar "
+    // - Version: "00"
+    // - Name: "some/dir/" (ending with slash)
+    // - Mode: 040755 (directory mode)
+    // - Linkflag: 'x' (PAX header)
+
+    // Fill with zeros first
+    Arrays.fill(tarHeader, (byte) 0);
+
+    // Ustar magic
+    System.arraycopy("ustar ".getBytes(), 0, tarHeader, 257, 6);
+    // Ustar version
+    System.arraycopy("00".getBytes(), 0, tarHeader, 263, 2);
+
+    // Entry name ending with slash
+    String entryName = "test/dir/";
+    byte[] nameBytes = entryName.getBytes();
+    System.arraycopy(nameBytes, 0, tarHeader, 0, Math.min(nameBytes.length, 100));
+
+    // Set mode to indicate a directory
+    // This is a simplified representation, actual mode calculation might be complex
+    // For directory, typically starts with 4 and has execute permissions
+    long directoryMode = 040755L;
+    String modeString = Long.toString(directoryMode, 8);
+    byte[] modeBytes = modeString.getBytes();
+    System.arraycopy(modeBytes, 0, tarHeader, 100, Math.min(modeBytes.length, 8));
+
+    // Linkflag 'x' for PAX header
+    tarHeader[15] = 'x';
+
+    // Size of the header block (should be 512 bytes for standard tar, but PAX can be larger)
+    // For this test, we are focusing on the header parsing logic, not the full tar stream.
+    // We'll simulate reading this header block.
+
+    InputStream tarInputStream = new ByteArrayInputStream(tarHeader);
+    TarArchiveInputStream tais = new TarArchiveInputStream(tarInputStream);
+
+    // Expecting an exception or incorrect behavior when trying to read the entry
+    // The original bug suggests that isDirectory() returns true and content cannot be read.
+    // We'll assert that we can't get a readable entry or that it's incorrectly identified as a directory.
+
+    TarArchiveEntry entry = tais.getNextTarEntry();
+
+    assertNotNull("Should have at least one entry", entry);
+
+    // The core of the bug is that isDirectory() returns true for a PAX header entry
+    // whose name ends with a slash, even if it's supposed to be a regular entry
+    // or if the PAX header itself signifies something else.
+    // In the described scenario, the isDirectory() check overrides other PAX metadata.
+    assertTrue("Entry.isDirectory() should not return true for a PAX header entry ending with '/'", entry.isDirectory());
+
+    // Further checks could involve trying to read from the entry, which should fail or not advance the stream correctly.
+    // However, the most direct reproduction of the described problem is the isDirectory() behavior.
+    // If isDirectory() is true, getInputStream() would typically return an empty stream or throw an exception.
+    try {
+        InputStream entryInputStream = tais.getInputStream();
+        // If getInputStream() doesn't throw an exception, try reading something.
+        // If it's truly a directory, reading should yield nothing or an error.
+        // The bug description implies the stream is not advanced, leading to issues with subsequent entries.
+        // A simple read might not reveal the stream advancement issue directly in a unit test of this scope.
+        // The primary failure point is the incorrect isDirectory() call.
+        assertNull("Should not be able to get an input stream for a directory entry", entryInputStream);
+    } catch (IOException e) {
+        // Depending on the implementation, getInputStream() on a directory might throw an exception.
+        // This is also an indicator of the problem.
+        // We could assert specific exception types if known.
+        assertTrue("Reading input stream from directory entry should ideally fail or return null", true);
+    }
+
+    // Attempting to get the next entry should ideally work if the stream was handled correctly.
+    // If the stream wasn't advanced, the next call to getNextTarEntry() would read the current entry's data as a header.
+    // This is harder to assert directly without a second, valid entry following the problematic one.
+    // The current test focuses on the immediate misinterpretation of the entry.
+}

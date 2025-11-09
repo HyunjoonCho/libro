@@ -1,0 +1,50 @@
+public void testMixinAnnotationsLostWhenUsingMixinClassHierarchyWithNonMixinInterfaces() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.disable(MapperFeature.ALLOW_FINAL_FIELDS_AS_MUTATORS);
+    mapper.disable(MapperFeature.AUTO_DETECT_FIELDS);
+    mapper.disable(MapperFeature.AUTO_DETECT_GETTERS);
+    mapper.disable(MapperFeature.AUTO_DETECT_IS_GETTERS);
+    mapper.disable(MapperFeature.INFER_PROPERTY_MUTATORS);
+
+    // This is the configuration that causes the issue
+    mapper.setMixInAnnotation(Person.class, PersonMixin.class);
+
+    PersonImpl person = new PersonImpl();
+    person.setCity("New York"); // Assuming a setter exists or is implied for testing
+
+    // If the mixin annotations were correctly applied, "city" should be serialized.
+    // The test will fail if "city" is missing from the output.
+    String json = mapper.writeValueAsString(person);
+
+    // Assert that the city property is present in the JSON output.
+    // The exact assertion might depend on the expected JSON structure.
+    // Here, we'll check for the presence of "city" and its value.
+    assertTrue(json.contains("\"city\":\"New York\""));
+}
+
+// Helper classes and interfaces as described in the bug report
+interface Contact {
+    String getCity();
+}
+
+// Assume ContactImpl has a concrete implementation for getCity
+class ContactImpl implements Contact {
+    private String city;
+    public String getCity() { return city; }
+    public void setCity(String city) { this.city = city; }
+}
+
+// Mixin for Contact
+abstract class ContactMixin implements Contact {
+    @JsonProperty
+    public abstract String getCity();
+}
+
+interface Person extends Contact {}
+
+class PersonImpl extends ContactImpl implements Person {}
+
+// Mixin for Person
+abstract class PersonMixin extends ContactMixin implements Person {
+    // No additional annotations here, but it extends ContactMixin which has @JsonProperty
+}

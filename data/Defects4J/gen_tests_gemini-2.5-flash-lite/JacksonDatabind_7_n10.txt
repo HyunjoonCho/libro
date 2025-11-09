@@ -1,0 +1,49 @@
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.deser.TokenBufferDeserializer;
+import com.fasterxml.jackson.databind.util.TokenBuffer;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+public class TokenBufferDelegateDeserializationTest {
+
+    @Test
+    public void testDelegateDeserializationWithJsonCreator() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{ \"a\":1, \"b\":null }";
+
+        // Create a TokenBuffer that simulates the state described in the bug report
+        // where the parser is at FIELD_NAME "a" and the value is VALUE_NUMBER_INT 1.
+        TokenBuffer tb = new TokenBuffer(null, null);
+        tb.writeFieldName("a");
+        tb.writeNumber(1);
+
+        // Manually create a JsonParser from the TokenBuffer to test the delegate deserialization
+        JsonParser jp = tb.asParser();
+        jp.nextToken(); // Move to FIELD_NAME "a"
+
+        // Simulate the deserialization process that would lead to the bug
+        // In the actual bug, this happens within BeanDeserializer when calling
+        // TokenBuffer.copyCurrentStructure(). We are simulating the input state.
+        TokenBuffer delegateBuffer = new TokenBuffer(null, null);
+        delegateBuffer.copyCurrentStructure(jp);
+
+        // Assert the state of the delegateBuffer to reproduce the bug's observed behavior
+        // The bug report states the buffer ends up with [FIELD_NAME, VALUE_NUMBER_INT]
+        // representing only the "a":1 part.
+        assertNotNull(delegateBuffer.firstToken());
+        assertEquals(JsonParser.Token.FIELD_NAME, delegateBuffer.firstToken().getCurrentToken());
+        assertEquals("a", delegateBuffer.firstToken().getText());
+
+        delegateBuffer.nextToken();
+        assertNotNull(delegateBuffer.currentToken());
+        assertEquals(JsonParser.Token.VALUE_NUMBER_INT, delegateBuffer.currentToken());
+        assertEquals(1, delegateBuffer.getIntValue());
+
+        // After these two tokens, the buffer should be empty according to the bug description
+        delegateBuffer.nextToken();
+        assertEquals(null, delegateBuffer.currentToken());
+    }
+}

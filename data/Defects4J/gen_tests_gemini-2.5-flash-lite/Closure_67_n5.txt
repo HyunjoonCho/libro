@@ -1,0 +1,97 @@
+public void testAdvancedCompilationIssue() {
+    // This test case is designed to simulate the described scenario.
+    // Since we are testing the behavior of a compiler/minifier,
+    // we will use JavaScript execution within Java to verify the output.
+    // This requires a JavaScript engine like Rhino or Nashorn.
+
+    String originalCode = "function A() {" +
+                          "  this._x = 1;" +
+                          "}" +
+                          "A.prototype['func1'] = A.prototype.func1;" + // Mimicking the problematic part
+                          "A.prototype.func1 = function() {" +
+                          "  this._x = 2;" +
+                          "  this.func2();" +
+                          "};" +
+                          "A.prototype.func2 = function() {" +
+                          "  this._x = 3;" +
+                          "  this.func3();" + // func3 is not defined, but the bug is about func2
+                          "};" +
+                          "window['A'] = A;";
+
+    // In a real scenario, you would pass 'originalCode' to the advanced compilation process.
+    // The bug report describes the *output* of the advanced compilation.
+    // We need to simulate that output and test if it behaves as described.
+
+    // The described problematic output after advanced compilation:
+    String compiledOutput = "function a() {" +
+                            " this.a = 1" +
+                            "}" +
+                            "a.prototype.func1 = a.prototype.b = function() {" +
+                            " this.a = 2;" +
+                            " this.c() // Problem! func2 was renamed to c, but its definition was removed." +
+                            "};" +
+                            "window.A = a;";
+
+    // We need to execute this compiledOutput and check for the error.
+    // This requires a JavaScript engine. Assuming Nashorn is available (JDK 8+).
+    javax.script.ScriptEngineManager manager = new javax.script.ScriptEngineManager();
+    javax.script.ScriptEngine engine = manager.getEngineByName("nashorn"); // Or "rhino"
+
+    try {
+        // Execute the compiled code.
+        engine.eval(compiledOutput);
+
+        // Attempt to create an instance and call the problematic method.
+        // This should throw a TypeError because 'c' is not defined on the prototype.
+        // We expect an exception here.
+        try {
+            // Create an instance of 'a' (which is the compiled 'A').
+            // We need to access 'a' from the global scope after eval.
+            Object compiledA = engine.get("A"); // The compiled code assigns to window.A, which maps to global scope in Nashorn.
+            
+            // If engine.get("A") returns null, it means the assignment to window.A failed or wasn't present in the eval scope.
+            // Let's re-evaluate with a slightly different approach to ensure 'a' is accessible.
+            String fullyRunnableCompiledCode = "var window = {};\n" + compiledOutput + "\n var a = window.A;";
+            engine.eval(fullyRunnableCompiledCode);
+            compiledA = engine.get("a");
+
+
+            if (compiledA == null) {
+                fail("Compiled class 'a' not found in the script engine's global scope.");
+            }
+
+            // Instantiate the compiled class 'a'.
+            // This requires calling the constructor function.
+            // In Nashorn, we can use reflection or directly invoke it if it's a Java object representing the function.
+            // A simpler approach for testing is to assume the structure and try to call the method.
+            
+            // We need to find a way to instantiate 'a' and call 'func1'.
+            // This is tricky without knowing the exact JS engine's object model.
+            // A more robust test might involve parsing the compiled JS and building a Java object model,
+            // but that's beyond the scope of a simple JUnit test.
+
+            // Let's try to simulate the call and catch the expected error.
+            // We will execute a snippet that calls the method.
+            String callSnippet = "try { var instance = new a(); instance.func1(); } catch (e) { throw e; }";
+            engine.eval(callSnippet);
+            
+            // If we reach here, no exception was thrown, which means the bug did not manifest as expected.
+            fail("Expected a TypeError when calling func1, but no exception was thrown.");
+
+        } catch (javax.script.ScriptException e) {
+            // This is the expected path. We need to check if the exception is a TypeError
+            // and if it's related to the missing function 'c'.
+            if (e.getMessage() != null && e.getMessage().contains("TypeError") && e.getMessage().contains("c is not a function")) {
+                // The bug is reproduced.
+                assertTrue(true); // Test passes if the expected error occurs.
+            } else {
+                // An unexpected ScriptException occurred.
+                fail("Caught unexpected ScriptException: " + e.getMessage());
+            }
+        }
+
+    } catch (javax.script.ScriptException e) {
+        // Error during the initial evaluation of the compiled code.
+        fail("Failed to evaluate the compiled JavaScript code: " + e.getMessage());
+    }
+}

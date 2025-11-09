@@ -1,0 +1,105 @@
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+import java.util.Collections;
+import java.util.List;
+
+public class JacksonTest {
+
+    // Helper classes to reproduce the issue
+    @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
+    static class Node {
+        private final String id;
+        private Node parent;
+        private List<Node> children = Collections.emptyList();
+
+        @JsonCreator
+        public Node(String id) {
+            this.id = id;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public void setParent(Node parent) {
+            this.parent = parent;
+        }
+
+        public Node getParent() {
+            return parent;
+        }
+
+        public void setChildren(List<Node> children) {
+            this.children = children;
+        }
+
+        public List<Node> getChildren() {
+            return children;
+        }
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
+    static class NodeWrapper {
+        private String id;
+        private Node node;
+
+        @JsonCreator
+        public NodeWrapper(String id, Node node) {
+            this.id = id;
+            this.node = node;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public Node getNode() {
+            return node;
+        }
+    }
+
+    @Test
+    public void testJsonIdentityInfoWithCreatorAndCycles() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        // Create a cyclic structure
+        Node parentNode = new Node("parent");
+        Node childNode = new Node("child");
+
+        parentNode.setChildren(Collections.singletonList(childNode));
+        childNode.setParent(parentNode);
+
+        // Wrap the parent node
+        NodeWrapper wrapper = new NodeWrapper("wrapper", parentNode);
+
+        // Serialize
+        String json = mapper.writeValueAsString(wrapper);
+
+        // Deserialize
+        NodeWrapper deserializedWrapper = mapper.readValue(json, NodeWrapper.class);
+
+        // Assertions to check if deserialization worked correctly
+        // The core of the bug is that the 'parent' field of 'childNode' might not be correctly resolved
+        // or might be null after deserialization when it's a direct field of an object.
+        // When it's in a collection, it tends to work.
+
+        // Check the basic structure
+        assertEquals("wrapper", deserializedWrapper.getId());
+        Node deserializedParentNode = deserializedWrapper.getNode();
+        assertEquals("parent", deserializedParentNode.getId());
+
+        List<Node> children = deserializedParentNode.getChildren();
+        assertEquals(1, children.size());
+        Node deserializedChildNode = children.get(0);
+        assertEquals("child", deserializedChildNode.getId());
+
+        // This is the crucial assertion: check if the parent reference is correctly set
+        // In the buggy scenario, deserializedChildNode.getParent() might be null or incorrect.
+        assertEquals(deserializedParentNode, deserializedChildNode.getParent());
+    }
+}

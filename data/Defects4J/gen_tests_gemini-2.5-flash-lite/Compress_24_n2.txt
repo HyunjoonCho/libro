@@ -1,0 +1,36 @@
+public void testBigUserId() throws IOException {
+    byte[] header = new byte[512];
+    // Simulate a tar header with a large user ID (e.g., 62410554)
+    // The user ID field is at offset 108 and is 8 bytes long.
+    // We need to represent the number 62410554 in octal.
+    // 62410554 decimal is 01725113322 octal.
+    // Pad with nulls and spaces as per tar format.
+    // Let's set a valid name and size to avoid other issues.
+    String name = "testfile";
+    for (int i = 0; i < name.length(); i++) {
+        header[i] = (byte) name.charAt(i);
+    }
+    // Set mode (e.g., 0644)
+    TarUtils.putOctal(header, 100, 0644);
+    // Set user ID
+    TarUtils.putOctal(header, 108, 62410554); // This is the problematic value
+    // Set group ID
+    TarUtils.putOctal(header, 148, 512);
+    // Set size
+    TarUtils.putOctal(header, 156, 100);
+    // Set modification time
+    TarUtils.putOctal(header, 116, 1234567);
+    // Set typeflag (regular file)
+    header[155] = TarConstants.LF_NORMAL;
+
+    ByteArrayInputStream bais = new ByteArrayInputStream(header);
+    TarArchiveInputStream tais = new TarArchiveInputStream(bais);
+    try {
+        TarArchiveEntry entry = tais.getNextTarEntry();
+        assertNotNull(entry);
+        assertEquals("testfile", entry.getName());
+        assertEquals(62410554, entry.getUserId());
+    } finally {
+        tais.close();
+    }
+}

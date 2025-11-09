@@ -1,0 +1,122 @@
+public void testIssue148() {
+    // Test case demonstrating the issue where parseInto overwrites the year
+    // with the default year, even when the input doesn't specify a year.
+    // The original bug report suggests that the year from the 'instant'
+    // should be preserved if not present in the format.
+
+    // Using a specific date for the initial instant
+    DateTime initialDateTime = new DateTime(2001, 1, 1, 0, 0, 0, 0); // Non-leap year
+
+    // Format that does not include the year
+    DateTimeFormatter formatter = DateTimeFormat.forPattern("MMdd");
+
+    // Input string that should be parsed
+    String textToParse = "0229"; // February 29th
+
+    // Create a mutable integer array to hold the parsed values
+    int[] array = new int[1];
+
+    // Use parseInto to parse the string into the provided array
+    // The bug is that formatter.parseInto(new DateTime(2001, 1, 1, 0, 0, 0, 0), textToParse, 0, array, 0)
+    // results in the year being set to the default year (e.g., 2000) instead of preserving the year from the initial DateTime object.
+    // This would lead to incorrect date calculations if the default year is not a leap year,
+    // or if the caller specifically intended to use the year from the initial DateTime object.
+
+    // To reproduce the failure, we'd expect that after this call, the year associated with
+    // the parsing context would be the default year, not 2001.
+    // The exact assertion depends on how the result of parseInto is intended to be used,
+    // but the core issue is the year being overwritten by the default.
+
+    // A potential way to observe this is if a subsequent operation relies on the year
+    // from the parsed instant, and it incorrectly uses the default year.
+    // For demonstration, let's assume we are checking the year after parsing.
+    // The bug states that it *overwrites* the given instant's year with the default.
+    // So, if we were to create a DateTime from the *context* after this call,
+    // it would have the default year.
+
+    // Let's simulate what would happen if we tried to get the year from the parsed result
+    // and it incorrectly used the default year.
+    // The actual `parseInto` method doesn't directly return the year, it populates an array.
+    // The bug is more about the internal state or how a subsequent `parseDateTime` would behave
+    // if it relied on the state modified by `parseInto`.
+
+    // To make a concrete assertion, let's consider the behavior described:
+    // "parseInto now overwrites the given instant's year with 2000"
+    // This implies that if you were to create a DateTime *after* calling parseInto,
+    // and it used the internal state modified by parseInto, it would have the default year.
+
+    // Let's create a scenario where we expect the year to be 2001 (from initialDateTime)
+    // but due to the bug, it becomes 2000.
+    // The `parseInto` method itself doesn't return a DateTime, but it modifies internal state
+    // which `parseDateTime` might use.
+
+    // A more direct way to test the described behavior is to see what year is used for parsing.
+    // The bug report implies that the 'instant' parameter is modified or its year is ignored.
+    // Let's try parsing a date that *should* fail if the year isn't handled correctly.
+
+    // Consider parsing "0229" with an initial DateTime of 2001-01-01.
+    // If the year 2001 is preserved, and it's not a leap year, parsing "0229" might be expected
+    // to either throw an error or result in a date in the next leap year, or use the default year.
+    // The bug says it overwrites with the default, implying it *will* parse, but with the default year.
+
+    // Let's construct a test that expects the default year to be used for parsing.
+    // If the input was "0229" and the default year is 2000 (a leap year),
+    // and the formatter is "MMdd", then parsing should result in Feb 29, 2000.
+    // The bug is that if you pass an `initialDateTime` with a non-default year,
+    // that year is *ignored* and the default year is used.
+
+    // Let's try to capture this:
+    DateTime initialDateTimeWithNonDefaultYear = new DateTime(2001, 1, 1, 0, 0, 0, 0); // Non-leap year
+    DateTimeFormatter formatterNoYear = DateTimeFormat.forPattern("MMdd");
+    String dateString = "0229"; // Feb 29
+
+    // According to the bug, when parsing "0229" with initialDateTime representing 2001,
+    // the year 2001 should be used (and it would fail because 2001 is not a leap year),
+    // OR the default year (2000) should be used if the 'instant' year is ignored.
+    // The bug states it overwrites with the default year. So, it *should* parse successfully
+    // using the default year (2000).
+
+    DateTime parsedDateTime = formatterNoYear.parseDateTime(dateString);
+
+    // The bug description implies that `parseInto` internally uses the default year
+    // instead of the year from the provided `instant`. If `parseDateTime` uses
+    // the same logic, then parsing "0229" with a format that omits the year
+    // should result in a date using the default year (which is 2000 in Joda Time 2.0).
+    // If 2000 is a leap year (which it is), then Feb 29, 2000 is a valid date.
+    // The failure is that the year from `initialDateTime` (2001) is ignored.
+
+    // So, we expect the parsed date to be Feb 29, 2000, NOT Feb 29, 2001 (which would fail or be handled differently).
+    assertEquals("Year should be the default year (2000) due to bug", 2000, parsedDateTime.getYear());
+    assertEquals("Month should be February", 2, parsedDateTime.getMonthOfYear());
+    assertEquals("Day should be 29", 29, parsedDateTime.getDayOfMonth());
+
+    // Additionally, let's test a case where the default year *is* a leap year,
+    // and the provided instant's year is *not* a leap year. The bug would cause
+    // it to parse correctly using the default year.
+    DateTime initialDateTimeNonLeap = new DateTime(2001, 1, 1, 0, 0, 0, 0); // Non-leap year
+    DateTimeFormatter formatterNoYear2 = DateTimeFormat.forPattern("MMdd");
+    String dateStringLeap = "0229"; // Feb 29
+
+    // If the bug were fixed, parsing "0229" with initialDateTimeNonLeap would likely
+    // result in an IllegalArgumentException because 2001 is not a leap year.
+    // However, due to the bug, it uses the default year (2000), which IS a leap year.
+    DateTime parsedDateTimeUsingDefault = formatterNoYear2.parseDateTime(dateStringLeap);
+
+    // Assert that the date was parsed successfully using the default year.
+    assertEquals("The date should parse correctly using the default year (2000) due to the bug.",
+                 new DateTime(2000, 2, 29, 0, 0, 0, 0), parsedDateTimeUsingDefault);
+
+    // Now, let's consider a case where the initial year *is* a leap year,
+    // and the default year is also a leap year. The bug would still overwrite.
+    DateTime initialDateTimeLeap = new DateTime(2000, 1, 1, 0, 0, 0, 0); // Leap year
+    DateTimeFormatter formatterNoYear3 = DateTimeFormat.forPattern("MMdd");
+    String dateStringLeap2 = "0229"; // Feb 29
+
+    // If the bug were fixed, parsing "0229" with initialDateTimeLeap should result in Feb 29, 2000.
+    // Due to the bug, it *also* results in Feb 29, 2000, because the default year is 2000.
+    // The key difference is *why* it gets that year. The bug is that it *ignores* the provided instant's year.
+    DateTime parsedDateTimeLeapBug = formatterNoYear3.parseDateTime(dateStringLeap2);
+
+    assertEquals("Even if the initial year is a leap year, the bug causes it to use the default year.",
+                 new DateTime(2000, 2, 29, 0, 0, 0, 0), parsedDateTimeLeapBug);
+}

@@ -1,0 +1,104 @@
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonAppend;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+public class NestedListDeserializationTest {
+
+    public static class Field {
+        public String value;
+    }
+
+    public static class Record {
+        @JsonUnwrapped
+        public List<Field> fields;
+    }
+
+    public static class Definition {
+        @JsonUnwrapped
+        public List<Record> records;
+    }
+
+    @Test
+    public void testNestedNonWrappedListEmptyInnerList() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        String json = "{\"records\": [{\"fields\": []}]}";
+
+        Definition definition = mapper.readValue(json, Definition.class);
+
+        assertNotNull(definition);
+        assertNotNull(definition.records);
+        assertEquals(1, definition.records.size());
+        assertNotNull(definition.records.get(0).fields);
+        assertEquals(0, definition.records.get(0).fields.size());
+    }
+
+    @Test
+    public void testNestedNonWrappedListWithContent() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        String json = "{\"records\": [{\"fields\": [{\"value\": \"abc\"}]}]}";
+
+        Definition definition = mapper.readValue(json, Definition.class);
+
+        assertNotNull(definition);
+        assertNotNull(definition.records);
+        assertEquals(1, definition.records.size());
+        assertNotNull(definition.records.get(0).fields);
+        assertEquals(1, definition.records.get(0).fields.size());
+        assertEquals("abc", definition.records.get(0).fields.get(0).value);
+    }
+
+    // This test demonstrates the failure scenario described in the bug report
+    @Test
+    public void testNestedNonWrappedListEmptyInnerListFailure() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        // This JSON represents a scenario where the inner list 'fields' is empty.
+        // The bug report suggests this leads to incorrect deserialization of the 'records' list.
+        String json = "{\"records\": [{\"fields\": []}, {\"fields\": [{\"value\": \"def\"}]}]}";
+
+        Definition definition = mapper.readValue(json, Definition.class);
+
+        // Based on the bug report, we expect the deserialization to fail or produce incorrect results.
+        // The exact assertion will depend on how the failure manifests.
+        // For example, if the first record's fields are incorrectly associated with the second record.
+
+        // Let's assume the failure results in the second record not being parsed correctly,
+        // or the first record's empty fields causing issues with subsequent records.
+
+        assertNotNull(definition);
+        assertNotNull(definition.records);
+
+        // If the bug causes the second record to be lost or corrupted:
+        // assertEquals(1, definition.records.size()); // This would be an incorrect expectation if the bug works as described.
+
+        // A more robust check might be to assert the expected *correct* behavior
+        // and see if this test fails, indicating the bug is present.
+        // The bug description implies that the *outer* list might be incorrectly split.
+        // Let's test for the expected *correct* outcome and expect this test to fail if the bug is present.
+
+        // Expected correct behavior:
+        assertEquals(2, definition.records.size()); // Expecting two records
+
+        // First record should have an empty fields list
+        assertNotNull(definition.records.get(0).fields);
+        assertEquals(0, definition.records.get(0).fields.size());
+
+        // Second record should have one field
+        assertNotNull(definition.records.get(1).fields);
+        assertEquals(1, definition.records.get(1).fields.size());
+        assertEquals("def", definition.records.get(1).fields.get(0).value);
+
+        // If this test FAILS, it means the bug is likely present.
+        // The failure would indicate that the deserialization did not produce the expected structure.
+    }
+}

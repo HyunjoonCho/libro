@@ -1,0 +1,154 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import org.junit.jupiter.api.Test;
+
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class StringCollectionDeserializerTest {
+
+    // Custom immutable collection
+    public static class ImmutableStringCollection implements java.util.Collection<String> {
+        private final List<String> delegate;
+
+        public ImmutableStringCollection(List<String> delegate) {
+            this.delegate = Collections.unmodifiableList(delegate);
+        }
+
+        @Override
+        public int size() {
+            return delegate.size();
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return delegate.isEmpty();
+        }
+
+        @Override
+        public boolean contains(Object o) {
+            return delegate.contains(o);
+        }
+
+        @Override
+        public java.util.Iterator<String> iterator() {
+            return delegate.iterator();
+        }
+
+        @Override
+        public Object[] toArray() {
+            return delegate.toArray();
+        }
+
+        @Override
+        public <T> T[] toArray(T[] a) {
+            return delegate.toArray(a);
+        }
+
+        @Override
+        public boolean add(String s) {
+            throw new UnsupportedOperationException("Immutable collection");
+        }
+
+        @Override
+        public boolean remove(Object o) {
+            throw new UnsupportedOperationException("Immutable collection");
+        }
+
+        @Override
+        public boolean containsAll(Collection<?> c) {
+            return delegate.containsAll(c);
+        }
+
+        @Override
+        public boolean addAll(Collection<? extends String> c) {
+            throw new UnsupportedOperationException("Immutable collection");
+        }
+
+        @Override
+        public boolean removeAll(Collection<?> c) {
+            throw new UnsupportedOperationException("Immutable collection");
+        }
+
+        @Override
+        public boolean retainAll(Collection<?> c) {
+            throw new UnsupportedOperationException("Immutable collection");
+        }
+
+        @Override
+        public void clear() {
+            throw new UnsupportedOperationException("Immutable collection");
+        }
+
+        // Needed for Jackson deserialization
+        public ImmutableStringCollection() {
+            this.delegate = Collections.emptyList();
+        }
+
+        @Override
+        public String toString() {
+            return delegate.toString();
+        }
+    }
+
+    // Class containing the custom collection as a property
+    public static class Container {
+        public ImmutableStringCollection strings;
+
+        public Container() {
+        }
+
+        public Container(ImmutableStringCollection strings) {
+            this.strings = strings;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Container container = (Container) o;
+            return java.util.Objects.equals(strings, container.strings);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(strings);
+        }
+    }
+
+    @Test
+    public void testStringCollectionDeserializerFailsWithCustomCollection() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+
+        // Register a deserializer for ImmutableStringCollection
+        // This part is crucial for the workaround, but the bug occurs when Jackson
+        // tries to deserialize it as a String collection within a Container.
+        module.addDeserializer(ImmutableStringCollection.class, new com.fasterxml.jackson.databind.deser.std.StdDeserializer<ImmutableStringCollection>(ImmutableStringCollection.class) {
+            @Override
+            public ImmutableStringCollection deserialize(com.fasterxml.jackson.core.JsonParser p, com.fasterxml.jackson.databind.DeserializationContext ctxt) throws java.io.IOException {
+                // This logic might be simplified or different in a real scenario,
+                // but it demonstrates that we can handle ImmutableStringCollection.
+                // The bug is that StringCollectionDeserializer is invoked *before* this is considered.
+                List<String> list = p.readValueAs(List.class);
+                return new ImmutableStringCollection(list);
+            }
+        });
+        mapper.registerModule(module);
+
+        // JSON representing a Container with a list of strings
+        String json = "{\"strings\": [\"a\", \"b\", \"c\"]}";
+
+        // The deserialization fails here with Jackson 2.9.8+ because StringCollectionDeserializer
+        // incorrectly tries to deserialize ImmutableStringCollection, and it doesn't have a no-arg constructor.
+        // With older Jackson versions or if StringCollectionDeserializer wasn't involved, this would work.
+        Container container = mapper.readValue(json, Container.class);
+
+        // Assert that deserialization succeeded and the collection is as expected
+        assertEquals(3, container.strings.size());
+        assertEquals("a", container.strings.iterator().next());
+    }
+}

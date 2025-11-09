@@ -1,0 +1,240 @@
+import org.apache.commons.compress.archivers.ArchiveOutputStream;
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.ArchiveException;
+import org.apache.commons.compress.archivers.ArchiveStreamFactory;
+import org.junit.jupiter.api.Test;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+public class SevenZipEmptyEntriesTest {
+
+    @Test
+    public void testWritingSevenEmptyEntriesProducesIncorrectArchive() throws IOException, ArchiveException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        ArchiveOutputStream<?> aos = null;
+        try {
+            aos = new ArchiveStreamFactory().createArchiveOutputStream(ArchiveStreamFactory.SEVEN_Z, bos);
+
+            // Create 7 empty entries
+            for (int i = 0; i < 7; i++) {
+                ArchiveEntry entry = aos.createArchiveEntry("emptyfile" + i, "emptyfile" + i);
+                aos.putArchiveEntry(entry);
+                aos.closeArchiveEntry();
+            }
+            aos.finish();
+
+            // The bug description implies that the archive is not correctly formed,
+            // but doesn't specify a precise checkable outcome for *exactly* 7 empty files.
+            // The description focuses on the *consequences* when more than 7 are added,
+            // or when there's a mix.
+
+            // For the purpose of reproducing the *symptom* of incorrect handling,
+            // we can attempt to read it back and see if it throws an exception or
+            // if the entries are as expected. A more robust test would involve
+            // inspecting the byte stream, but that's complex.
+
+            // Let's try to create an archive with 8 empty files to trigger a more
+            // definitive failure as described in Scenario 3.
+            bos.reset();
+            aos = new ArchiveStreamFactory().createArchiveOutputStream(ArchiveStreamFactory.SEVEN_Z, bos);
+            for (int i = 0; i < 8; i++) {
+                ArchiveEntry entry = aos.createArchiveEntry("emptyfile" + i, "emptyfile" + i);
+                aos.putArchiveEntry(entry);
+                aos.closeArchiveEntry();
+            }
+            aos.finish();
+
+            // Attempting to read this back should fail, as per the description.
+            // However, directly reading from the same stream is not how it works.
+            // We'd need a separate ArchiveInputStream to verify.
+            // The description says "7zip Manager cannot open archive and stops working".
+            // This suggests a corruption that would be detected by a reader.
+            // A simple check here is to ensure finish() doesn't throw an exception
+            // prematurely, but the actual corruption is in the output bytes.
+
+            // A more practical test for this scenario would involve writing to a file
+            // and then trying to open it with a 7z utility or a corresponding
+            // ArchiveInputStream. Since we are constrained to JUnit methods and
+            // standard Java I/O, we'll focus on what we *can* observe.
+
+            // The core issue seems to be how the archive stream handles multiple
+            // consecutive empty entries or entries beyond a certain threshold.
+            // The bug report for 7z specifically mentions issues with empty entries.
+            // Let's simulate a scenario that *might* trigger the described behavior
+            // by creating a mix of empty and non-empty files, aiming for more than 7.
+
+            bos.reset();
+            aos = new ArchiveStreamFactory().createArchiveOutputStream(ArchiveStreamFactory.SEVEN_Z, bos);
+
+            // Scenario 4.2: 8 files, some empty, some with content, last file empty
+            // Let's create 7 non-empty files and 1 empty file.
+            for (int i = 0; i < 7; i++) {
+                ArchiveEntry entry = aos.createArchiveEntry("file" + i, "file" + i);
+                aos.putArchiveEntry(entry);
+                InputStream content = new java.io.ByteArrayInputStream("some content".getBytes(StandardCharsets.UTF_8));
+                byte[] buffer = new byte[1024];
+                int len;
+                while ((len = content.read(buffer)) > 0) {
+                    aos.write(buffer, 0, len);
+                }
+                content.close();
+                aos.closeArchiveEntry();
+            }
+
+            // Add the last empty file
+            ArchiveEntry lastEntry = aos.createArchiveEntry("empty_last_file", "empty_last_file");
+            aos.putArchiveEntry(lastEntry);
+            aos.closeArchiveEntry();
+
+            aos.finish();
+
+            // The description says "archive is corrupt, the following message is received: 'Cannot open file 'archivename.7z' as archive'".
+            // This implies that an ArchiveInputStream would fail to read it.
+            // We can simulate this by trying to read from the generated byte stream.
+            // Note: This test might pass if the underlying library (e.g., Apache Commons Compress's 7z implementation)
+            // has already fixed this specific bug. The goal here is to *reproduce* the described failure.
+
+            // If the bug is present, creating an ArchiveInputStream from 'bos' might throw an exception.
+            try {
+                // We expect this to throw an exception if the bug is present and the archive is corrupt.
+                // If it passes, it means the bug might be fixed in the version of the library being used.
+                ArchiveStreamFactory factory = new ArchiveStreamFactory();
+                // We need to provide the stream to the factory.
+                // The factory needs a way to determine the archive type.
+                // For 7z, this is often done by magic bytes, but the factory might infer it.
+                // Let's assume the factory can infer it or we can explicitly tell it.
+                // Since we are testing the *output* of writing, we'd typically use a separate
+                // ArchiveInputStream to verify.
+                // The problem is that Commons Compress's 7z support is often limited or experimental.
+                // If the actual 7z implementation has this bug, a standard 7z tool would fail.
+                // To *reproduce* the failure in a JUnit test, we need to detect the incorrect output.
+
+                // A common way to detect corruption is if the ArchiveInputStream throws an exception.
+                // However, the specific failure modes described (folder entry instead of file,
+                // entries named "archive", etc.) are difficult to check without deep inspection
+                // of the archive's internal structure, which is beyond the scope of a simple JUnit test.
+
+                // For the purpose of *reproducing* the described failure, we will assert that
+                // if the bug exists, reading it back should fail *in some way*.
+                // The most straightforward failure is an exception during reading.
+
+                // We'll create an InputStream from the ByteArrayOutputStream
+                InputStream is = new java.io.ByteArrayInputStream(bos.toByteArray());
+
+                // Use ArchiveStreamFactory to create an ArchiveInputStream for 7z
+                // Note: Apache Commons Compress's 7z support is limited.
+                // If this test fails to throw an exception, it might mean the bug is fixed
+                // or the library doesn't fully implement the problematic part.
+                @SuppressWarnings("resource") // We don't want to close the ByteArrayInputStream here
+                ArchiveInputStream<?> ais = factory.createArchiveInputStream(ArchiveStreamFactory.SEVEN_Z, is);
+
+                // Try to iterate through entries. If the archive is corrupt as described,
+                // this iteration or accessing entries might throw an exception.
+                ArchiveEntry entry;
+                int entryCount = 0;
+                while ((entry = ais.getNextEntry()) != null) {
+                    entryCount++;
+                    // We can add checks here if we know what the incorrect entries look like.
+                    // For example, if we expect "emptyfile0" but get "archive", we could assert that.
+                    // However, the bug description is a bit vague on the exact output for the 7-file case.
+                    // The 8-file case resulting in corruption is more concrete.
+                    // Let's assume that if the archive is corrupt, getNextEntry() or reading from it will fail.
+                    // For demonstration, we'll just consume the entry.
+                    byte[] buffer = new byte[1024];
+                    int len;
+                    while ((len = ais.read(buffer)) > 0) {
+                        // Consume the entry content
+                    }
+                }
+
+                // If the archive was corrupt as described in Scenario 4.2,
+                // we might expect an exception *before* this point, or perhaps
+                // the entry count might be unexpected, or entry names might be wrong.
+                // The description for 4.2 is "archive is corrupt, the following message is received: 'Cannot open file 'archivename.7z' as archive'".
+                // This implies a failure during the *opening* or initial reading phase,
+                // which would likely manifest as an exception during ArchiveInputStream creation or getNextEntry().
+
+                // If we reach here without an exception, and the archive *should* be corrupt,
+                // then the test has failed to reproduce the described behavior.
+                // However, we cannot definitively assert corruption without a specific checker.
+                // The best we can do is to *attempt* to read it and expect an exception if it's corrupt.
+
+                // If the test passes without throwing an exception, it means the current library version
+                // might have fixed the bug, or the test setup doesn't trigger the specific corruption
+                // that causes a readable error message.
+
+                // To make this test *fail* if the bug is present and triggers corruption,
+                // we would need a way to reliably detect that corruption.
+                // Since the description mentions "Cannot open file", let's assume that
+                // if the archive is corrupt, an exception *will* be thrown during reading.
+                // If no exception is thrown, it implies the archive *was* readable,
+                // which would be contrary to the bug description.
+
+                // Therefore, we can invert the logic: if the test *completes* without error,
+                // it means the corruption wasn't detected by the reader. This might be
+                // a failure to reproduce the bug, or the bug might be fixed.
+
+                // For the sake of having a test that *would* fail if the bug is present
+                // and causes detectable corruption, we'll assert that the archive should NOT be corrupt.
+                // If it IS corrupt, the exception during reading will cause the test to fail.
+                // If it's NOT corrupt, the test passes.
+                // This is a bit of a workaround because we're testing for the *absence* of a failure
+                // that we *expect* if the bug exists.
+
+                // A more direct approach: if the bug causes a specific type of corruption,
+                // and our reader detects it with a specific exception, we can catch that.
+                // E.g., if it threw `ArchiveException("corrupt archive")`.
+
+                // Let's re-evaluate Scenario 3: "8 empty files -> 7zip Manager cannot open archive and stops working."
+                // This is the strongest indicator of corruption. If we create 8 empty files,
+                // and then try to read the archive back, we expect it to fail.
+
+                bos.reset();
+                aos = new ArchiveStreamFactory().createArchiveOutputStream(ArchiveStreamFactory.SEVEN_Z, bos);
+                for (int i = 0; i < 8; i++) {
+                    ArchiveEntry entry = aos.createArchiveEntry("emptyfile" + i, "emptyfile" + i);
+                    aos.putArchiveEntry(entry);
+                    aos.closeArchiveEntry();
+                }
+                aos.finish();
+
+                InputStream is8Empty = new java.io.ByteArrayInputStream(bos.toByteArray());
+                @SuppressWarnings("resource") // We don't want to close the ByteArrayInputStream here
+                ArchiveInputStream<?> ais8Empty = factory.createArchiveInputStream(ArchiveStreamFactory.SEVEN_Z, is8Empty);
+
+                // We expect that calling getNextEntry() or reading from ais8Empty will throw an exception.
+                // Let's try to get the first entry.
+                assertThrows(IOException.class, () -> { // Expecting an IOException or similar for corruption
+                    ArchiveEntry entry8 = ais8Empty.getNextEntry();
+                    if (entry8 == null) {
+                        // If there are no entries, that's also an indication of failure for 8 empty files.
+                        throw new IOException("Archive unexpectedly empty");
+                    }
+                    // Consume the entry to ensure full read attempt
+                    byte[] buffer = new byte[1024];
+                    while (ais8Empty.read(buffer) > 0) {
+                        // do nothing
+                    }
+                }, "Reading archive with 8 empty files should fail due to corruption.");
+
+            } catch (ArchiveException e) {
+                // This catch block is for exceptions during the *writing* process,
+                // which is less likely to be the bug described.
+                fail("Archive creation failed unexpectedly: " + e.getMessage());
+            }
+
+        } finally {
+            if (aos != null) {
+                // Ensure stream is closed if it was opened.
+                // Note: In this test, we are managing streams within the try block.
+                // If aos was opened and not finished, this would be important.
+            }
+        }
+    }
+}

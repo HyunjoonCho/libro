@@ -1,0 +1,40 @@
+public void testRecursiveTypeBug() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+
+    // Define the types within the test method to ensure they are local to the test
+    class IFace<T> {}
+
+    class Base implements IFace<Sub> {
+        @JsonProperty
+        int base = 1;
+    }
+
+    class Sub {
+        @JsonProperty
+        int sub = 2;
+    }
+
+    // Create an instance of the subclass
+    Sub subInstance = new Sub();
+    // Manually create a Base instance and assign it to a field that would normally be of type IFace<Sub>
+    // This simulates the scenario where Jackson needs to infer the type from the context.
+    // In a real scenario, this might be a field in another class or a parameter in a method.
+    // For this test, we'll use a Map to simulate the serialization context.
+    Map<String, Object> wrapper = new HashMap<>();
+    wrapper.put("sub", subInstance);
+    // We'll also need a Base instance to be serialized for the test to fail as described
+    Base baseInstance = new Base();
+    wrapper.put("base", baseInstance);
+
+
+    // Serialize the wrapper object. The bug occurs when Jackson tries to serialize 'sub'
+    // and needs to resolve its supertypes, encountering the recursive IFace<Sub>.
+    // The expected output is {"sub":{"sub":2},"base":1} if Base properties are included.
+    // The bug results in {"sub":{"sub":2}}.
+    String json = mapper.writeValueAsString(wrapper);
+
+    // Assert that the base property is missing in the serialized output.
+    // This assertion will fail if the bug is present.
+    assertFalse(json.contains("\"base\":1"));
+    assertTrue(json.contains("\"sub\":2")); // Ensure the sub property is present
+}

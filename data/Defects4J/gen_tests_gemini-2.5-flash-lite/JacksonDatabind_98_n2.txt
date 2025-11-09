@@ -1,0 +1,140 @@
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class ExternalPropertyEnumTest {
+
+    enum Invite {
+        CONTACT,
+        EMAIL
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "kind")
+    @JsonSubTypes({
+            @JsonSubTypes.Type(value = Contact.class, name = "CONTACT"),
+            @JsonSubTypes.Type(value = Email.class, name = "EMAIL")
+    })
+    interface Base {
+        Invite getKind();
+    }
+
+    static class Contact implements Base {
+        private Invite kind;
+        private Person to;
+
+        public Contact() {
+        }
+
+        public Contact(Invite kind, Person to) {
+            this.kind = kind;
+            this.to = to;
+        }
+
+        @Override
+        public Invite getKind() {
+            return kind;
+        }
+
+        public Person getTo() {
+            return to;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Contact contact = (Contact) o;
+            return kind == contact.kind &&
+                    java.util.Objects.equals(to, contact.to);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(kind, to);
+        }
+    }
+
+    static class Email implements Base {
+        private Invite kind;
+        private String address;
+
+        public Email() {
+        }
+
+        public Email(Invite kind, String address) {
+            this.kind = kind;
+            this.address = address;
+        }
+
+        @Override
+        public Invite getKind() {
+            return kind;
+        }
+
+        public String getAddress() {
+            return address;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Email email = (Email) o;
+            return kind == email.kind &&
+                    java.util.Objects.equals(address, email.address);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(kind, address);
+        }
+    }
+
+    static class Person {
+        private String name;
+
+        public Person() {
+        }
+
+        public Person(String name) {
+            this.name = name;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Person person = (Person) o;
+            return java.util.Objects.equals(name, person.name);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(name);
+        }
+    }
+
+    @Test
+    public void testEnumPolymorphicDeserialization() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\n" +
+                "  \"kind\": \"CONTACT\",\n" +
+                "  \"to\": {\n" +
+                "    \"name\": \"Foo\"\n" +
+                "  }\n" +
+                "}";
+
+        Base base = mapper.readValue(json, Base.class);
+
+        assertEquals(Contact.class, base.getClass());
+        Contact contact = (Contact) base;
+        assertEquals(Invite.CONTACT, contact.getKind());
+        assertEquals("Foo", contact.getTo().getName());
+    }
+}

@@ -1,0 +1,68 @@
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class ScriptTagParsingTest {
+
+    @Test
+    public void testScriptTagWithInternalTags() {
+        String html = "<HTML>\n" +
+                      "<body>\n" +
+                      " <div class=vsc sig=Uga>\n" +
+                      "  <div class=before></div>\n" +
+                      "  <script type=\"text/javascript\">\n" +
+                      "   header = jQuery('#header\\_features');\n" +
+                      "   if(header.length){\n" +
+                      "    header\n" +
+                      "     .prepend('<a class=\"prevPage browse left \" />')\n" +
+                      "     .append('<a class=\"nextPage browse right\" />');\n" +
+                      "\n" +
+                      "    items\n" +
+                      "     .wrapAll('<div class=\"scrollable\"/>')\n" +
+                      "     .wrapAll('<ul class=\"items\"/>')\n" +
+                      "     .wrap('<li/>');\n" +
+                      "   }\n" +
+                      "   </script>\n" +
+                      "   <div class=after></div>\n" +
+                      " </div>\n" +
+                      "</body>\n" +
+                      "</HTML>";
+
+        Document doc = Jsoup.parse(html);
+        Element scriptElement = doc.select("script").first();
+        String scriptContent = scriptElement.html();
+
+        // The problematic part is that the closing tag '</a>' inside the string literal
+        // was being interpreted as a closing tag for the script itself.
+        // The original bug report shows that the 'after' div was incorrectly placed inside the script.
+        // We check if the script content is parsed as expected, without premature closing.
+        // The exact expected output for script content can be tricky due to Jsoup's internal handling,
+        // but we can assert that the '<div class="after"></div>' is NOT inside the script's output.
+
+        // A more robust check would be to see where the 'after' div is located in the parsed document.
+        // It should be a sibling to the script tag, not a child.
+        Element afterDiv = doc.select("div.after").first();
+        Element parentOfAfterDiv = afterDiv.parent();
+
+        // Assert that the 'after' div's parent is the 'vsc' div, not the script tag.
+        assertEquals("div.vsc", parentOfAfterDiv.tagName() + (parentOfAfterDiv.hasAttr("class") ? " ." + parentOfAfterDiv.attr("class") : ""));
+
+        // We can also check the script content for specific patterns that indicate the bug.
+        // For example, the bug report shows '</a>' being misinterpreted.
+        // However, Jsoup might normalize this within the script tag's content.
+        // The most reliable test is the structural test above.
+
+        // If we want to assert the script content itself, it's more about ensuring
+        // the internal string literals are preserved as strings and not parsed as HTML.
+        // The original bug description implies the script content was broken.
+        // Let's check if the string '<a class="nextPage browse right" />' is still within the script.
+        // If the script was prematurely closed, this might not be the case.
+        // Note: Jsoup might reformat the HTML within the script tag.
+        // The key is that the script tag itself is correctly terminated.
+        assert(scriptContent.contains("header.prepend('<a class=\"prevPage browse left \" />')"));
+        assert(scriptContent.contains(".append('<a class=\"nextPage browse right\" />')"));
+        assert(scriptContent.contains(".wrap('<li/>')"));
+    }
+}

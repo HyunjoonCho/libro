@@ -1,0 +1,77 @@
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertEquals;
+
+public class JsonIdentityInfoTest {
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class, property = "@id")
+    static class Node {
+        public String name;
+        public List<Node> children = new ArrayList<>();
+
+        @JsonCreator
+        public Node(String name) {
+            this.name = name;
+        }
+
+        public void addChild(Node node) {
+            children.add(node);
+        }
+    }
+
+    @Test
+    public void testJsonIdentityInfoWithCreatorAndCycle() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        Node root = new Node("root");
+        Node child1 = new Node("child1");
+        Node child2 = new Node("child2");
+
+        root.addChild(child1);
+        child1.addChild(child2);
+        child2.addChild(root); // Cycle
+
+        // Serialize
+        String json = mapper.writeValueAsString(root);
+        System.out.println("Serialized JSON: " + json);
+
+        // Deserialize
+        Node deserializedRoot = mapper.readValue(json, Node.class);
+
+        assertNotNull(deserializedRoot);
+        assertEquals("root", deserializedRoot.name);
+        assertNotNull(deserializedRoot.children);
+        assertEquals(1, deserializedRoot.children.size());
+
+        Node deserializedChild1 = deserializedRoot.children.get(0);
+        assertNotNull(deserializedChild1);
+        assertEquals("child1", deserializedChild1.name);
+        assertNotNull(deserializedChild1.children);
+        assertEquals(1, deserializedChild1.children.size());
+
+        Node deserializedChild2 = deserializedChild1.children.get(0);
+        assertNotNull(deserializedChild2);
+        assertEquals("child2", deserializedChild2.name);
+        assertNotNull(deserializedChild2.children);
+        assertEquals(1, deserializedChild2.children.size());
+
+        // Check the cycle
+        Node deserializedCycle = deserializedChild2.children.get(0);
+        assertNotNull(deserializedCycle);
+        assertEquals("root", deserializedCycle.name);
+        // Ensure it's the same object reference due to JsonIdentityInfo
+        assertEquals(deserializedRoot, deserializedCycle);
+    }
+
+    // This nested class structure is to contain the test method within a class
+    // as required by JUnit, but the actual test logic is the method itself.
+    // In a real scenario, this test method would be part of a larger test class.
+}

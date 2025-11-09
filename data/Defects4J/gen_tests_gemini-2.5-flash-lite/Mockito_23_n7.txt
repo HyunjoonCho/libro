@@ -1,0 +1,89 @@
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
+
+import static org.junit.Assert.assertEquals;
+
+public class MockitoIssueTest {
+
+    abstract class AbstractClass {
+        abstract protected Long lol();
+        abstract protected String wow();
+        public String give() {
+            wow();
+            lol();
+            return "give";
+        }
+    }
+
+    public class ClassExtendsAbstractClass extends AbstractClass {
+        @Override
+        protected Long lol() {
+            return 2L;
+        }
+        @Override
+        protected String wow() {
+            return "WOW";
+        }
+    }
+
+    public class A {
+        private AbstractClass classExtendsAbstractClass;
+        public A(AbstractClass classExtendsAbstractClass) {
+            this.classExtendsAbstractClass = classExtendsAbstractClass;
+        }
+        public String doSomeThing(){
+            return classExtendsAbstractClass.wow();
+        }
+        public String doAnotherThing(){
+            return classExtendsAbstractClass.give();
+        }
+    }
+
+    @Mock
+    private ClassExtendsAbstractClass mockedClassExtendsAbstractClass;
+    private A a;
+
+    @Before
+    public void before() {
+        MockitoAnnotations.initMocks(this);
+        // Mocking the abstract method 'give' which calls other abstract methods
+        Mockito.when(mockedClassExtendsAbstractClass.give()).thenReturn("mocked give");
+        // Even though we don't directly call lol() or wow() in A.doSomeThing(),
+        // Mockito seems to have issues when mocking a method in an abstract class
+        // that depends on other abstract methods, especially when those methods
+        // have different return types. The error occurs during the setup phase
+        // when mocking 'give'.
+        // To reproduce the error, we need to mock a method that ultimately
+        // tries to resolve the return types of other abstract methods.
+        // The original bug report implies an issue with Mockito's handling of
+        // abstract methods with different return types when one method is mocked.
+        // The error message "WrongTypeOfReturnValue" suggests Mockito is incorrectly
+        // inferring or checking return types.
+    }
+
+    @Test(expected = org.mockito.exceptions.misusing.WrongTypeOfReturnValue.class)
+    public void testWrongTypeOfReturnValue() {
+        // The error happens when Mockito tries to process the stubbing for 'give()'.
+        // It appears to get confused by the presence of other abstract methods
+        // with different return types within the same abstract class hierarchy.
+        // We don't need to instantiate 'a' or call its methods to trigger the error;
+        // the error occurs during the mock setup in the @Before method.
+        // The test is designed to catch the specific exception thrown by Mockito.
+        a = new A(mockedClassExtendsAbstractClass);
+        // The following line is not reached if the exception is thrown as expected.
+        // a.doAnotherThing();
+    }
+
+    // This test demonstrates the behavior when there's only one abstract method.
+    @Test
+    public void testWithSingleAbstractMethod() {
+        // Mocking an abstract class with only one abstract method (simulated)
+        AbstractClass abstractClassWithOneMethod = Mockito.mock(AbstractClass.class);
+        Mockito.when(abstractClassWithOneMethod.give()).thenReturn("single method give");
+        A aWithOneMethod = new A(abstractClassWithOneMethod);
+        assertEquals("mocked give", aWithOneMethod.doAnotherThing());
+    }
+}

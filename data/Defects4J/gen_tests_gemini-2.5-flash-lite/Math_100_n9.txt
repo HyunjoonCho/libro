@@ -1,0 +1,117 @@
+public void testCovariancesAndErrorsWithBoundParameters() throws EstimationException {
+    // Create a dummy estimation problem with bound parameters
+    LocalUnivariateRealEstimator estimator = new LocalUnivariateRealEstimator();
+    UnivariateRealFunction f = new SinFunction();
+    double[] y = {0.0, Math.sin(1.0), Math.sin(2.0)};
+    double[] x = {0.0, 1.0, 2.0};
+    double[] w = {1.0, 1.0, 1.0};
+
+    // Add parameters, some bound
+    estimator.addMeasurement(x[0], y[0], w[0]);
+    estimator.addMeasurement(x[1], y[1], w[0]);
+    estimator.addMeasurement(x[2], y[2], w[0]);
+
+    estimator.addVariable("p1", 1.0, false); // unbound
+    estimator.addVariable("p2", 0.5, true);  // bound
+
+    // Try to get covariances and errors, which should now work
+    try {
+        estimator.getCovariances();
+        estimator.guessParametersErrors();
+    } catch (ArrayOutOfBoundsException e) {
+        fail("getCovariances() or guessParametersErrors() crashed with bound parameters: " + e.getMessage());
+    }
+
+    // Verify that the results are not null and have the expected dimensions (for unbound parameters)
+    double[][] covariances = estimator.getCovariances();
+    assertNotNull(covariances);
+    // The size should correspond to the number of unbound parameters
+    assertEquals(1, covariances.length);
+    assertEquals(1, covariances[0].length);
+
+
+    double[] errors = estimator.guessParametersErrors();
+    assertNotNull(errors);
+    // The size should correspond to the number of unbound parameters
+    assertEquals(1, errors.length);
+}
+
+// Dummy classes to satisfy AbstractEstimator dependencies
+private static class LocalUnivariateRealEstimator extends AbstractEstimator {
+    public LocalUnivariateRealEstimator() {
+        super(new LevenbergMarquardtOptimizer());
+    }
+
+    @Override
+    public void addMeasurement(double x, double y, double weight) throws EstimationException {
+        super.addMeasurement(x, y, weight);
+    }
+
+    @Override
+    public void addVariable(String name, double initialValue, boolean bound) throws EstimationException {
+        super.addVariable(name, initialValue, bound);
+    }
+
+    @Override
+    public void addVariable(String name, double initialValue, double lower, double upper) throws EstimationException {
+        super.addVariable(name, initialValue, lower, upper);
+    }
+
+    @Override
+    public void addVariable(String name, double initialValue, double min, double max, boolean bound) throws EstimationException {
+        super.addVariable(name, initialValue, min, max, bound);
+    }
+
+    @Override
+    protected void updateJacobian() {
+        // Dummy implementation
+    }
+
+    @Override
+    protected void updateResiduals() {
+        // Dummy implementation
+    }
+}
+
+private static class SinFunction implements UnivariateRealFunction {
+    @Override
+    public double value(double x) {
+        return Math.sin(x);
+    }
+}
+
+// Mock Optimizer to avoid actual optimization logic for this test
+private static class LevenbergMarquardtOptimizer implements OptimizationProblem<UnivariateRealFunction> {
+    @Override
+    public double[] optimize(UnivariateRealFunction f, double[] initialGuess, double[] target, double[] weights) {
+        return initialGuess; // Just return initial guess
+    }
+
+    @Override
+    public double[][] computeCovariances(UnivariateRealFunction f, double[] params, double[] residuals, double[][] jacobian) {
+        // Simulate covariance matrix for unbound parameters
+        int unboundCount = 0;
+        for (int i = 0; i < params.length; i++) {
+            // This check is a simplification; a real check would involve the estimator's internal state
+            if (params[i] != Double.NaN) { // Assuming NaN or similar indicates bound
+                unboundCount++;
+            }
+        }
+        double[][] cov = new double[unboundCount][unboundCount];
+        for (int i = 0; i < unboundCount; i++) {
+            cov[i][i] = 1.0; // Dummy diagonal values
+        }
+        return cov;
+    }
+
+    @Override
+    public double[] guessParametersErrors(double[][] jacobian, double[] residuals, double[] weights) {
+        // Simulate parameter errors for unbound parameters
+        int unboundCount = jacobian.length;
+        double[] errors = new double[unboundCount];
+        for (int i = 0; i < unboundCount; i++) {
+            errors[i] = 1.0; // Dummy error values
+        }
+        return errors;
+    }
+}

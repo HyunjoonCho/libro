@@ -1,0 +1,39 @@
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.JsonIdentityReference;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class ObjectIdTest {
+
+    public static class Foo {
+        @JsonIdentityReference(alwaysAsId = true)
+        public Bar bar1;
+        @JsonIdentityReference()
+        public Bar bar2;
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class)
+    public static class Bar {
+        // Need some field for the object to be distinguishable, otherwise Jackson might optimize it away.
+        public int id = 1;
+    }
+
+    @Test
+    public void testForwardReferences() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        Foo foo = new Foo();
+        foo.bar1 = new Bar();
+        foo.bar2 = foo.bar1;
+
+        String json = mapper.writeValueAsString(foo);
+
+        // Expected output: {"bar1":1,"bar2":1}
+        // Actual output from description: {"bar1":1,"bar2":{"@id":2}}
+        // We assert that bar2 is also represented by its ID (1)
+        assertEquals("{\"bar1\":1,\"bar2\":1}", json);
+    }
+}

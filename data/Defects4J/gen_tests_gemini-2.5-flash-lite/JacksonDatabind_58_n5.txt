@@ -1,0 +1,52 @@
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+import java.io.IOException;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+
+public class JsonIgnorePropertiesTest {
+
+    @JsonIgnoreProperties("cause")
+    public static class MyException extends RuntimeException {
+        public MyException() {
+            super();
+        }
+
+        public MyException(String message) {
+            super(message);
+        }
+
+        // No-arg constructor is needed for deserialization
+        public MyException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    @Test
+    public void testIgnoreCausePropertyOnGAE() throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        MyException originalException = new MyException("Test message", new Exception("Inner cause"));
+
+        String json = objectMapper.writeValueAsString(originalException);
+
+        // The important part is deserialization.
+        // If @JsonIgnoreProperties("cause") works, the 'cause' field should be null after deserialization.
+        MyException deserializedException = objectMapper.readValue(json, MyException.class);
+
+        assertEquals("Test message", deserializedException.getMessage());
+        // On GAE, due to reflection restrictions, the 'cause' might not be ignored and deserialization might fail before this point.
+        // If the deserialization succeeds, and the property was ignored, the cause should be null.
+        // However, the bug report indicates deserialization *fails* with an IllegalArgumentException.
+        // This test aims to reproduce that failure. If it *doesn't* fail, it means the fix is working.
+        // To truly reproduce the *failure*, we'd need an environment that mimics GAE's reflection restrictions.
+        // Since we can't easily do that in a standard JUnit test, we'll assert the *expected* outcome if the fix *were* applied correctly.
+        // If this test *passes* in a standard environment, it doesn't necessarily mean the bug is fixed on GAE.
+        // But if a similar exception occurs *during* deserialization in a GAE-like environment, this test structure would be relevant.
+
+        // For the purpose of demonstrating the *intended* behavior after a fix, we assert that cause is null.
+        // If the original bug *persists*, the readValue call itself would throw an exception.
+        assertNull(deserializedException.getCause());
+    }
+}

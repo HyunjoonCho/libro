@@ -1,0 +1,97 @@
+public void testOpenMapRealMatrixIntegerOverflow() {
+    // The goal is to trigger an integer overflow in computeKey.
+    // This happens when row + col exceeds Integer.MAX_VALUE.
+    // Since it's a sparse matrix, we don't need to actually allocate
+    // the memory for such a large matrix. We just need to try to
+    // compute a key for indices that would cause an overflow.
+
+    // Choose indices that sum up to more than Integer.MAX_VALUE.
+    // For example, Integer.MAX_VALUE and 1.
+    int largeRow = Integer.MAX_VALUE;
+    int largeCol = 1;
+
+    // We expect an ArithmeticException or similar due to overflow.
+    // The exact exception might depend on the JVM and exact implementation,
+    // but an overflow is the core issue.
+    // The original bug report implies computeKey is the problematic method.
+    // We'll instantiate a matrix and try to access an element that would
+    // internally call computeKey with these large indices.
+
+    // The matrix dimensions themselves don't need to be this large,
+    // but the indices used in operations do.
+    // Let's create a small matrix and try to compute a key for large indices.
+    // The computeKey method is likely static or called internally.
+    // If computeKey is private, we might need to indirectly call it.
+    // Looking at OpenMapRealMatrix, computeKey is protected.
+    // We can create a subclass to call it directly.
+
+    // If computeKey is protected, we can subclass to test it.
+    // However, the bug report implies it's about creating/accessing elements.
+    // Let's assume we can create a matrix and then try to set/get an element
+    // that would trigger the computeKey with overflowed values.
+
+    // The computeKey method is `protected int computeKey(int row, int column)`
+    // It calculates `row * this.columnDimension + column`.
+    // So, if `this.columnDimension` is, say, 2, and we try `row = Integer.MAX_VALUE`,
+    // `column = 1`, then `Integer.MAX_VALUE * 2 + 1` will overflow.
+
+    // Let's create a matrix with a small column dimension.
+    OpenMapRealMatrix matrix = new OpenMapRealMatrix(1, 1); // Dimensions don't matter much for the key calculation itself if we can control the input.
+    // We need to set the column dimension to a value that, when multiplied by a large row, causes overflow.
+    // Let's try to set the column dimension to 2.
+    // The constructor `OpenMapRealMatrix(int rowDimension, int columnDimension)` sets `columnDimension`.
+    // However, the `computeKey` is called internally when accessing elements.
+    // The problem is likely in how the *key* is computed for sparse storage,
+    // not necessarily in the matrix dimensions themselves, but in the indices *passed* to computeKey.
+
+    // The bug description states "computeKey() has an integer overflow".
+    // Let's try to directly call computeKey if possible, or simulate the condition.
+    // Since computeKey is protected, we can't call it directly from a test method
+    // in a separate class without subclassing.
+    // Let's try to trigger it via a method that uses it.
+    // The `addToEntry` method uses `computeKey`.
+    // `addToEntry(int row, int column, double value)`
+    // We need `row * columnDimension + column` to overflow.
+    // Let's set `columnDimension` to a small value like 2.
+    // And `row` to `Integer.MAX_VALUE`.
+    // `column` can be small, e.g., 1.
+
+    // Create a matrix with a small column dimension.
+    // The constructor `OpenMapRealMatrix(int rowDimension, int columnDimension)`
+    // initializes `columnDimension`.
+    OpenMapRealMatrix matrixWithSmallColDim = new OpenMapRealMatrix(1, 2);
+
+    // Now, try to add an entry with a row index that will cause overflow
+    // when multiplied by the column dimension (2).
+    int rowCausingOverflow = Integer.MAX_VALUE;
+    int colForOverflow = 1; // This will be added after multiplication
+
+    // We expect an ArithmeticException because `rowCausingOverflow * matrixWithSmallColDim.getColumnDimension() + colForOverflow`
+    // will overflow.
+    try {
+        // Accessing an element indirectly calls computeKey.
+        // For example, `setEntry` or `addToEntry`.
+        // Let's use `setEntry` as it's a common operation.
+        // The `setEntry` method calls `addToEntry`, which calls `computeKey`.
+        matrixWithSmallColDim.setEntry(rowCausingOverflow, colForOverflow, 1.0);
+        fail("Expected ArithmeticException due to integer overflow in computeKey");
+    } catch (ArithmeticException e) {
+        // This is the expected exception.
+        // We can optionally check the message if it's consistent.
+        assertTrue(e.getMessage().contains("overflow"));
+    } catch (ArrayIndexOutOfBoundsException e) {
+        // Sometimes overflow can manifest as an out-of-bounds access if the
+        // computed key is then used as an array index without proper checks.
+        // This is less likely to be the *direct* result of the overflow itself,
+        // but a consequence. The core issue is the overflow in `computeKey`.
+        // If the test fails with this, it still indicates an issue related to large indices.
+        // However, the bug report specifically mentions "integer overflow in computeKey()".
+        // So, ArithmeticException is more precise.
+        fail("Expected ArithmeticException, but got ArrayIndexOutOfBoundsException. The overflow might be masked.");
+    }
+
+    // Alternative approach: If computeKey was public or we could mock it.
+    // Since it's protected, the subclassing approach is cleaner if direct call is needed.
+    // However, triggering it via `setEntry` or `addToEntry` is a valid way to reproduce the bug
+    // as described by its impact on matrix operations.
+}

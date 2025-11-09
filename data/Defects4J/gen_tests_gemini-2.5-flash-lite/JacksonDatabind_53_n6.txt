@@ -1,0 +1,104 @@
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import org.junit.Test;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class JsonDeserializeTest {
+
+    // Assuming MyHashMap, Foo, and MyCustomIdInterface are defined as in the bug report
+    // For demonstration purposes, we'll create minimal versions here.
+
+    interface MyCustomIdInterface {
+        UUID getId();
+    }
+
+    static class Foo implements MyCustomIdInterface {
+        private UUID id;
+        private String property;
+
+        @Override
+        public UUID getId() {
+            return id;
+        }
+
+        public void setId(UUID id) {
+            this.id = id;
+        }
+
+        public String getProperty() {
+            return property;
+        }
+
+        public void setProperty(String property) {
+            this.property = property;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Foo foo = (Foo) o;
+            return java.util.Objects.equals(id, foo.id) &&
+                   java.util.Objects.equals(property, foo.property);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(id, property);
+        }
+    }
+
+    // This custom HashMap is intended to deserialize the input JSON structure
+    // into a Map<UUID, Foo>
+    static class MyHashMap extends HashMap<UUID, Foo> {
+        // Jackson will use this if @JsonDeserialize(as = MyHashMap.class) is on a Map field
+        // However, the bug report implies the issue is with how Jackson handles the value type (Foo)
+        // when the target is an interface or abstract class, and the Map itself is specified.
+    }
+
+    static class MyPojo {
+        private Map<UUID, Foo> something;
+
+        @JsonDeserialize(as = MyHashMap.class) // This annotation is key to the bug
+        public void setSomething(Map<UUID, Foo> incomingValue) {
+            this.something = incomingValue;
+        }
+
+        public Map<UUID, Foo> getSomething() {
+            return something;
+        }
+    }
+
+    @Test
+    public void testTypeSpecializationForMaps() throws Exception {
+        String json = "{\n" +
+                      "  \"something\": [\n" +
+                      "        {\n" +
+                      "           \"id\": \"a1b2c3d4-e5f6-7890-1234-567890abcdef\",\n" +
+                      "           \"property\": \"value\"\n" +
+                      "         }\n" +
+                      "  ]\n" +
+                      "}";
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        MyPojo result = objectMapper.readValue(json, MyPojo.class);
+
+        Map<UUID, Foo> somethingMap = result.getSomething();
+
+        // Assertions to verify the deserialization worked as expected in older Jackson versions
+        // This test will fail in Jackson 2.7.x and later due to the reported issue.
+        assertEquals(1, somethingMap.size());
+        UUID expectedId = UUID.fromString("a1b2c3d4-e5f6-7890-1234-567890abcdef");
+        assertTrue(somethingMap.containsKey(expectedId));
+        Foo fooValue = somethingMap.get(expectedId);
+        assertEquals(expectedId, fooValue.getId());
+        assertEquals("value", fooValue.getProperty());
+    }
+}

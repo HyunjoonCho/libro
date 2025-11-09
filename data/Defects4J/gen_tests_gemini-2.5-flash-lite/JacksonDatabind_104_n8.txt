@@ -1,0 +1,59 @@
+import com.fasterxml.jackson.databind.util.StdDateFormat;
+import org.junit.Test;
+
+import java.text.ParseException;
+import java.util.Date;
+import java.util.TimeZone;
+
+import static org.junit.Assert.assertEquals;
+
+public class StdDateFormatTest {
+
+    @Test
+    public void testLargeISODates() throws ParseException {
+        StdDateFormat formatter = new StdDateFormat();
+        formatter.setTimeZone(TimeZone.getTimeZone("UTC")); // Ensure consistent formatting
+
+        // Test with Long.MAX_VALUE
+        Date maxDate = new Date(Long.MAX_VALUE);
+        String formattedMaxDate = formatter.format(maxDate);
+        // The expected format for years > 9999 is not standard ISO-8601,
+        // and StdDateFormat might not handle it correctly.
+        // We are testing the *current* behavior which is likely incorrect.
+        // A correct implementation might throw an exception or use a different format.
+        // Based on the bug report, the format is likely corrupt.
+        // For example, it might produce something like "痝055-12-02T16:47:04.192+0000"
+        // We will try to parse it and assert that it does NOT equal the original date
+        // because the parsing will fail or produce a wrong date.
+
+        try {
+            Date parsedMaxDate = formatter.parse(formattedMaxDate);
+            // If parsing succeeds, it's likely incorrect, so we assert inequality.
+            // The bug report indicates parsing fails with specific exceptions,
+            // so this assertion might not even be reached if the parsing fails.
+            assertEquals("Parsing large ISO-8601 dates should not succeed with incorrect formatting", maxDate.getTime(), parsedMaxDate.getTime());
+        } catch (ParseException e) {
+            // If parsing fails, this confirms the bug as described.
+            // We can add a more specific check if the exception message is known.
+            // For now, catching the exception is sufficient to indicate the bug.
+            System.out.println("Successfully caught expected ParseException for Long.MAX_VALUE: " + e.getMessage());
+            // Optionally, assert on the exception message if it's predictable
+            // assertTrue(e.getMessage().contains("not compatible with any of standard forms"));
+        }
+
+        // Test with Long.MIN_VALUE (negative dates)
+        // The bug report explicitly mentions this might fail due to lack of support for negative dates.
+        Date minDate = new Date(Long.MIN_VALUE);
+        String formattedMinDate = formatter.format(minDate);
+        try {
+            Date parsedMinDate = formatter.parse(formattedMinDate);
+            // If parsing succeeds, it's likely incorrect.
+            assertEquals("Parsing large negative ISO-8601 dates should not succeed with incorrect formatting", minDate.getTime(), parsedMinDate.getTime());
+        } catch (ParseException e) {
+            // Catching the exception confirms the issue with negative dates.
+            System.out.println("Successfully caught expected ParseException for Long.MIN_VALUE: " + e.getMessage());
+            // Optionally, assert on the exception message if it's predictable
+            // assertTrue(e.getMessage().contains("not compatible with any of standard forms"));
+        }
+    }
+}

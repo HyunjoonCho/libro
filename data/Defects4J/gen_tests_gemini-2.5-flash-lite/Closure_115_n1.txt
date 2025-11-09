@@ -1,0 +1,44 @@
+public void testAdvancedOptimizationsOptimization() throws Exception {
+    String inputJs = "window[\"anchor\"] = function (obj, modifiesProp) {\n" +
+                     " return (function (saved) {\n" +
+                     " return modifiesProp(obj) + saved;\n" +
+                     " })(obj[\"prop\"]);\n" +
+                     " }";
+    String externsJs = "var window; window.prop;";
+
+    CompilerOptions options = new CompilerOptions();
+    options.setLanguageIn(LanguageMode.ECMASCRIPT5);
+    options.setLanguageOut(LanguageMode.ECMASCRIPT5);
+    options.setOptimizationLevel(CompilerOptions.OptimizationLevel.ADVANCED_OPTIMIZATIONS);
+    options.setPrettyPrint(true);
+
+    Compiler compiler = new Compiler();
+    compiler.init(new PrintStream(new ByteArrayOutputStream()), new PrintStream(new ByteArrayOutputStream()), new ErrorManager());
+    compiler.compile(new String[] {externsJs}, new String[] {inputJs}, options);
+
+    String outputJs = compiler.toSource();
+
+    // The expected output is not explicitly provided in a machine-readable
+    // format, but the description states the difference.
+    // The faulty output removes the 'saved' variable, which holds the original
+    // value of obj["prop"]. This is problematic if modifiesProp has side effects
+    // that change obj["prop"].
+    // We need to assert that the output still contains the structure that
+    // preserves the original value of obj["prop"] before the inner function call.
+    // A simple check for the presence of "saved" might be too brittle.
+    // Instead, let's check for the pattern that implies the 'saved' variable
+    // was used correctly. The original code assigns obj["prop"] to 'saved'
+    // and then uses 'saved' in the return statement.
+    // The incorrect version returns b(a) + a.prop directly.
+    // We'll check for the presence of the inner function with the 'saved' parameter.
+    assertTrue(outputJs.contains("(function(saved){"));
+    assertTrue(outputJs.contains("saved"));
+    // Also, ensure that the original obj["prop"] is referenced as 'saved' inside the inner function.
+    assertTrue(outputJs.contains("return modifiesProp(obj) + saved"));
+
+    // The problematic output would look something like:
+    // window.foo = function(a, b) { return b(a) + a.prop; };
+    // We can assert that this specific problematic pattern is NOT present.
+    assertFalse(outputJs.contains("return modifiesProp(obj) + obj.prop"));
+
+}

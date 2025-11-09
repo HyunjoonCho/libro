@@ -1,0 +1,68 @@
+import com.google.gson.Gson;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import org.junit.Test;
+import java.io.StringReader;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+
+public class GsonNegativeZeroTest {
+
+    @Test
+    public void testNegativeZeroLexicalPreservation() throws Exception {
+        Gson gson = new Gson();
+        String jsonInput = "-0";
+        JsonReader reader = new JsonReader(new StringReader(jsonInput));
+
+        // The current implementation parses -0 as a long with value 0
+        reader.peek(); // Advance to the token
+        assertEquals(JsonToken.NUMBER, reader.peek());
+        Object value = gson.fromJson(reader, Object.class);
+
+        // After parsing, Gson's LazilyParsedNumber for "-0" should represent it
+        // as a string that preserves the lexical "-0" and not just "0".
+        // The actual numeric value of -0 is 0, but its lexical representation matters here.
+        if (value instanceof com.google.gson.internal.LazilyParsedNumber) {
+            com.google.gson.internal.LazilyParsedNumber lazilyParsedNumber = (com.google.gson.internal.LazilyParsedNumber) value;
+            assertEquals("-0", lazilyParsedNumber.toString());
+            // Verify that the numeric value is indeed 0, but the string representation is "-0"
+            assertEquals(0, lazilyParsedNumber.longValue());
+            assertNotEquals(0L, Long.parseLong(lazilyParsedNumber.toString())); // This assertion might fail depending on exact interpretation
+        } else {
+            // If it's not a LazilyParsedNumber, it might have been directly converted to a primitive type.
+            // This would indicate the bug is present.
+            assertEquals(0, ((Number) value).longValue());
+            // We can't directly assert the lexical representation here if it's not LazilyParsedNumber
+            // but the fact that it parsed to 0 without error and not as a string "-0.0"
+            // suggests the issue might be present if the goal is lexical preservation.
+        }
+    }
+
+    @Test
+    public void testNegativeZeroAsString() throws Exception {
+        Gson gson = new Gson();
+        String jsonInput = "-0";
+        // Force parsing as string to see the original lexical value
+        String parsedAsString = gson.fromJson(jsonInput, String.class);
+        assertEquals("-0", parsedAsString);
+    }
+
+    @Test
+    public void testNegativeZeroAsDouble() throws Exception {
+        Gson gson = new Gson();
+        String jsonInput = "-0.0"; // This case is handled correctly
+        JsonReader reader = new JsonReader(new StringReader(jsonInput));
+        reader.peek(); // Advance to the token
+        assertEquals(JsonToken.NUMBER, reader.peek());
+        Object value = gson.fromJson(reader, Object.class);
+
+        if (value instanceof com.google.gson.internal.LazilyParsedNumber) {
+            com.google.gson.internal.LazilyParsedNumber lazilyParsedNumber = (com.google.gson.internal.LazilyParsedNumber) value;
+            assertEquals("-0.0", lazilyParsedNumber.toString());
+            assertEquals(-0.0, lazilyParsedNumber.doubleValue(), 0.0);
+        } else {
+            assertEquals(-0.0, ((Number) value).doubleValue(), 0.0);
+        }
+    }
+}

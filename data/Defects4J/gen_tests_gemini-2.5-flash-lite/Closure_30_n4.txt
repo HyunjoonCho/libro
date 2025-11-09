@@ -1,0 +1,93 @@
+public void testClosureCompilerIssue() {
+    // This test attempts to simulate the problematic JavaScript behavior
+    // in a Java context. The original issue is related to JavaScript's
+    // variable scoping and how Closure Compiler might optimize it.
+    //
+    // In JavaScript, if 'str' is not declared with 'var', it becomes a global
+    // variable. If the compiler optimizes aggressively, it might reuse the
+    // same 'str' variable reference across different assignments and then
+    // incorrectly concatenate the final value.
+    //
+    // This Java test aims to check a similar pattern: if a temporary string
+    // variable is repeatedly assigned and then used in a concatenation,
+    // does it behave as expected or does it pick up an "older" or incorrect
+    // value?
+    //
+    // We will simulate the RGBA to Hex conversion.
+    // The original JavaScript code converts RGBA components (0-1) to hex
+    // strings (00-FF).
+
+    // Simulate the RGBA components. Let's pick values that would require
+    // leading zeros to ensure the logic is tested.
+    // For example, r=0.1, g=0.2, b=0.3, a=0.4
+    // Expected hex: 1a2b3c4d
+    // 0.1 * 255 = 25.5 -> floor is 25 -> 19 in hex
+    // 0.2 * 255 = 51.0 -> floor is 51 -> 33 in hex
+    // 0.3 * 255 = 76.5 -> floor is 76 -> 4c in hex
+    // 0.4 * 255 = 102.0 -> floor is 102 -> 66 in hex
+    // Expected: "19334c66"
+
+    // Let's use values that might expose issues with intermediate string states.
+    // For instance, if the compiler is over-optimizing and reuses a string
+    // reference incorrectly.
+    String rHex = toPaddedHex(0.1); // 25 -> "19"
+    String gHex = toPaddedHex(0.2); // 51 -> "33"
+    String bHex = toPaddedHex(0.3); // 76 -> "4c"
+    String aHex = toPaddedHex(0.4); // 102 -> "66"
+
+    // The problematic JavaScript line was: return "" + str + str + str + str;
+    // This suggests the compiler might have incorrectly produced something like:
+    // var tempStr = "some_value";
+    // ... assign to tempStr ...
+    // return tempStr + tempStr + tempStr + tempStr; // instead of using distinct values.
+
+    // In our Java simulation, we want to ensure that concatenating the results
+    // of separate calls to a helper function (that simulates the JavaScript
+    // logic for a single component) results in the correct combined string,
+    // not a repetition of one of the intermediate values.
+
+    String combinedHex = rHex + gHex + bHex + aHex;
+
+    // Assert the expected combined hex string.
+    assertEquals("19334c66", combinedHex);
+
+    // Let's test another set of values to be more thorough.
+    // r=0.0, g=0.0, b=0.0, a=1.0
+    // 0.0 * 255 = 0 -> "00"
+    // 1.0 * 255 = 255 -> "ff"
+    // Expected: "000000ff"
+    rHex = toPaddedHex(0.0);
+    gHex = toPaddedHex(0.0);
+    bHex = toPaddedHex(0.0);
+    aHex = toPaddedHex(1.0);
+    combinedHex = rHex + gHex + bHex + aHex;
+    assertEquals("000000ff", combinedHex);
+
+    // Test with values that result in single-digit hex before padding.
+    // r=0.05, g=0.1, b=0.15, a=0.2
+    // 0.05 * 255 = 12.75 -> 12 -> "0c"
+    // 0.1 * 255 = 25.5 -> 25 -> "19"
+    // 0.15 * 255 = 38.25 -> 38 -> "26"
+    // 0.2 * 255 = 51 -> "33"
+    // Expected: "0c192633"
+    rHex = toPaddedHex(0.05);
+    gHex = toPaddedHex(0.1);
+    bHex = toPaddedHex(0.15);
+    aHex = toPaddedHex(0.2);
+    combinedHex = rHex + gHex + bHex + aHex;
+    assertEquals("0c192633", combinedHex);
+}
+
+// Helper method to simulate the JavaScript logic for converting a float (0-1)
+// to a two-digit zero-padded hexadecimal string.
+private String toPaddedHex(double value) {
+    // Simulate sgxFloor(this.r*255)
+    int intValue = (int) Math.floor(value * 255);
+    // Simulate toString(16)
+    String hexString = Integer.toHexString(intValue);
+    // Simulate if (str.length < 2) { str = "0"+str; }
+    if (hexString.length() < 2) {
+        hexString = "0" + hexString;
+    }
+    return hexString;
+}

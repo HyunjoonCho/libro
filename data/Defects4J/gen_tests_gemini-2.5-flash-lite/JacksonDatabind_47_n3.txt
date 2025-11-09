@@ -1,0 +1,68 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class JacksonTest {
+
+    // Dummy classes to reproduce the issue
+    public interface AccessionIdentifier {
+        String getId();
+    }
+
+    public static class BaseAccessionIdentifier implements AccessionIdentifier {
+        private String id;
+
+        public BaseAccessionIdentifier() {
+        }
+
+        public BaseAccessionIdentifier(String id) {
+            this.id = id;
+        }
+
+        @Override
+        public String getId() {
+            return id;
+        }
+
+        public void setId(String id) {
+            this.id = id;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            BaseAccessionIdentifier that = (BaseAccessionIdentifier) o;
+            return java.util.Objects.equals(id, that.id);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(id);
+        }
+    }
+
+    public static class Foo {
+        @JsonSerialize(as = BaseAccessionIdentifier.class)
+        @JsonDeserialize(as = BaseAccessionIdentifier.class)
+        public AccessionIdentifier getReference() {
+            return new BaseAccessionIdentifier("someId");
+        }
+    }
+
+    @Test
+    public void testJsonSerializeAsSuperType() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        Foo foo = new Foo();
+        String json = mapper.writeValueAsString(foo);
+        assertEquals("{\"reference\":{\"id\":\"someId\"}}", json);
+
+        // Also test deserialization
+        Foo deserializedFoo = mapper.readValue(json, Foo.class);
+        assertEquals(foo.getReference().getClass(), deserializedFoo.getReference().getClass());
+        assertEquals(foo.getReference().getId(), deserializedFoo.getReference().getId());
+    }
+}

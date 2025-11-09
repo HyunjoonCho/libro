@@ -1,0 +1,44 @@
+public void testVarCheckCrashWithModules() {
+    String jqueryJs = "var jQuery = function(selector) { return { length: 1 }; };";
+    String coreJs = "equal( jQuery(\" <div/> \").length, 1, \"Make sure whitespace is trimmed.\" );";
+
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setPrettyPrint(true);
+    options.setLanguage(CompilerOptions.LanguageMode. மூல); // Assuming ' மூல' represents the module language mode
+    options.setClosurePass(false); // Disable closure passes for this test
+
+    // Define modules
+    ModuleLoader moduleLoader = new ModuleLoader(new File("."), null, null);
+    CompilationLevel compilationLevel = CompilationLevel.ADVANCED_OPTIMIZATIONS;
+    compilationLevel.setOptionsForCompilationLevel(options);
+
+    List<SourceFile> externs = new ArrayList<>();
+    externs.add(SourceFile.fromCode("qunit_externs.js", "function equal(a, b, c) {}"));
+
+    List<SourceFile> inputs = new ArrayList<>();
+    inputs.add(SourceFile.fromCode("jquery.js", jqueryJs));
+    inputs.add(SourceFile.fromCode("core.js", coreJs));
+
+    // Create module configurations
+    ModuleConfiguration jqueryModule = new ModuleConfiguration("jquery", 1, null, null);
+    ModuleConfiguration coreModule = new ModuleConfiguration("core", 1, "jquery", null);
+    List<ModuleConfiguration> moduleConfigs = Arrays.asList(jqueryModule, coreModule);
+
+    // Mock ModuleLoader to return our defined modules
+    ModuleLoader mockModuleLoader = Mockito.mock(ModuleLoader.class);
+    Mockito.when(mockModuleLoader.getModule(Mockito.eq("jquery"), Mockito.anyInt(), Mockito.anyString()))
+            .thenReturn(new Module("jquery", 1, new String[]{}, new SourceFile[]{SourceFile.fromCode("jquery.js", jqueryJs)}));
+    Mockito.when(mockModuleLoader.getModule(Mockito.eq("core"), Mockito.anyInt(), Mockito.eq("jquery")))
+            .thenReturn(new Module("core", 1, new String[]{"jquery"}, new SourceFile[]{SourceFile.fromCode("core.js", coreJs)}));
+    
+    // Set the mock module loader
+    options.setModuleLoader(mockModuleLoader);
+
+    // Compile the code
+    Result result = compiler.compile(externs, inputs, options);
+
+    // Assert that there are no errors or warnings
+    assertTrue(result.errors.toString(), result.errors.isEmpty());
+    assertTrue(result.warnings.toString(), result.warnings.isEmpty());
+}

@@ -1,0 +1,27 @@
+public void testTarArchiveInputStreamRejectsLargeUidGid() throws Exception {
+    // Create a dummy tar archive in memory with a PAX header containing a large UID
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    try (TarArchiveOutputStream taos = new TarArchiveOutputStream(bos)) {
+        TarArchiveEntry entry = new TarArchiveEntry("testfile.txt");
+        // Set a UID >= 0x80000000 (4294967296)
+        // Using 4294967295 which is Integer.MAX_VALUE * 2 + 1, to fit in unsigned int
+        entry.setUserId(4294967295); 
+        taos.putArchiveEntry(entry);
+        taos.write("content".getBytes());
+        taos.closeArchiveEntry();
+    }
+
+    byte[] tarBytes = bos.toByteArray();
+
+    // Attempt to read the archive, expecting a NumberFormatException
+    try (TarArchiveInputStream tais = new TarArchiveInputStream(new ByteArrayInputStream(tarBytes))) {
+        TarArchiveEntry entry = tais.getNextTarEntry();
+        assertNotNull("Should have at least one entry", entry);
+        // The exception is thrown during getNextTarEntry or when accessing entry details
+        // The actual check here is that it doesn't throw an exception if the fix is applied
+        // For reproducing the bug, we'd expect a NumberFormatException here.
+        // To *test* the fix, we assert that it *doesn't* throw.
+        // If we wanted to assert the bug, we'd wrap this in assertThrows(NumberFormatException.class, ...)
+        assertEquals(4294967295L, entry.getUserId());
+    }
+}

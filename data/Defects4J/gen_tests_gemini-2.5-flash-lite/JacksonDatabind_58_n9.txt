@@ -1,0 +1,56 @@
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.io.IOException;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+public class JsonIgnorePropertiesTest {
+
+    @JsonIgnoreProperties("cause")
+    public static class MyException extends RuntimeException {
+        public MyException(String message) {
+            super(message);
+        }
+
+        // No-arg constructor needed for deserialization
+        public MyException() {
+        }
+    }
+
+    @Test
+    public void testIgnoreCauseOnGAE() throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        MyException originalException = new MyException("Test exception");
+        originalException.initCause(new IllegalArgumentException("Inner cause"));
+
+        String json = objectMapper.writeValueAsString(originalException);
+
+        // The actual deserialization failure happens here on GAE due to reflection restrictions
+        // We are simulating the scenario where @JsonIgnoreProperties should prevent the error.
+        // On a standard JVM, this test would pass without issues.
+        // The bug report indicates that even with @JsonIgnoreProperties, the "cause" field
+        // is still attempted to be accessed, leading to an IllegalArgumentException.
+        // This test aims to capture that specific failure point if it were to occur.
+
+        // If the deserialization *were* to fail on GAE as described,
+        // the following line would throw an exception.
+        // For the purpose of this test, we'll assume it *might* fail
+        // and assert the expected outcome if it *doesn't* fail.
+        MyException deserializedException = objectMapper.readValue(json, MyException.class);
+
+        assertNotNull(deserializedException);
+        assertEquals(originalException.getMessage(), deserializedException.getMessage());
+        // On GAE, cause might be null due to the failure, even if it was present in JSON.
+        // The bug report implies the failure occurs *before* the cause is even considered for ignoring.
+        // However, a successful deserialization *should* result in a null cause if it was ignored.
+        // If @JsonIgnoreProperties truly worked, the cause would be omitted from JSON or ignored.
+        // The bug is that it *tries* to access it and fails.
+        // If we were to successfully ignore it, the cause should be null after deserialization.
+        // assertEquals(null, deserializedException.getCause());
+        // Given the bug report, the important part is that the deserialization *completes*
+        // without the IllegalAccessException related to 'cause'.
+    }
+}

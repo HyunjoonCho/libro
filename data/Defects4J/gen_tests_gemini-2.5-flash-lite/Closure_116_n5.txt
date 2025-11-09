@@ -1,0 +1,44 @@
+public void testAdvancedOptimization() throws Exception {
+    String inputJs = "window[\"anchor\"] = function (obj, modifiesProp) {\n" +
+                     " return (function (saved) {\n" +
+                     " return modifiesProp(obj) + saved;\n" +
+                     " })(obj[\"prop\"]);\n" +
+                     " }";
+    String externsJs = "var window = {}; window.anchor = function(obj, modifiesProp) {};";
+    CompilerOptions options = new CompilerOptions();
+    options.setCompilationLevel(CompilationLevel.ADVANCED_OPTIMIZATIONS);
+    options.setPrettyPrint(true);
+    options.setLanguage(LanguageMode.ECMASCRIPT5);
+
+    Compiler compiler = new Compiler();
+    compiler.init(new PrintStream(new ByteArrayOutputStream()), new PrintStream(new ByteArrayOutputStream()), new CompilerOptions());
+    compiler.compile(new StringArraySupplier(new String[]{externsJs}), new StringArraySupplier(new String[]{inputJs}), options);
+
+    String outputJs = compiler.toSource();
+
+    // The expected output is a simplified version of the input after optimizations.
+    // The bug is that the optimization incorrectly assumes 'obj["prop"]' is not modified.
+    // We are checking that the 'saved' variable is still used, which indicates the optimization didn't happen incorrectly.
+    // A more direct check would be to assert the exact output, but the exact output can change with compiler versions.
+    // Instead, we check for the presence of the intermediate variable `saved` which is part of the correct structure.
+    assertTrue(outputJs.contains("saved"));
+    assertFalse(outputJs.contains("return modifiesProp(obj) + obj[\"prop\"]"));
+}
+
+// Helper class to provide String[] as SourceSupplier
+private static class StringArraySupplier implements SourceSupplier {
+    private final String[] sources;
+
+    public StringArraySupplier(String[] sources) {
+        this.sources = sources;
+    }
+
+    @Override
+    public ImmutableList<CompilerInput> getInputs() {
+        ImmutableList.Builder<CompilerInput> builder = ImmutableList.builder();
+        for (String source : sources) {
+            builder.add(new CompilerInput(source));
+        }
+        return builder.build();
+    }
+}

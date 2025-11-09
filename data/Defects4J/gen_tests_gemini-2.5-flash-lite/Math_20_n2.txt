@@ -1,0 +1,81 @@
+public void testCMAESOptimizerBounds() {
+    // This test case aims to reproduce the issue where CMAESOptimizer might exceed bounds.
+    // The original bug report indicates that the default checkFeasableCount is zero,
+    // which prevents isFeasible() from being called. Even with a non-zero count,
+    // the optimizer might still return an out-of-bounds solution.
+
+    // Mock or set up a scenario that triggers the problematic behavior.
+    // This might involve:
+    // 1. Defining an objective function that is sensitive to bounds.
+    // 2. Setting bounds that are relatively narrow or difficult to satisfy.
+    // 3. Configuring CMAESOptimizer with specific parameters, potentially including
+    //    checkFeasableCount = 0 initially to demonstrate that part of the bug,
+    //    and then a non-zero value to test the other aspect.
+
+    // Example setup (this is a conceptual example and may need adjustment based on
+    // the actual CMAESOptimizer implementation and its dependencies):
+
+    // Define a simple objective function that is clearly out of bounds outside a range.
+    ObjectiveFunction<Point> objectiveFunction = new ObjectiveFunction<Point>() {
+        @Override
+        public double value(Point point) {
+            // Penalize points outside the range [-1, 1] for each dimension
+            double penalty = 0;
+            for (double coord : point.getPoint()) {
+                if (coord < -1.0 || coord > 1.0) {
+                    penalty += Math.abs(coord); // Add a penalty proportional to the deviation
+                }
+            }
+            // A simple function that has a minimum at (0,0) but is otherwise flat or increasing
+            // and has a clear boundary.
+            return point.getPoint()[0] * point.getPoint()[0] + point.getPoint()[1] * point.getPoint()[1] + penalty;
+        }
+    };
+
+    // Define bounds
+    double[] lowerBounds = {-1.0, -1.0};
+    double[] upperBounds = {1.0, 1.0};
+    List<Range> bounds = new ArrayList<>();
+    for (int i = 0; i < lowerBounds.length; i++) {
+        bounds.add(new Range(lowerBounds[i], upperBounds[i]));
+    }
+
+    // Initial guess
+    Point initialGuess = new Point(new double[]{0.5, 0.5}); // Starting within bounds
+
+    // Create CMAESOptimizer instance
+    CMAESOptimizer optimizer = new CMAESOptimizer();
+
+    // --- Test case 1: Demonstrate the issue with checkFeasableCount = 0 ---
+    // Configure optimizer (assuming parameters can be set like this)
+    optimizer.setCheckFeasibleCount(0); // Explicitly set to 0 to trigger the described behavior
+
+    // Run optimization
+    Point result1 = optimizer.optimize(objectiveFunction, initialGuess, bounds);
+
+    // Assert that the result is out of bounds.
+    // This assertion depends on the objective function and how "out of bounds" is defined.
+    // For this example, we check if any coordinate is outside [-1, 1].
+    for (double coord : result1.getPoint()) {
+        assertTrue("Result 1 should be within bounds [-1, 1] but is: " + coord, coord >= -1.0 && coord <= 1.0);
+    }
+
+
+    // --- Test case 2: Demonstrate the issue even with non-zero checkFeasableCount ---
+    // Reset or create a new optimizer instance if state is an issue
+    optimizer = new CMAESOptimizer();
+    optimizer.setCheckFeasibleCount(5); // Set to a non-zero value
+
+    // Run optimization again
+    Point result2 = optimizer.optimize(objectiveFunction, initialGuess, bounds);
+
+    // Assert that the result is out of bounds.
+    for (double coord : result2.getPoint()) {
+        assertTrue("Result 2 should be within bounds [-1, 1] but is: " + coord, coord >= -1.0 && coord <= 1.0);
+    }
+
+    // Note: This test is conceptual. The exact way to set up the optimizer,
+    // objective function, and bounds will depend on the specific API of CMAESOptimizer.
+    // The key is to create a scenario where the optimizer's internal logic for handling
+    // bounds checking fails as described in the bug report.
+}

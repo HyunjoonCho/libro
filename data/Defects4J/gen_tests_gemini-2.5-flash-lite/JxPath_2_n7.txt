@@ -1,0 +1,57 @@
+public void testExtensionFunctionReturningNodeSet() {
+    // Mocking the extension function to return a BasicNodeSet
+    JXPathContext context = JXPathContext.newContext(new Object());
+    context.registerNamespace("ems", ""); // Assuming a namespace for the extension function
+    context.registerDeclarativeFunctions(); // Assuming JXPath can discover functions
+
+    // Mock the JXPathIntrospector to intercept calls to the extension function
+    // and return our controlled NodeSet
+    JXPathIntrospector.addNodePointerFactory(new JXPathNodePointerFactory() {
+        @Override
+        public NodePointer createNodePointer(QName name, Object object, JXPathContext context) {
+            if ("ems:observations".equals(name.toString())) {
+                BasicNodeSet nodeSet = new BasicNodeSet();
+                // Add some dummy NodePointers to the NodeSet
+                nodeSet.add(new StringNodePointer("dummyValue1"));
+                nodeSet.add(new StringNodePointer("dummyValue2"));
+                return new NodeSetNodePointer(nodeSet); // Wrap NodeSet in a NodePointer
+            }
+            return null;
+        }
+    });
+
+    // Select nodes using the extension function
+    // The expected behavior is to get the elements of the NodeSet directly, not a single node containing the NodeSet
+    List<?> result = context.selectNodes("ems:observations()");
+
+    // Assert that the result is a list of NodePointers (or their values) from the NodeSet
+    // and not a single NodePointer containing the NodeSet.
+    // The exact assertion depends on how the NodeSetNodePointer is resolved by selectNodes.
+    // If selectNodes correctly iterates over the NodeSet, we expect multiple results.
+    // If it incorrectly returns a single NodePointer, we might get a list with one element.
+    // The bug report suggests it was returning a single node containing the BasicNodeSet.
+    // So we assert that we get more than one result, implying iteration.
+
+    assertTrue("Expected multiple results from NodeSet, but got: " + result, result.size() > 1);
+
+    // Further assertions could check the types or values of the returned elements
+    // For example, if StringNodePointer's value is returned:
+    // assertEquals("dummyValue1", result.get(0));
+    // assertEquals("dummyValue2", result.get(1));
+}
+
+// Helper classes for mocking (simplified for demonstration)
+class BasicNodeSet extends org.apache.commons.jxpath.BasicNodeSet {
+}
+
+class NodeSetNodePointer extends org.apache.commons.jxpath.ri.model.NodeSetNodePointer {
+    public NodeSetNodePointer(BasicNodeSet nodeSet) {
+        super(null, nodeSet); // Parent is null for simplicity
+    }
+}
+
+class StringNodePointer extends org.apache.commons.jxpath.ri.model.beans.StringEncoder.StringNodePointer {
+    public StringNodePointer(String value) {
+        super(value);
+    }
+}

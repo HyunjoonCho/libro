@@ -1,0 +1,81 @@
+public void testLabeledLoopsAndBreaks() {
+    String source = "var i = 0; lab1: do { lab2: do { i++; if (true) { break lab2; } else { break lab1; } } while(false); } while(false); console.log(i);";
+    CompilerOptions options = new CompilerOptions();
+    options.setPrettyPrint(false); // Mimic the bug scenario
+    options.setLanguage(CompilerOptions.LanguageMode.ECMASCRIPT5);
+    Compiler compiler = new Compiler();
+    compiler.compile(SourceFile.fromCode("test.js", source), options);
+    String generatedCode = compiler.toSource();
+    // The bug report indicates IE doesn't like the missing brackets after the first do.
+    // We can try to assert that the generated code might have this structure,
+    // but a direct assertion on the exact IE-breaking output is difficult without
+    // running IE. A more robust test would be to check if the generated code
+    // compiles and runs correctly in a standard JS environment, and then
+    // potentially add a specific IE check if needed.
+    // For the purpose of reproducing the described issue, we'll check for the
+    // presence of the problematic structure if it were to be generated.
+    // However, the provided example output in the bug report is:
+    // "var a=0;do b:do{a++;break b}while(0);while(0);console.log(a);"
+    // This output is actually functional in modern browsers and doesn't seem to have
+    // the "missing brackets" issue described. The description might be slightly
+    // misleading or referring to a very old IE version.
+    //
+    // Given the description and the example output, it seems the core issue is
+    // how labeled breaks are handled and potentially the minimization of the code.
+    // Let's try to assert that the generated code, when run, produces the expected output.
+    // Since we can't directly execute JS in JUnit easily without external tools,
+    // we'll focus on the structure that was *claimed* to be problematic.
+    // The bug report's example output "var a=0;do b:do{a++;break b}while(0);while(0);console.log(a);"
+    // is what we'll assume is generated and test its behavior implicitly.
+    // The core problem is that `break lab2` should exit the inner loop, and `i` should be 1.
+    // The `else { break lab1; }` is unreachable.
+    //
+    // A more direct test would be to check the *compiled* output for the problematic pattern if possible.
+    // However, without a clear pattern that *always* breaks IE, and given the JS engine differences,
+    // let's assume the described generated code is the target and verify its logic.
+    // The described generated code: "var a=0;do b:do{a++;break b}while(0);while(0);console.log(a);"
+    // If this code were executed, `a` would be incremented to 1, then `break b` would exit the inner `do-while`.
+    // The outer `while(0)` would then terminate. `console.log(a)` would output 1.
+    // This is the *expected* behavior for the provided source.
+    // The bug is that this *specific* generated output doesn't work in IE.
+    //
+    // Since we are testing the *compiler's* behavior, we should test the output it produces.
+    // The bug report states the generated code is:
+    // "var a=0;do b:do{a++;break b}while(0);while(0);console.log(a);"
+    // We can't directly assert IE's behavior. We can assert the *logic* of the generated code.
+    // The logic dictates that `i` should be 1.
+    //
+    // Let's re-evaluate the description: "IE doesn't like the missing brackets just after the first do instruction".
+    // This implies the generated code might look like: `do { ... } while(false);` vs `do ... while(false);`.
+    // The generated example `do b:do{a++;break b}while(0);while(0);console.log(a);` *does* have missing brackets after the first `do`.
+    // So, we are testing that the compiler *produces* this output when `setPrettyPrint(false)` is used.
+
+    // We can't easily run the generated JS in JUnit.
+    // The best we can do is to check if the compiler *generates* the code that was reported as problematic.
+    // The problematic pattern is the minimized `do ... while(false);` without braces.
+    // Let's check if the generated code contains this pattern and if the logic results in `i` being 1.
+
+    // The original code's logic:
+    // i = 0
+    // Outer loop starts (do...while(false))
+    //   Inner loop starts (do...while(false))
+    //     i becomes 1
+    //     if (true) -> break lab2 (exits inner loop)
+    //   Inner loop ends
+    // Outer loop condition is false (while(false))
+    // Outer loop ends
+    // console.log(i) -> outputs 1
+
+    // The reported generated code:
+    // var a=0;do b:do{a++;break b}while(0);while(0);console.log(a);
+    // This code correctly sets a=1 and logs it. The *problem* is IE's interpretation of the syntax.
+    // Since we cannot test IE directly, we test that the compiler produces the reported output.
+
+    assertTrue("Generated code should contain the problematic syntax for IE",
+               generatedCode.contains("do b:do{a++;break b}while(0);while(0);"));
+
+    // We can also try to run the code through a JS engine if available, but that's complex for a single method.
+    // For now, asserting the presence of the *reported* problematic output is the closest we can get.
+    // If the bug was that it *didn't* produce this output, we'd assert the opposite.
+    // Here, the bug is that the *produced* output is problematic.
+}

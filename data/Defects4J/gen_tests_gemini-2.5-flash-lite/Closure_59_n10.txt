@@ -1,0 +1,36 @@
+public void testCommandLineExclusionOfGlobalThis() throws Exception {
+    String[] args = {
+        "--warning_level", "VERBOSE",
+        "--jscomp_off", "globalThis",
+        "--jscomp_off", "nonStandardJsDocs",
+        "--jscomp_error", "nonStandardJsDocs", // To verify nonStandardJsDocs is affected by --jscomp_off
+        "--jscomp_error", "globalThis" // To verify globalThis is NOT affected by --jscomp_off
+    };
+    Compiler compiler = new Compiler();
+    compiler.initOptions(args);
+
+    // A simple JS code that would trigger globalThis warning
+    String jsCode = "function foo() { return globalThis.bar; }";
+    SourceFile sourceFile = SourceFile.fromCode("test.js", jsCode);
+
+    // Compile and check warnings
+    compiler.compile(ImmutableList.of(), ImmutableList.of(sourceFile), compiler.getOptions());
+
+    // Assert that globalThis warning is NOT present, meaning it was suppressed.
+    // If it's present, the test fails, indicating the bug.
+    // We expect nonStandardJsDocs to be an error because we explicitly set it to error
+    // and it should be suppressed by --jscomp_off, but the bug description implies it works for it.
+    // The critical part is that globalThis should NOT be an error.
+    boolean globalThisWarningFound = false;
+    for (JSError error : compiler.getErrors()) {
+        if (error.getDescription().contains("globalThis")) {
+            globalThisWarningFound = true;
+            break;
+        }
+    }
+    assertFalse("globalThis warning should have been suppressed by --jscomp_off", globalThisWarningFound);
+
+    // Optionally, assert that nonStandardJsDocs is treated as an error if the input had it
+    // (though the provided snippet doesn't directly trigger nonStandardJsDocs).
+    // The core of the bug is about globalThis not being suppressed.
+}

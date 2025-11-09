@@ -1,0 +1,36 @@
+public void testConvertAndWriteContextMismatch() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.setFilterProvider(new SimpleFilterProvider().addFilter("myFilter", SimpleBeanPropertyFilter.filterOutAllExcept("field1")));
+
+    MyObject obj = new MyObject("value1", "value2");
+
+    // Using writeValueAsString
+    StringWriter sw1 = new StringWriter();
+    mapper.writerWithDefaultPrettyPrinter().withFilters(new SimpleFilterProvider().addFilter("myFilter", SimpleBeanPropertyFilter.filterOutAllExcept("field1"))).writeValue(sw1, obj);
+    String result1 = sw1.toString();
+
+    // Using convertValue
+    Map<String, Object> map = mapper.convertValue(obj, Map.class);
+    StringWriter sw2 = new StringWriter();
+    mapper.writerWithDefaultPrettyPrinter().withFilters(new SimpleFilterProvider().addFilter("myFilter", SimpleBeanPropertyFilter.filterOutAllExcept("field1"))).writeValue(sw2, map);
+    String result2 = sw2.toString();
+
+    // The issue is that the filtering is not applied correctly when using convertValue
+    // In the expected output, only "field1" should be present.
+    // The actual output from convertValue will include both fields.
+    assertFalse("Filtering should be applied when using convertValue", result2.contains("field2"));
+    assertTrue("Filtering should be applied when using writeValueAsString", result1.contains("field1"));
+    assertFalse("Filtering should not include excluded fields", result1.contains("field2"));
+}
+
+// Helper class for the test
+@JsonFilter("myFilter")
+private static class MyObject {
+    public String field1;
+    public String field2;
+
+    public MyObject(String field1, String field2) {
+        this.field1 = field1;
+        this.field2 = field2;
+    }
+}

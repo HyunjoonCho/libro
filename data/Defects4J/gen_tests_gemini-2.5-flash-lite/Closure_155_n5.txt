@@ -1,0 +1,109 @@
+public void testOverzealousArgumentsOptimisation() {
+    // This test case attempts to simulate the JavaScript behavior described in the bug report.
+    // In JavaScript, 'arguments' is an array-like object that contains the arguments passed to a function.
+    // Modifying 'arguments[0]' can affect the value of the first parameter of the function.
+    // This Java test aims to replicate a scenario where this modification could lead to unexpected behavior
+    // if not handled correctly, specifically when the function is called with 'apply'.
+
+    // We'll use a mock object or a simple class to simulate the 'this' context and the callback.
+    // The core of the bug is that the 'apply' method might receive modified arguments.
+
+    // Let's define a simple context object
+    Object context = new Object();
+
+    // Let's define a callback that expects specific arguments and checks them.
+    // We'll use a lambda expression for brevity.
+    Object callback = (Object[] args) -> {
+        // In the buggy JavaScript, 'arguments[0]' is modified before 'apply' is called.
+        // If 'apply' then uses the modified 'arguments', the first argument passed to the callback
+        // would be the 'this' context instead of the original first argument.
+
+        // We expect the first argument to be the 'context' object, and the second to be an array
+        // containing the arguments passed to 'apply'.
+        // The original bug report implies that 'arguments[0]' was overwritten with 'this'.
+        // So, when 'f.apply(this, arguments)' is called, 'arguments' should contain the modified arguments.
+
+        // Assert that the first argument received by the callback is indeed the context.
+        // This is the behavior caused by the "overzealous optimisation" where arguments[0] is overwritten.
+        assertEquals("The first argument should be the 'this' context", context, args[0]);
+
+        // We can also assert the number of arguments passed to the apply method.
+        // In the original JS, it was 'f.apply(this, arguments)'.
+        // The 'arguments' object would have been modified to include 'this' as its first element.
+        // If the original call was d3_call(callback, arg1, arg2), then after arguments[0] = this,
+        // the 'arguments' object would effectively be [this, arg1, arg2].
+        // So, the callback should receive 3 arguments.
+        assertEquals("The callback should receive the modified arguments", 3, args.length);
+
+        // We can also check the subsequent arguments to ensure they are the original ones.
+        // This part might vary depending on the exact interpretation of the JS bug.
+        // Assuming the original call was d3_call(callback, "originalArg1", "originalArg2")
+        // and 'this' is 'context'.
+        // After arguments[0] = this, the 'arguments' object becomes [context, "originalArg1", "originalArg2"].
+        // So, args[1] should be "originalArg1".
+        // assertEquals("The second argument should be the original first argument", "originalArg1", args[1]);
+        // assertEquals("The third argument should be the original second argument", "originalArg2", args[2]);
+        // The above assertions on args[1] and args[2] are commented out because the exact behavior
+        // of how 'apply' handles the modified 'arguments' object in the presence of the overwritten first argument
+        // is subtle and depends on the JavaScript engine. The primary goal here is to reproduce the
+        // failure where the first argument becomes the 'this' context.
+    };
+
+    // We need a way to invoke this callback with 'apply' and simulate the 'arguments' modification.
+    // Since Java doesn't have a direct equivalent of JavaScript's `arguments` object and its behavior
+    // with `apply` in this specific way, we'll simulate the effect.
+
+    // Let's create a method that mimics the problematic JavaScript function.
+    // This method will take a callback and some arguments.
+    // Inside, it will simulate the modification of the 'arguments' and then call the callback.
+
+    // We can't directly modify Java's method arguments like JavaScript's `arguments`.
+    // So, we will simulate the *effect* of the bug. The bug is that `arguments[0]` is overwritten
+    // with `this`, and then `f.apply(this, arguments)` is called. This means the callback `f`
+    // receives `this` as its first argument, and then the rest of the original arguments.
+
+    // A way to simulate this in Java is to create a wrapper that captures the intended arguments,
+    // modifies the first one to be the context, and then passes the modified list to the callback.
+
+    Object[] originalArgsForApply = new Object[] { "originalArg1", "originalArg2" }; // Simulate original arguments passed to d3_call after the callback
+
+    // Simulate the 'arguments' object modification: arguments[0] = this
+    // In our simulation, this means the first element of the array passed to the callback
+    // should be the 'context'.
+    Object[] simulatedArgumentsForApply = new Object[originalArgsForApply.length + 1];
+    simulatedArgumentsForApply[0] = context; // This is the crucial part: arguments[0] = this
+    System.arraycopy(originalArgsForApply, 0, simulatedArgumentsForApply, 1, originalArgsForApply.length);
+
+    // Now, call the callback with the simulated arguments.
+    // In Java, we can't directly use 'apply' like in JavaScript. We'll invoke the lambda.
+    // The lambda itself will perform the assertions.
+    try {
+        // We need to cast the lambda to a functional interface that accepts Object[].
+        // A simple way is to use a custom interface or a standard one if available.
+        // For this example, let's assume we can invoke it directly if it matches the signature.
+        // If using a framework like Mockito, you could mock the method call.
+
+        // Let's define a functional interface for clarity:
+        @FunctionalInterface
+        interface CallbackWithArgs {
+            void call(Object... args);
+        }
+
+        CallbackWithArgs cb = (args) -> {
+            // Replicate the assertions from the description
+            assertEquals("The first argument should be the 'this' context", context, args[0]);
+            assertEquals("The callback should receive the modified arguments", 3, args.length);
+            // The rest of the assertions would check originalArgsForApply[0] and originalArgsForApply[1]
+            // if the JS engine preserved them in the 'arguments' object after modification.
+            // For simplicity, we focus on the primary failure: first argument being overwritten.
+        };
+
+        // Now, invoke the callback with the simulated modified arguments.
+        cb.call(simulatedArgumentsForApply);
+
+    } catch (Exception e) {
+        // If any assertion fails, it will throw an AssertionError.
+        // We can re-throw it or handle it as needed.
+        throw new AssertionError("Test failed due to unexpected exception: " + e.getMessage(), e);
+    }
+}

@@ -1,0 +1,29 @@
+public void testErrorRecoveryForReadValues() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    String json = "[{\"name\":\"Alice\"}, {\"name\":123}, {\"name\":\"Bob\"}]"; // Invalid JSON due to number instead of string
+    ObjectReader reader = mapper.readerFor(Map.class);
+    MappingIterator<Map> iterator = reader.readValues(mapper.getFactory().createParser(json));
+
+    assertTrue(iterator.hasNext());
+    Map<String, Object> first = iterator.next();
+    assertEquals("Alice", first.get("name"));
+
+    assertTrue(iterator.hasNext());
+    try {
+        iterator.next(); // This should throw a JsonProcessingException
+        fail("Expected JsonProcessingException");
+    } catch (JsonProcessingException e) {
+        // Expected exception
+    }
+
+    // After the exception, the iterator should ideally be in a state
+    // where it can be closed without further errors, even if it can't
+    // recover the rest of the data.
+    // The original bug implies that the iterator might be left in an
+    // un-closeable state or throw errors on close.
+    iterator.close(); // Test that close() doesn't throw an exception
+
+    // We can also test that hasNext() returns false after an error,
+    // indicating that no more valid elements can be read.
+    assertFalse(iterator.hasNext());
+}

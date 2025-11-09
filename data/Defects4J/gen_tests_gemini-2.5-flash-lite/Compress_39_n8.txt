@@ -1,0 +1,44 @@
+public void testZipTruncatedArchive() throws Exception {
+    // Create a minimal zip file with one entry, but truncate it
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    ZipOutputStream zos = new ZipOutputStream(baos);
+    ZipEntry entry = new ZipEntry("test.txt");
+    zos.putNextEntry(entry);
+    zos.write("Hello".getBytes());
+    zos.closeEntry();
+    zos.finish(); // Finish writing the zip structure
+
+    // Truncate the zip file content
+    byte[] zipBytes = baos.toByteArray();
+    byte[] truncatedZipBytes = Arrays.copyOf(zipBytes, zipBytes.length / 2); // Truncate by half
+
+    // Attempt to read the truncated zip file and assert that it doesn't throw an EOFException with excessive data
+    try {
+        ZipArchiveInputStream sais = new ZipArchiveInputStream(new ByteArrayInputStream(truncatedZipBytes));
+        // Consume the archive to trigger potential errors
+        while (sais.getNextZipEntry() != null) {
+            byte[] buffer = new byte[1024];
+            while (sais.read(buffer) != -1) {
+                // Do nothing, just consume
+            }
+        }
+        sais.close();
+        // If no exception was thrown, the test passes for this scenario
+        // However, the original bug implies an EOFException with large data.
+        // We can't directly assert the *absence* of a specific error message content easily without mocking or more specific error handling.
+        // The primary goal is to ensure that an EOFException, if thrown, doesn't contain excessive byte data.
+        // A more robust test might involve catching specific exceptions and inspecting their messages.
+        // For this reproduction, we'll assume that if an EOFException is thrown, we'd examine its message.
+        // If no exception is thrown, it's also a valid outcome if the truncation is handled gracefully.
+
+    } catch (EOFException e) {
+        // Assert that the error message does not contain a large byte array.
+        // This is a heuristic. The original bug implies a *huge* amount of data.
+        // We'll check if the exception message contains "byte[" and assume it's problematic if it does.
+        // A more precise test would involve knowing the exact expected exception type or message format.
+        assertFalse("EOFException message should not contain large byte array data", e.getMessage() != null && e.getMessage().contains("byte["));
+    } catch (Exception e) {
+        // Catch other potential exceptions during zip processing and fail if unexpected.
+        fail("Unexpected exception during truncated zip processing: " + e.getMessage());
+    }
+}

@@ -1,0 +1,194 @@
+public void testInvalidFormatExceptionIndexForCollectionAndArray() {
+    try {
+        JsonDeserializer deserializer = new CollectionDeserializer(new BeanDeserializerFactory(new DefaultDeserializationConfig()));
+        JavaType type = TypeFactory.collectionType(List.class, String.class);
+        JsonParser parser = new MockJsonParser("[\"a\", \"b\", \"c\"]");
+        DeserializationContext context = new MockDeserializationContext(deserializer);
+        
+        // Intentionally cause an error during deserialization to trigger the exception
+        // For example, let's try to deserialize into a type that's not compatible
+        JavaType invalidTargetType = TypeFactory.collectionType(List.class, Integer.class);
+        
+        // To actually trigger the exception with an index, we'd need a more complex setup
+        // that simulates a parsing error within the collection itself.
+        // For demonstration, let's simulate a scenario where an error *would* occur
+        // and the index *should* be set.
+        
+        // A more direct way to test the exception itself, assuming the logic is flawed:
+        // We can't directly create InvalidFormatException with a specific index from outside
+        // the deserialization process. We need to trigger the deserialization that *should* set it.
+        
+        // Let's try to deserialize a string into an integer, which will fail, within a collection.
+        parser = new MockJsonParser("[\"a\", \"b\", \"c\"]"); // Reset parser
+        context = new MockDeserializationContext(new StringCollectionDeserializer(null)); // Use a deserializer that might trigger this
+        type = TypeFactory.collectionType(List.class, String.class);
+        
+        // The original bug description implies the index is *never* set.
+        // We need to trigger a scenario where it *should* be set.
+        // Let's mock the situation where an exception occurs during element processing.
+        
+        // A more realistic test would involve a JsonMappingException being thrown
+        // within the deserialization loop, and checking if the index is set on that exception.
+        
+        // Since we cannot directly control the creation of InvalidFormatException with
+        // the index from the outside in a simple unit test without mocking internal
+        // deserializer logic, we'll focus on the implication: that when such an exception
+        // *is* thrown internally, the index is -1.
+        
+        // To reproduce the *failure*, we need to trigger an exception that *should* have an index.
+        // Let's try to deserialize an invalid value into a collection of Integers.
+        
+        parser = new MockJsonParser("[\"1\", \"abc\", \"3\"]"); // "abc" will cause an error
+        deserializer = new CollectionDeserializer(new BeanDeserializerFactory(new DefaultDeserializationConfig()));
+        type = TypeFactory.collectionType(List.class, Integer.class);
+        context = new MockDeserializationContext(deserializer);
+        
+        try {
+            deserializer.deserialize(parser, context, type);
+            fail("Should have thrown an exception");
+        } catch (JsonMappingException e) {
+            // The bug states the index is always -1. We need to verify this.
+            // The exception thrown might be a JsonMappingException which wraps
+            // InvalidFormatException, or directly InvalidFormatException.
+            // We are looking for the index information.
+            
+            // Let's traverse the cause chain to find the relevant exception if it's nested.
+            Throwable cause = e;
+            boolean indexFound = false;
+            while (cause != null) {
+                if (cause instanceof InvalidFormatException) {
+                    InvalidFormatException ife = (InvalidFormatException) cause;
+                    // The bug implies the index is -1 when it should be set.
+                    // We expect to find an exception where the index is *not* -1 if the bug is fixed.
+                    // To reproduce the *failure*, we assert that the index is -1.
+                    // However, a better reproduction is to assert that the index *is not* -1 if the bug is fixed.
+                    // The bug report states "index values is always '-1'". So, to reproduce the failure,
+                    // we'd expect the index to be -1.
+                    
+                    // A more precise test for the bug would be to assert that the index *is* -1
+                    // when it *should not* be. But we don't know the exact context of the failure
+                    // without more specific code.
+                    
+                    // Let's assume the exception we catch *is* the one with the problematic index.
+                    // If the bug is that it's *always* -1, then any exception thrown *should* have -1.
+                    // However, the description implies it's not set *correctly*.
+                    
+                    // To reproduce the failure, we need to show that an index that *should* be there is missing or -1.
+                    // If the deserialization fails at index 1 (the "abc" element), the index should be 1.
+                    // The bug is that it's -1.
+                    
+                    // This test aims to trigger an exception where an index *should* be present.
+                    // If the bug is present, the caught exception's index property will be -1.
+                    
+                    // The provided example in the bug report is very minimal.
+                    // Let's focus on the core claim: "index values is always '-1'".
+                    // This means when an error occurs *within* a collection/array, the index property
+                    // of InvalidFormatException is -1, even though it should reflect the position.
+                    
+                    // We need to trigger an InvalidFormatException *within* a collection deserialization.
+                    
+                    // Re-simulating the scenario:
+                    parser = new MockJsonParser("[\"1\", \"abc\", \"3\"]");
+                    deserializer = new CollectionDeserializer(new BeanDeserializerFactory(new DefaultDeserializationConfig()));
+                    type = TypeFactory.collectionType(List.class, Integer.class);
+                    context = new MockDeserializationContext(deserializer);
+                    
+                    try {
+                        deserializer.deserialize(parser, context, type);
+                    } catch (JsonMappingException jme) {
+                        // Find the InvalidFormatException
+                        JsonMappingException current = jme;
+                        while (current != null) {
+                            if (current.getCause() instanceof InvalidFormatException) {
+                                InvalidFormatException ifeCause = (InvalidFormatException) current.getCause();
+                                // Assert that the index is -1, reproducing the failure.
+                                // The bug is that it *is* -1 when it shouldn't be.
+                                // So, we expect the index to be -1.
+                                assertEquals("Index should be -1 when not set correctly", -1, ifeCause.getIndex());
+                                indexFound = true;
+                                break;
+                            }
+                            if (current.getCause() instanceof JsonMappingException) {
+                                current = (JsonMappingException) current.getCause();
+                            } else {
+                                current = null;
+                            }
+                        }
+                        if (!indexFound) {
+                            // If InvalidFormatException wasn't the direct cause or nested deeply,
+                            // we might need to inspect the top-level exception if it's InvalidFormatException itself.
+                            if (jme instanceof InvalidFormatException) {
+                                assertEquals("Index should be -1 when not set correctly", -1, ((InvalidFormatException) jme).getIndex());
+                                indexFound = true;
+                            }
+                        }
+                    }
+                    // If we reached here and indexFound is true, the test has reproduced the condition.
+                    // If the bug is fixed, this assertion would fail.
+                    // To reproduce the bug, we assert the failing condition.
+                    
+                    // The most direct interpretation of the bug: create an InvalidFormatException
+                    // for a collection element, and check its index.
+                    // The fix would involve setting the index correctly.
+                    // So, to reproduce the bug, we need to trigger such an exception and assert its index is -1.
+                    
+                    // Let's create a mock scenario to force an InvalidFormatException with an index.
+                    // This requires mocking internal deserializer behavior.
+                    
+                    // A simpler approach for a test method: trigger a known failure case.
+                    // The case of deserializing a string into an Integer within a collection.
+                    // This *should* throw an InvalidFormatException with index 1.
+                    // The bug is that it throws with index -1.
+                    
+                    // Let's refine the test based on this understanding.
+                    
+                    parser = new MockJsonParser("[\"1\", \"abc\", \"3\"]");
+                    deserializer = new CollectionDeserializer(new BeanDeserializerFactory(new DefaultDeserializationConfig()));
+                    type = TypeFactory.collectionType(List.class, Integer.class);
+                    context = new MockDeserializationContext(deserializer);
+                    
+                    try {
+                        deserializer.deserialize(parser, context, type);
+                        fail("Expected JsonMappingException due to invalid input");
+                    } catch (JsonMappingException e2) {
+                        // We expect the exception to contain information about the index.
+                        // The bug is that this index is -1.
+                        
+                        // Let's find the InvalidFormatException within the exception chain.
+                        InvalidFormatException foundIfe = null;
+                        Throwable current = e2;
+                        while (current != null) {
+                            if (current instanceof InvalidFormatException) {
+                                foundIfe = (InvalidFormatException) current;
+                                break;
+                            }
+                            if (current.getCause() instanceof JsonMappingException) {
+                                current = current.getCause();
+                            } else {
+                                current = null;
+                            }
+                        }
+                        
+                        assertNotNull("Should have found an InvalidFormatException", foundIfe);
+                        // The bug is that the index is -1. To reproduce the bug, we assert this.
+                        // If the bug were fixed, we would assert foundIfe.getIndex() == 1.
+                        assertEquals("Index should be -1 as per bug report", -1, foundIfe.getIndex());
+                        
+                        // Also check the reference property if possible, though the bug focuses on index.
+                        // The bug report mentions "Reference" in the title, but the description focuses on "index".
+                        // Let's assume the core issue is the index.
+                    }
+                    return; // Exit after the detailed test logic
+                }
+                if (cause.getCause() != null) {
+                    cause = cause.getCause();
+                } else {
+                    break;
+                }
+            }
+            fail("InvalidFormatException with index information not found in the exception chain.");
+        }
+    } catch (IOException e) {
+        throw new RuntimeException(e);
+    }
+}

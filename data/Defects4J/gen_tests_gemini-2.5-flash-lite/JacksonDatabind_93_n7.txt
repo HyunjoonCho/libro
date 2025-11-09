@@ -1,0 +1,55 @@
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertNotNull;
+
+public class JacksonDeserializationTest {
+
+    // Dummy implementation for GrantedAuthority to make the example compilable
+    public static class SimpleGrantedAuthority implements GrantedAuthority {
+        private String role;
+
+        public SimpleGrantedAuthority(String role) {
+            this.role = role;
+        }
+
+        @Override
+        public String getAuthority() {
+            return role;
+        }
+
+        // Required for Jackson deserialization of nested types if not handled by default
+        public void setAuthority(String role) {
+            this.role = role;
+        }
+    }
+
+
+    @Test
+    public void testValidateSubTypeFailsWithNPE() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
+
+        // Modified JSON to use a concrete implementation for authorities,
+        // as the original JSON was likely too simplified and might not trigger the specific interface issue.
+        // If the bug is strictly about the interface itself being the target of deserialization within the list,
+        // a more complex setup might be needed. However, this aims to reproduce the NPE context.
+        String json = "{\"@class\":\"org.springframework.security.core.Authentication\",\"authorities\":[\"java.util.ArrayList\",[{\"@class\":\"JacksonDeserializationTest$SimpleGrantedAuthority\",\"authority\":\"ROLE_USER\"}]]}";
+
+
+        // The actual deserialization call that is expected to throw NPE in affected versions
+        Authentication authentication = mapper.readValue(json, Authentication.class);
+
+        // Assert that the object was created, even though the test is about reproducing the failure.
+        // If the test passes without NPE, this assertion will also pass.
+        assertNotNull(authentication);
+        assertNotNull(authentication.getAuthorities());
+        // Add more assertions if needed to verify the deserialized content.
+    }
+}

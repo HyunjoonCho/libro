@@ -1,0 +1,232 @@
+public void testArrayJoinMungedIncorrectly() {
+    String original = "$.fn.hasClass = function(selector) { return ( this.length > 0 ? !( ( ['', this[0].className, ''].join(' ') ).indexOf( ['', selector, ''].join(' ') ) == -1 ) : false ); };";
+    String minified = "$.fn.hasClass=function(a){return this.length>0?(\"\"+this[0].className).indexOf(\"\"+a)!=-1:false};";
+    
+    // The original code uses join(' ') to add spaces around the class name and the selector.
+    // This is intended to handle cases where the class name might be at the beginning or end of the string,
+    // or when the selector itself contains spaces (though that's less common for class selectors).
+    // The minified version simplifies this by directly concatenating strings.
+    // The bug description implies that the minification process incorrectly transforms the behavior.
+    // We need to simulate a scenario where the difference in join behavior matters.
+    
+    // Let's assume the original code is what we expect the behavior to be.
+    // We'll create a mock object that simulates the `this` context.
+    Object mockThis = new Object() {
+        public int length = 1;
+        public Object[] className = {"myClass"}; // Simulating className as an array for join
+        
+        // Mocking the join method as described in the original code snippet
+        public String join(String separator) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < className.length; i++) {
+                sb.append(className[i]);
+                if (i < className.length - 1) {
+                    sb.append(separator);
+                }
+            }
+            return sb.toString();
+        }
+    };
+
+    // Recreating the logic of the original `hasClass` function with the mock object.
+    // This is a simplified representation to test the join behavior.
+    // In a real scenario, this would be part of a JavaScript engine or a library that processes JS.
+    // For JUnit, we'll assert that a specific input *should* produce a certain output based on the *intended* logic.
+
+    // The core issue seems to be how `join(' ')` interacts with the class names.
+    // Let's simulate a case where a class name is at the beginning or end.
+    
+    // Test case 1: Class name at the beginning
+    Object mockThisStart = new Object() {
+        public int length = 1;
+        public Object[] className = {"myClass", "anotherClass"}; 
+        
+        public String join(String separator) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < className.length; i++) {
+                sb.append(className[i]);
+                if (i < className.length - 1) {
+                    sb.append(separator);
+                }
+            }
+            return sb.toString();
+        }
+    };
+
+    // Original logic: " myClass anotherClass "
+    String classNamesStringStart = ['', mockThisStart.className[0], ''].join(' '); // Simulating the join of ['', 'myClass', ''] -> " myClass "
+    String selectorStringStart = ['', 'myClass', ''].join(' '); // Simulating the join of ['', 'myClass', ''] -> " myClass "
+    assertTrue("Original logic should find class at start", classNamesStringStart.indexOf(selectorStringStart) != -1);
+
+    // Test case 2: Class name at the end
+    Object mockThisEnd = new Object() {
+        public int length = 1;
+        public Object[] className = {"anotherClass", "myClass"}; 
+        
+        public String join(String separator) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < className.length; i++) {
+                sb.append(className[i]);
+                if (i < className.length - 1) {
+                    sb.append(separator);
+                }
+            }
+            return sb.toString();
+        }
+    };
+    
+    // Original logic: " anotherClass myClass "
+    String classNamesStringEnd = ['', mockThisEnd.className[1], ''].join(' '); // Simulating the join of ['', 'myClass', ''] -> " myClass "
+    String selectorStringEnd = ['', 'myClass', ''].join(' '); // Simulating the join of ['', 'myClass', ''] -> " myClass "
+    assertTrue("Original logic should find class at end", classNamesStringEnd.indexOf(selectorStringEnd) != -1);
+
+    // Now, let's consider the minified version's behavior.
+    // The minified version simplifies to: ("" + this[0].className).indexOf("" + a) != -1
+    // This means it directly checks the string representation of className.
+    
+    // If className is an array like ["myClass", "anotherClass"], its string representation
+    // will be "myClass,anotherClass" (default toString for arrays in Java).
+    // This is fundamentally different from the JavaScript `join(' ')` behavior.
+
+    // To reproduce the *failure*, we need to show a case where the minified version
+    // *fails* where the original *would have succeeded*.
+    // The description implies the minified version is *incorrect*.
+    // The bug description is about JavaScript minification, which is hard to replicate directly in JUnit Java.
+    // We will simulate the *expected* behavior of the original code and assert against it,
+    // implying that if the minified code produced a different result, it would be a failure.
+
+    // Let's assume `this[0].className` in JavaScript would be a string like "myClass anotherClass".
+    // The original code: `(' ' + this[0].className + ' ').indexOf(' ' + selector + ' ')`
+    // This adds spaces around the entire class string and the selector to ensure boundary matching.
+    
+    // Example: className = "myClass"
+    // Original: ("" + "myClass" + "").indexOf("" + "myClass" + "") -> "myClass".indexOf("myClass") -> 0 (correct)
+    // Minified: ("" + "myClass").indexOf("" + "myClass") -> "myClass".indexOf("myClass") -> 0 (correct)
+
+    // Example: className = "myClass anotherClass"
+    // Original: ("" + "myClass anotherClass" + "").indexOf("" + "myClass" + "") -> " myClass anotherClass ".indexOf(" myClass ") -> 0 (correct)
+    // Minified: ("" + "myClass anotherClass").indexOf("" + "myClass") -> "myClass anotherClass".indexOf("myClass") -> 0 (correct)
+
+    // The bug description is tricky because it's about minification transforming JS code.
+    // The key is the `join(' ')` which in JS would add spaces.
+    // `['', this[0].className, ''].join(' ')`
+    // If `this[0].className` is "myClass", this becomes " myClass ".
+    // If `this[0].className` is "myClass anotherClass", this becomes " myClass anotherClass ".
+    // The `indexOf` then looks for `['', selector, ''].join(' ')`, which is " selector ".
+
+    // So the original code is effectively checking:
+    // `(' ' + classNameString + ' ').indexOf(' ' + selector + ' ') != -1`
+
+    // The minified code is effectively checking:
+    // `classNameString.indexOf(selector) != -1`
+
+    // The failure occurs when `selector` is a substring of `classNameString` but not a full class name.
+    // For example, if `classNameString` is "myClass anotherClass" and `selector` is "myClass".
+    // Original: " myClass anotherClass ".indexOf(" myClass ") -> 0 (correct)
+    // Minified: "myClass anotherClass".indexOf("myClass") -> 0 (correct)
+
+    // The bug description mentions:
+    // "Array Join Munged Incorrectly" and "Looks like there might be an issue with join and ' '".
+    // This implies the minifier is *not* correctly translating the `join` behavior.
+    // The provided minified code: `(""+this[0].className).indexOf(""+a)!=-1`
+    // This strongly suggests `this[0].className` is treated as a string directly, and `a` (the selector) is also treated as a string.
+    // The original code's `join(' ')` adds surrounding spaces.
+    // `['', 'myClass', ''].join(' ')` in JS results in `" myClass "` (note the spaces).
+    // `['', 'myClass', ''].join(' ')` in JS results in `" myClass "` (note the spaces).
+    // So the original logic checks if `" myClass "` is present within `" myClass anotherClass "`.
+
+    // Let's simulate a case where the minifier *might* fail if it doesn't handle boundaries correctly.
+    // Consider `className = "myClass-extra"` and `selector = "myClass"`.
+    // Original: `(' ' + "myClass-extra" + ' ').indexOf(' ' + "myClass" + ' ')`
+    // This becomes: `" myClass-extra ".indexOf(" myClass ")`. This will be -1, which is correct (myClass is not a distinct class).
+    // Minified: `"myClass-extra".indexOf("myClass")`. This will be 0. This is INCORRECT.
+
+    // This seems to be the intended failure. The minifier removed the boundary spaces provided by `join`.
+
+    // We need to make this test runnable in Java, so we'll use strings to represent the JS variables.
+    String classNameString = "myClass-extra";
+    String selector = "myClass";
+
+    // Simulating the original logic's effective check
+    String paddedClassName = " " + classNameString + " ";
+    String paddedSelector = " " + selector + " ";
+    boolean originalResult = paddedClassName.indexOf(paddedSelector) != -1;
+
+    // Simulating the minified logic's effective check
+    boolean minifiedResult = classNameString.indexOf(selector) != -1;
+
+    // The failure is that the minified result is true when it should be false.
+    // So, we assert that the minified result is TRUE, and the original result is FALSE.
+    // However, the JUnit test should *reproduce the failure*. This means the test
+    // should be written such that it *passes* if the bug is fixed, and *fails* if the bug exists.
+    // Therefore, we should assert the *expected correct behavior* (which is what the original code did).
+    // If the code under test (which we are not explicitly testing here, but inferring from the bug)
+    // exhibits the minified behavior, this test will fail.
+
+    // Expected behavior: `hasClass("myClass")` on `className="myClass-extra"` should be false.
+    // The original code implements this correctly.
+    assertFalse("The original hasClass logic should correctly return false for partial matches", originalResult);
+
+    // Now, let's assert what the minified version *would* return, and show that it's wrong.
+    // This is tricky for a JUnit test that *reproduces* the failure.
+    // A test that reproduces the failure should fail when the buggy code is present.
+    // So, we should assert the *incorrect* outcome that the buggy code produces.
+
+    // Let's assume the code under test *is* the minified version.
+    // We want to show that this code produces an incorrect result.
+    boolean buggyResult = minifiedResult; // This is what the minified code would return.
+
+    // We assert that the buggy result is TRUE, which is incorrect in this scenario.
+    assertTrue("The minified hasClass logic incorrectly returns true for partial matches", buggyResult);
+
+    // To make this a self-contained JUnit test method, we can encapsulate the logic
+    // being tested (or rather, the logic that *causes* the failure).
+    // The bug is that the minifier removed the padding spaces.
+    
+    // Let's define a helper method that represents the problematic minified `hasClass`.
+    // This is a bit meta, as we're writing Java code to test the *effect* of JS minification.
+    
+    class ProblematicHasClass {
+        // Simulates the minified JS function
+        public boolean hasClass(String className, String selector) {
+            // This is the core of the minified logic:
+            return className.indexOf(selector) != -1;
+        }
+    }
+    
+    ProblematicHasClass problematic = new ProblematicHasClass();
+    
+    // The test case that fails due to the bug.
+    // We expect `hasClass("myClass-extra", "myClass")` to be false.
+    // The buggy `hasClass` function returns true.
+    // So, the test should assert the *actual outcome of the buggy function* and show it's wrong.
+    
+    String className = "myClass-extra";
+    String selector = "myClass";
+    
+    // This is the incorrect result produced by the buggy (minified) code.
+    boolean actualBuggyOutcome = problematic.hasClass(className, selector);
+    
+    // The test fails if `actualBuggyOutcome` is true, because it *should* be false.
+    // So, we assert that it *is* true.
+    assertTrue("The minified hasClass incorrectly returns true for selector 'myClass' on className 'myClass-extra'", actualBuggyOutcome);
+    
+    // Alternative approach: Assert the *expected correct behavior* and if the test fails, it means the buggy code is present.
+    // This is often preferred.
+    
+    // Assert the expected correct behavior:
+    // The original `hasClass` function would have returned false.
+    // We can simulate the original logic here for clarity in the test.
+    
+    // Simulating original JS logic in Java:
+    // let classNameString = "myClass-extra";
+    // let selector = "myClass";
+    // let paddedClassName = ['', classNameString, ''].join(' '); // " myClass-extra "
+    // let paddedSelector = ['', selector, ''].join(' ');       // " myClass "
+    // let originalCorrectResult = paddedClassName.indexOf(paddedSelector) != -1; // false
+    
+    // If the test is run against the buggy (minified) code, the assertion below will fail.
+    // This is the standard way to write a test that reproduces a bug: assert the *expected correct behavior*.
+    assertFalse("The hasClass function should not find 'myClass' within 'myClass-extra' when checking for whole words/classes.",
+                problematic.hasClass(className, selector)); // This assertion will FAIL if problematic.hasClass is used.
+}

@@ -1,0 +1,110 @@
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Arrays;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+
+public class PolymorphicTypeLostTest {
+
+    // Define the class that reproduces the issue
+    static class RemoteCall {
+        Object[] args;
+
+        @JsonCreator
+        public RemoteCall(@JsonProperty("args") Object[] args) {
+            this.args = args;
+        }
+
+        public Object[] getArgs() {
+            return args;
+        }
+    }
+
+    // Inner class representing the type that loses its polymorphic nature
+    static class CommandAPDU {
+        private byte[] apdu;
+
+        @JsonCreator
+        public CommandAPDU(@JsonProperty(value = "bytes") byte[] apdu) {
+            this.apdu = apdu.clone();
+            // parse(); // Assuming parse() doesn't affect the serialization/deserialization logic for this test
+        }
+
+        @JsonValue
+        public byte[] getBytes() {
+            return apdu.clone();
+        }
+
+        // Override equals and hashCode for proper assertion if needed,
+        // but for this test, we primarily care about the byte array content.
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CommandAPDU that = (CommandAPDU) o;
+            return Arrays.equals(apdu, that.apdu);
+        }
+
+        @Override
+        public int hashCode() {
+            return Arrays.hashCode(apdu);
+        }
+    }
+
+    @Test
+    public void testPolymorphicTypeLostWhenUsingJsonValue() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+        mapper.enableDefaultTyping(); // Enable default typing
+
+        // Create an instance of the object to be serialized
+        CommandAPDU command = new CommandAPDU(new byte[]{0x01, 0x02, 0x03});
+        RemoteCall remoteCall = new RemoteCall(new Object[]{
+                "some_string", // This might be the "args" element that appears in the bug description
+                command
+        });
+
+        // Serialize the object
+        String json = mapper.writeValueAsString(remoteCall);
+
+        // The bug description suggests the JSON might look something like this (simplified):
+        // {"args": [ "some_string", ["[B", "AQID"] ]}
+        // Or, if the type is lost, it might serialize CommandAPDU as just its byte array value
+        // without the type information, and the deserializer will struggle.
+        // The core issue is that when CommandAPDU is serialized via @JsonValue to its byte array,
+        // the default typing mechanism might not correctly associate the byte array back to CommandAPDU.
+
+        // Deserialize the JSON back into the RemoteCall object
+        RemoteCall deserializedRemoteCall = mapper.readValue(json, RemoteCall.class);
+
+        // Assert that the deserialized object contains the expected data
+        Object[] deserializedArgs = deserializedRemoteCall.getArgs();
+
+        // Check that the byte array was correctly deserialized and that the type is preserved
+        // The bug implies that deserializedArgs[1] would be a byte[] instead of a CommandAPDU.
+        // We expect it to be a CommandAPDU instance.
+        Object deserializedCommand = deserializedArgs[1];
+
+        // Assert that the deserialized object is an instance of CommandAPDU
+        // This is the core of the bug: it should be CommandAPDU, not byte[].
+        assertEquals("Expected the deserialized object to be of type CommandAPDU", CommandAPDU.class, deserializedCommand.getClass());
+
+        // Cast and assert the content of the byte array
+        CommandAPDU deserializedCommandAPDU = (CommandAPDU) deserializedCommand;
+        assertArrayEquals("The byte array content should match the original", command.getBytes(), deserializedCommandAPDU.getBytes());
+
+        // Additional check: verify the JSON structure if possible, to ensure type information was present during serialization
+        // The bug description indicates a structure like ["net.sf.lipermi.call.RemoteInstance", {"instanceId": ..., "className": ...}]
+        // or in this case, for CommandAPDU, it should be something like ["com.yourpackage.CommandAPDU", "AQID"]
+        // However, the bug states it becomes "[B". We are testing that it *doesn't* become "[B" and that the type is preserved.
+        // The exact JSON output might vary based on how default typing is configured and applied.
+        // The crucial part is that the deserialization results in the correct object type.
+    }
+}

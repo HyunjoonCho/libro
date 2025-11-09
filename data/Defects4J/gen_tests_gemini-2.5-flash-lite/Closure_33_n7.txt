@@ -1,0 +1,46 @@
+import com.google.javascript.jscomp.CompilationLevel;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.testing.JsCompilerTestCase;
+import org.junit.Test;
+
+public class WeirdObjectLiteralTest extends JsCompilerTestCase {
+
+    @Override
+    protected CompilerOptions createOptions() {
+        CompilerOptions options = super.createOptions();
+        options.setCompilationLevel(CompilationLevel.ADVANCED_OPTIMIZATIONS);
+        options.setErrorFormat(CompilerOptions.ErrorFormat.NORMAL);
+        options.addSpecificError(
+                "accessControls", "checkTypes", "checkVars");
+        return options;
+    }
+
+    @Test
+    public void testWeirdObjectLiteral() {
+        test(
+                "function temp1(opt_data) { return opt_data.text; }" +
+                        "function temp2(opt_data) { " +
+                        "  function __inner() { return temp1(opt_data.activity); } " +
+                        "  return __inner(); " +
+                        "}" +
+                        "function temp3(opt_data) { return 'n: ' + opt_data.n + ', t: ' + opt_data.text + '.'; }" +
+                        "function callee() { " +
+                        "  var output = temp3({ n: 0, text: 'a string', b: true }); " +
+                        "  alert(output); " +
+                        "} " +
+                        "callee();",
+                "function temp1(a){return a.text}" +
+                        "function temp2(a){" +
+                        "function b(){return a.activity.text}" +
+                        "return b()}" +
+                        "function temp3(a){return'n:'+a.n+', t:'+a.text+'.'} " +
+                        "function callee(){alert(temp3({n:0,text:'a string',b:true}))}" +
+                        "callee();");
+
+        // The original bug report indicates an error on this line:
+        // repro.js:30: ERROR - actual parameter 1 of temp3 does not match formal parameter
+        // found : {b: boolean, n: number, text: (string|undefined)}
+        // required: {b: boolean, n: number, text: string}
+        // This test asserts that no such error is thrown.
+    }
+}

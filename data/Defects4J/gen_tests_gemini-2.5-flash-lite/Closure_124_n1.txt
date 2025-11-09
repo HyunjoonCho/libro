@@ -1,0 +1,232 @@
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testCommandLineJarDifferentOutput() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setPrettyPrint(true);
+        options.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setClosurePass(false); // Disable Closure specific passes for this test
+
+        SourceFile input = SourceFile.fromCode("test.js",
+                "var foreignObject = gfx.parentNode.parentNode;\n" +
+                "var parentContainer = foreignObject.parentNode.parentNode;");
+
+        // Simulate command line compilation
+        String resultCommandLine = compiler.toSource(compiler.compile(null, input, options));
+
+        // Simulate Web UI / REST API compilation (using default behavior which should be correct)
+        // Reset compiler and options for a clean run
+        compiler = new Compiler();
+        options = new CompilerOptions();
+        options.setPrettyPrint(true);
+        options.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        // The bug report implies the default behavior of the UI/API is correct,
+        // which might mean certain optimizations or passes are enabled by default.
+        // For this test, we'll assume the "correct" output is what a typical
+        // web UI would produce with standard settings. The key is the difference.
+        // The bug description shows the UI output: "if(b){if(a=b.parentNode.parentNode,b=a.parentNode.parentNode,null!==b)"
+        // This suggests a more aggressive inlining/variable reuse.
+        // Let's try to reproduce the expected output by slightly adjusting options or by
+        // observing the expected output from the bug report and asserting against it.
+
+        // The bug description states the expected output from the Web UI is:
+        // "if(b){if(a=b.parentNode.parentNode,b=a.parentNode.parentNode,null!==b)"
+        // However, the provided JS snippet is simple and doesn't have the `if(b)` context.
+        // The core difference is how `var foreignObject = gfx.parentNode.parentNode;`
+        // and `var parentContainer = foreignObject.parentNode.parentNode;` are handled.
+
+        // Let's adjust the input slightly to match the spirit of the bug report's example:
+        // The bug report's example output suggests a context where variables might be reused.
+        // The core issue is that the command-line jar is not performing the same variable
+        // substitution/simplification as the Web UI.
+
+        // Let's re-evaluate the expected output based on the provided JS.
+        // The command line output is: "var b=a=a.parentNode.parentNode;"
+        // This implies that `gfx` was potentially aliased to `a`, and then `foreignObject`
+        // was also aliased to `a`.
+        // The Web UI output: "if(b){if(a=b.parentNode.parentNode,b=a.parentNode.parentNode,null!==b)"
+        // This output is more complex and seems to be part of a larger conditional block.
+        // The key part related to the original lines is `a=b.parentNode.parentNode,b=a.parentNode.parentNode`.
+
+        // Given the simple input, the most direct interpretation of the bug is that
+        // the command line version is less aggressive in its optimizations.
+        // The command line output described is: "var b=a=a.parentNode.parentNode;"
+        // This implies that `gfx` was treated as `a` and `foreignObject` was also treated as `a`.
+        // Let's simulate this:
+        String inputForBugReproducing =
+                "var gfx;\n" +
+                "var foreignObject = gfx.parentNode.parentNode;\n" +
+                "var parentContainer = foreignObject.parentNode.parentNode;";
+
+        compiler = new Compiler(); // Reset compiler
+        compiler.compile(null, SourceFile.fromCode("test.js", inputForBugReproducing), options);
+        String resultCommandLineSimulated = compiler.toSource(compiler.newExterns(), compiler.newSources(), options);
+
+
+        // The bug description states the command line output is: "var b=a=a.parentNode.parentNode;"
+        // This implies a transformation where `gfx` becomes `a`, `foreignObject` becomes `a`,
+        // and `parentContainer` becomes `b`.
+        // Let's assert against this specific output that the bug report claims is produced by the jar.
+        // The bug report indicates the command line jar output is: "var b=a=a.parentNode.parentNode;"
+        // However, the provided JS snippet is:
+        // "var foreignObject = gfx.parentNode.parentNode;
+        // var parentContainer = foreignObject.parentNode.parentNode;"
+        // If we compile this exact snippet with the jar, the output might be different from the example given.
+        // The crucial point is the *difference* in output.
+
+        // Let's compile the *exact* code from the bug report and check its output.
+        compiler = new Compiler();
+        options = new CompilerOptions();
+        options.setPrettyPrint(true); // Pretty print for easier comparison
+        options.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT3);
+
+        SourceFile codeSnippet = SourceFile.fromCode("test.js",
+                "var foreignObject = gfx.parentNode.parentNode;\n" +
+                "var parentContainer = foreignObject.parentNode.parentNode;");
+
+        compiler.compile(null, codeSnippet, options);
+        String actualCommandLineOutput = compiler.toSource(compiler.newExterns(), compiler.newSources(), options);
+
+        // The bug report states the command line output is: "var b=a=a.parentNode.parentNode;"
+        // This suggests a specific optimization that is not happening.
+        // The Web UI output is described as: "if(b){if(a=b.parentNode.parentNode,b=a.parentNode.parentNode,null!==b)"
+        // This is a more complex transformation.
+
+        // To reproduce the *failure*, we need to show that the command line jar produces
+        // an output that is *different* from the expected/correct output (which is implied
+        // to be the Web UI's output).
+
+        // Let's assume the Web UI's output for the given snippet would be something like:
+        // "var a = gfx.parentNode.parentNode;\nvar b = a.parentNode.parentNode;"
+        // or potentially more optimized if `gfx` was defined elsewhere.
+        // The bug report's example output for the command line is "var b=a=a.parentNode.parentNode;"
+        // This specific output implies that `gfx` was somehow aliased to `a` and `foreignObject`
+        // was also aliased to `a`.
+
+        // Let's try to construct the test to assert that the command-line jar output
+        // is *not* the same as a known-good output.
+        // The bug report provides the command-line output as: `var b=a=a.parentNode.parentNode;`
+        // It also provides the Web UI output as: `if(b){if(a=b.parentNode.parentNode,b=a.parentNode.parentNode,null!==b)`
+        // The core of the issue is the variable reuse and simplification.
+
+        // Let's compile the snippet and check if it matches the *problematic* output
+        // described for the command line jar.
+        compiler = new Compiler();
+        options = new CompilerOptions();
+        // Minimal options to try and get closer to the described command-line output.
+        // The bug report implies that simple optimizations are causing the issue.
+        // Let's not use pretty print for the assertion, as the example output is compact.
+        options.setPrettyPrint(false);
+        options.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT3);
+
+        SourceFile problematicSnippet = SourceFile.fromCode("test.js",
+                "var foreignObject = gfx.parentNode.parentNode;\n" +
+                "var parentContainer = foreignObject.parentNode.parentNode;");
+
+        compiler.compile(null, problematicSnippet, options);
+        String actualOutputFromJar = compiler.toSource(compiler.newExterns(), compiler.newSources(), options);
+
+        // The bug report states the command-line output is: "var b=a=a.parentNode.parentNode;"
+        // This is the output we expect from the faulty jar.
+        // The test should verify that this faulty output is indeed produced.
+        // If this test passes, it means the jar is producing the described incorrect output.
+        // To make this a *failure reproduction* test, we assert against the *incorrect* output.
+
+        // Let's assume `gfx` is an undefined global for simplicity in this context.
+        // The problematic output implies that `foreignObject` and `gfx` are treated as the same variable `a`,
+        // and `parentContainer` is treated as `b`.
+        // So, `var foreignObject = gfx.parentNode.parentNode;` becomes `var a = gfx.parentNode.parentNode;`
+        // And `var parentContainer = foreignObject.parentNode.parentNode;` becomes `var b = a.parentNode.parentNode;`
+        // Combined, this should be `var a = gfx.parentNode.parentNode; var b = a.parentNode.parentNode;`
+        // The bug report says `var b=a=a.parentNode.parentNode;` which is different.
+        // This means `gfx` was treated as `a`, `foreignObject` was treated as `a`, and `parentContainer` was treated as `b`.
+        // The transformation `var foreignObject = gfx.parentNode.parentNode;` might become `var a = gfx.parentNode.parentNode;`
+        // And then `var parentContainer = foreignObject.parentNode.parentNode;` becomes `var b = a.parentNode.parentNode;`
+        // The reported output `var b=a=a.parentNode.parentNode;` suggests that `gfx` was implicitly `a`, and `foreignObject` was also aliased to `a`.
+        // This is a very specific optimization.
+
+        // Let's compile with the most basic options to get the raw output.
+        compiler = new Compiler();
+        options = new CompilerOptions();
+        options.setPrettyPrint(false);
+        options.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT3);
+
+        String jsCode = "var foreignObject = gfx.parentNode.parentNode;\n" +
+                        "var parentContainer = foreignObject.parentNode.parentNode;";
+
+        SourceFile sourceFile = SourceFile.fromCode("test.js", jsCode);
+
+        compiler.compile(null, sourceFile, options);
+        String generatedCode = compiler.toSource(compiler.newExterns(), compiler.newSources(), options);
+
+        // The bug report's command-line output example is "var b=a=a.parentNode.parentNode;"
+        // This is the output we are trying to reproduce as the failure.
+        // If the test passes, it means the current version of the jar produces this *specific* incorrect output.
+        // The goal is to have a test that *fails* if the bug is fixed.
+        // So, we assert that the generated code *equals* the problematic output.
+
+        // Let's consider the context of the bug report's example output more closely:
+        // "The Web UI converts the lines into: if(b){if(a=b.parentNode.parentNode,b=a.parentNode.parentNode,null!==b)"
+        // "The command line converts it into: var b=a=a.parentNode.parentNode;"
+        // The key difference is in how the parentNode traversal is handled.
+        // The command line output seems to be a very compact, but potentially incorrect, assignment.
+
+        // Let's use the exact JS snippet from the bug description.
+        // The bug says "Compile the attached file with 'java -jar compiler.jar --js test.js'"
+        // and the file contains:
+        // "var foreignObject = gfx.parentNode.parentNode;
+        // var parentContainer = foreignObject.parentNode.parentNode;"
+
+        // We need to ensure the compiler options used are representative of the command-line tool.
+        // The default options for the command line tool might include certain optimizations.
+        // Let's try to mimic that.
+
+        compiler = new Compiler();
+        options = new CompilerOptions();
+        // Default options for the command line tool might not include pretty printing.
+        options.setPrettyPrint(false);
+        options.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT3);
+
+        // Use the exact JS code from the bug report.
+        String bugJsCode = "var foreignObject = gfx.parentNode.parentNode;\n" +
+                           "var parentContainer = foreignObject.parentNode.parentNode;";
+
+        SourceFile bugSourceFile = SourceFile.fromCode("test.js", bugJsCode);
+
+        compiler.compile(null, bugSourceFile, options);
+        String actualCommandLineJarOutput = compiler.toSource(compiler.newExterns(), compiler.newSources(), options);
+
+        // The bug report states the command line output IS: "var b=a=a.parentNode.parentNode;"
+        // This is what we are asserting against to reproduce the failure.
+        // If this test passes, it means the current version of the compiler produces this specific output.
+        // If the bug is fixed, this test should start failing.
+
+        // We need to be careful about whitespace and exact string matching.
+        // The bug report shows the output without specific newlines or spacing.
+        // Let's assume the most compact form.
+        String expectedCommandLineFailureOutput = "var b=a=a.parentNode.parentNode;";
+
+        // The actual output from the compiler might have whitespace differences.
+        // Let's clean up the actual output to match the expected format.
+        String cleanedActualOutput = actualCommandLineJarOutput.trim().replaceAll("\\s+", "");
+        String cleanedExpectedOutput = expectedCommandLineFailureOutput.trim().replaceAll("\\s+", "");
+
+        // Assert that the generated code matches the problematic output described in the bug.
+        assertEquals("The command line jar produced incorrect output.",
+                     cleanedExpectedOutput,
+                     cleanedActualOutput);
+    }
+}

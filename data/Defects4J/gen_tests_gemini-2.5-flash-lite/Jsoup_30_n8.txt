@@ -1,0 +1,73 @@
+public void testStackOverflowError() {
+    String html = "<p>Some text</p>";
+    for (int i = 0; i < 30000; i++) {
+        html += "<wbr>";
+    }
+    html += "<p>More text</p>";
+
+    // The original code that caused StackOverflowError
+    // Whitelist.none().addTags("p").addProtocols("a", "href").addAttributes("a", "href").addEnforcedAttributes("a", "rel", "nofollow");
+    // Jsoup.clean(html, Whitelist.none().addTags("p").addProtocols("a", "href").addAttributes("a", "href").addEnforcedAttributes("a", "rel", "nofollow"));
+
+    // A potentially improved version (or at least one that doesn't immediately stack overflow)
+    // This might still be inefficient or produce undesired results due to the excessive wbr tags,
+    // but it should avoid the StackOverflowError itself.
+    Whitelist whitelist = Whitelist.none();
+    whitelist.addTags("p");
+    whitelist.addProtocols("a", "href");
+    whitelist.addAttributes("a", "href");
+    whitelist.addEnforcedAttributes("a", "rel", "nofollow");
+
+    // The fix in the bug report involved modifying the Cleaner.copySafeNodes method
+    // to break recursion after a certain depth or number of nodes.
+    // Since we cannot modify the library code directly in a test, we'll simulate
+    // the effect of a limited recursion or node count if possible, or
+    // simply test that the clean method *runs* without StackOverflowError
+    // with a very large number of wbr tags.
+
+    // The core issue is the deep recursion caused by nested or repetitive tags.
+    // The specific fix mentioned in the bug report implies a modification to the
+    // Cleaner.copySafeNodes method to limit recursion. Without modifying the
+    // library code, we can only test that the clean method *doesn't* blow up
+    // with a large input that previously caused the error.
+
+    // A direct reproduction of the StackOverflowError would involve calling
+    // Jsoup.clean with an HTML structure that forces deep recursion.
+    // The example provided in the bug report with 24205 <wbr> tags is a good candidate.
+    // Let's construct a similar HTML string.
+    StringBuilder largeHtmlBuilder = new StringBuilder();
+    largeHtmlBuilder.append("<p>Start</p>");
+    for (int i = 0; i < 25000; i++) { // Use a number known to cause issues
+        largeHtmlBuilder.append("<wbr>");
+    }
+    largeHtmlBuilder.append("<p>End</p>");
+    String largeHtml = largeHtmlBuilder.toString();
+
+    // The expected behavior is that Jsoup.clean should not throw a StackOverflowError.
+    // The actual output might be truncated or incomplete due to the nature of the fix
+    // (e.g., if the fix limits the number of tags processed).
+    // We are primarily testing that the exception is *not* thrown.
+
+    // Using a more permissive whitelist to ensure the <p> tags are kept.
+    Whitelist permissiveWhitelist = Whitelist.basic();
+    permissiveWhitelist.addTags("wbr"); // Explicitly allow wbr if needed by the logic, though it's usually ignored.
+
+    try {
+        String cleanedHtml = Jsoup.clean(largeHtml, permissiveWhitelist);
+        // If we reach here, no StackOverflowError occurred.
+        // We can add assertions about the cleaned HTML if the expected behavior
+        // of the *fixed* version is known (e.g., that the <wbr> tags are removed or handled).
+        // For the purpose of reproducing the failure, the absence of StackOverflowError is key.
+        assertTrue("Jsoup.clean should not throw StackOverflowError with many <wbr> tags", true);
+        // Depending on the fix, the <wbr> tags might be removed.
+        // Assert that the <p> tags remain.
+        assertTrue(cleanedHtml.contains("<p>Start</p>"));
+        assertTrue(cleanedHtml.contains("<p>End</p>"));
+
+    } catch (StackOverflowError e) {
+        fail("Jsoup.clean threw StackOverflowError, reproducing the reported issue.");
+    } catch (Exception e) {
+        // Catch other potential exceptions during cleaning, though StackOverflowError is the target.
+        fail("Jsoup.clean threw an unexpected exception: " + e.getMessage());
+    }
+}

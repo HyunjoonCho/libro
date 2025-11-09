@@ -1,0 +1,46 @@
+public void testTarArchiveInputStreamEOF() throws IOException {
+    // Create a dummy tar file that is intentionally truncated
+    String corruptedTarPath = "corrupted.tar";
+    try (OutputStream fos = new FileOutputStream(corruptedTarPath);
+         TarArchiveOutputStream taos = new TarArchiveOutputStream(fos)) {
+        taos.setBigNumberMode(TarArchiveOutputStream.BIGNUMBER_STAR);
+        taos.setLongFileMode(TarArchiveOutputStream.LONGFILE_GNU);
+
+        ArchiveEntry entry = new TarArchiveEntry("test.txt");
+        entry.setSize(1024); // Make the entry larger than the data we write
+        taos.putArchiveEntry(entry);
+        // Write only a small amount of data
+        taos.write("Hello".getBytes());
+        taos.closeArchiveEntry();
+    }
+
+    TarArchiveInputStream input = null;
+    try {
+        input = new TarArchiveInputStream(new FileInputStream(corruptedTarPath));
+        // The loop should ideally throw an exception when it tries to read past the EOF
+        // or when getNextEntry() is called after the truncated data.
+        ArchiveEntry nextMatchedEntry = input.getNextEntry();
+        while (nextMatchedEntry != null) {
+            // Consume the entry to ensure we hit the EOF
+            byte[] buffer = new byte[1024];
+            int bytesRead;
+            while ((bytesRead = input.read(buffer)) != -1) {
+                // Do nothing, just consume
+            }
+            nextMatchedEntry = input.getNextEntry();
+        }
+        // If we reach here without an exception, the test fails.
+        fail("Expected IOException due to corrupted tar file.");
+    } catch (IOException e) {
+        // Expected exception
+    } finally {
+        if (input != null) {
+            try {
+                input.close();
+            } catch (IOException e) {
+                // Ignore
+            }
+        }
+        new File(corruptedTarPath).delete(); // Clean up the dummy file
+    }
+}

@@ -1,0 +1,60 @@
+public void test7zEmptyEntries() throws IOException {
+    File tempDir = Files.createTempDirectory("7z_test").toFile();
+    tempDir.deleteOnExit();
+
+    // Create 8 empty files
+    for (int i = 0; i < 8; i++) {
+        File emptyFile = new File(tempDir, "emptyFile" + i + ".txt");
+        emptyFile.createNewFile();
+        emptyFile.deleteOnExit();
+    }
+
+    File archiveFile = new File(tempDir, "archive.7z");
+    archiveFile.deleteOnExit();
+
+    SevenZOutputFile sevenZOutput = new SevenZOutputFile(archiveFile);
+
+    for (int i = 0; i < 8; i++) {
+        File file = new File(tempDir, "emptyFile" + i + ".txt");
+        SevenZArchiveEntry entry = new SevenZArchiveEntry();
+        entry.setName(file.getName());
+        entry.setSize(file.length());
+        sevenZOutput.putArchiveEntry(entry);
+        sevenZOutput.closeArchiveEntry();
+    }
+
+    sevenZOutput.close();
+
+    // Attempt to read the archive to check for corruption
+    try (SevenZFile sevenZFile = new SevenZFile(archiveFile)) {
+        SevenZArchiveEntry entry;
+        int count = 0;
+        while ((entry = sevenZFile.getNextEntry()) != null) {
+            count++;
+        }
+        // Based on the description, the archive might be corrupt or have unexpected entries.
+        // For 8 empty files, the description states it's corrupt.
+        // If it's corrupt, reading entries might throw an exception or return an unexpected count.
+        // We'll assert that it's not an empty archive if it doesn't throw an exception immediately.
+        assertTrue("Archive should contain entries or be corrupt", count > 0 || archiveFile.length() == 0);
+    } catch (IOException e) {
+        // If an IOException occurs during reading, it might indicate corruption as described.
+        // We'll fail the test if it's not the expected corruption scenario,
+        // but for the purpose of reproducing the bug, catching the exception is part of it.
+        // A more robust test would differentiate between expected corruption and unexpected errors.
+        // For this specific bug, the corruption leads to an error when opening.
+        // If the test reaches here, it means the archive *could* be opened to some extent,
+        // but might still be malformed. The description for scenario 4.2 is "archive is corrupt".
+        // The description for scenario 3 is "7zip Manager cannot open archive and stops working".
+        // This implies an exception during opening or reading.
+        fail("IOException occurred, potentially indicating a corrupt archive: " + e.getMessage());
+    } finally {
+        // Clean up
+        if (tempDir.exists()) {
+            for (File file : tempDir.listFiles()) {
+                file.delete();
+            }
+            tempDir.delete();
+        }
+    }
+}

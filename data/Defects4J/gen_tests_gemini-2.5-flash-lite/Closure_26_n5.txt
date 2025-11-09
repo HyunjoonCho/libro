@@ -1,0 +1,41 @@
+public void testProcessCommonJSModulesModuleExportsFailuresWhenCheckTypesEnabled() {
+    String echoJs = "define(function() { return { echo: function(val) { window.console.log(val); } }});";
+    String echoMainJs = "var echo = require('echo'); echo.echo('hello world');";
+
+    CompilerOptions options = new CompilerOptions();
+    options.setPrettyPrint(true);
+    options.setCompilationLevel(CompilationLevel.SIMPLE_OPTIMIZATIONS);
+    options.setClosurePass(true); // Required for transform_amd_modules and process_common_js_modules
+    options.addGeneralError(CheckLevel.ERROR, DiagnosticGroups.TYPES);
+    options.setProcessCommonJSModules(true);
+    options.setTransformAMDModules(true);
+    options.setCommonJSEntryModule("echo-main");
+
+    List<SourceFile> externs = ImmutableList.of(
+            // Add necessary externs if any, e.g., for goog.require, goog.provide, etc.
+            // For this specific bug, we might not need explicit externs if the compiler
+            // can infer them or if they are implicitly handled.
+            // However, if 'module$exports' is truly the issue, it might be related to
+            // how the compiler defines modules internally.
+            SourceFile.fromCode("externs.js", "var console; var require; var define; var module; var window;")
+    );
+
+    List<SourceFile> inputs = ImmutableList.of(
+            SourceFile.fromCode("echo.js", echoJs),
+            SourceFile.fromCode("echo-main.js", echoMainJs)
+    );
+
+    Compiler compiler = new Compiler();
+    compiler.compile(externs, inputs, options);
+
+    // Assert that no errors related to 'module$exports' are present.
+    // The original bug report implies a specific error message.
+    // We'll check if the compilation succeeds without that specific error.
+    // If the compiler throws an exception or returns errors, we can inspect them.
+    assertThat(compiler.getErrors()).noneMatch(
+            error -> error.getMessage().contains("module$exports never defined")
+    );
+
+    // Optionally, you can also check the generated code if needed, but the primary
+    // goal here is to ensure the compilation error doesn't occur.
+}

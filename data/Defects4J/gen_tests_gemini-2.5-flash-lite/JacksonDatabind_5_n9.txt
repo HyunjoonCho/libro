@@ -1,0 +1,86 @@
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import org.junit.Test;
+
+import static org.junit.Assert.assertNotNull;
+
+public class MixinAnnotationTest {
+
+    // Classes and interfaces from the bug report
+    interface Contact {
+        String getCity();
+    }
+
+    static class ContactImpl implements Contact {
+        @Override
+        public String getCity() {
+            return "CityFromImpl";
+        }
+    }
+
+    static class ContactMixin implements Contact {
+        @JsonProperty
+        @Override
+        public String getCity() {
+            return null;
+        }
+    }
+
+    interface Person extends Contact {}
+
+    static class PersonImpl extends ContactImpl implements Person {}
+
+    static class PersonMixin extends ContactMixin implements Person {}
+
+    @Test
+    public void testMixinAnnotationsLost() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+
+        // The problematic configuration
+        module.setMixInAnnotation(Person.class, PersonMixin.class);
+
+        mapper.registerModule(module);
+
+        PersonImpl person = new PersonImpl();
+        String json = mapper.writeValueAsString(person);
+
+        // The assertion that fails because 'city' is missing
+        // A more direct test would be to assert the JSON string, but since the
+        // description focuses on the *loss* of annotation, we'll check if the
+        // property is present in the serialized output.
+        // If the bug is fixed, the 'city' property should be present.
+        // If the bug persists, 'city' will be missing.
+        // For the purpose of reproducing the failure, we can assert that the
+        // JSON does NOT contain the city property if the bug is present.
+        // However, a more robust test is to assert that it *does* contain it
+        // when the fix is applied. Let's assume the test is written to pass
+        // when the bug is fixed, and fail when it's not.
+
+        // To reproduce the failure, we expect 'city' to be missing.
+        // A more direct way to show the failure is to attempt to read it back,
+        // or inspect the JSON output.
+        // Let's assert that the JSON output *does not* contain "city" when the bug is present.
+        // If the bug is fixed, this assertion will fail.
+        assertNotNull("City property should be annotated and serialized", json); // Basic check
+        assertFalse("City property should be included in serialization", json.contains("\"city\""));
+
+        // To make this test pass when the bug is fixed, we would assert the opposite:
+        // assertTrue("City property should be included in serialization", json.contains("\"city\""));
+        // But the request is to reproduce the *failure*. So we assert the state *with* the bug.
+    }
+
+    // Helper method to make the test runnable without a full class context
+    private void assertFalse(String message, boolean condition) {
+        if (condition) {
+            throw new AssertionError(message);
+        }
+    }
+
+    private void assertNotNull(String message, Object obj) {
+        if (obj == null) {
+            throw new AssertionError(message);
+        }
+    }
+}

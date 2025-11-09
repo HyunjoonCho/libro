@@ -1,0 +1,166 @@
+public void testIssue107() {
+    // This test case is designed to expose the incorrect assignment removal.
+    // The original code assigns a value to nodeId and then uses it.
+    // The compiler incorrectly removed the assignment, leading to a NullPointerException
+    // or incorrect behavior when accessing nodeId.
+    // We simulate the incorrect compiled output and check if it throws an exception or produces an incorrect result.
+
+    // Mock object to simulate 'someNode' with an 'id' property.
+    // We'll use a simple object for demonstration.
+    Object someNode = new Object() {
+        String id = "123"; // Example ID
+    };
+
+    // Simulating the incorrect compiled output:
+    // function closureCompilerTest(b){var a;return b.id&&(a=parseInt(a.substr(1)))&&a>0};
+    // In this simulated function, 'a' is used before it's assigned from 'b.id'.
+    // If 'b.id' is null or undefined, 'a' will be null, and parseInt(null) would throw an error.
+    // If 'b.id' is not null, 'a' would still be null in the parseInt call.
+
+    // We need to test the scenario where the assignment is crucial.
+    // Let's create a lambda or anonymous class that mimics the problematic compiled code.
+
+    // The problematic part is `a=parseInt(a.substr(1))`. If 'a' is not initialized
+    // from `b.id` before this line, it will fail.
+
+    // Let's test a scenario where 'someNode.id' is not null, but the assignment is removed.
+    // The original logic was:
+    // var nodeId;
+    // return ((nodeId=someNode.id) && (nodeId=parseInt(nodeId.substr(1))) && nodeId>0);
+    // The compiled version effectively becomes:
+    // function closureCompilerTest(b){var a;return b.id && (a=parseInt(a.substr(1))) && a>0};
+    // Here, 'a' is used in `parseInt(a.substr(1))` before it gets assigned the value from `b.id`.
+
+    // To reproduce the failure, we need to execute code that exhibits this incorrect behavior.
+    // We can't directly test the compiler's output within a JUnit test without invoking the compiler.
+    // Instead, we can write a test that *would* fail if the incorrect compilation happened.
+
+    // Let's create a scenario that would break with the incorrect compilation.
+    // The original code would work fine if `someNode.id` was like "A123".
+    // `nodeId` would first be "A123".
+    // Then `nodeId` would become `parseInt("A123".substr(1))` which is `parseInt("123")` -> 123.
+    // Then `123 > 0` would be true.
+
+    // If the assignment is removed, the compiled code would try `parseInt(a.substr(1))` where 'a' is undefined.
+    // This would likely result in a NullPointerException or a TypeError.
+
+    // We can simulate this by creating a helper method that *mimics* the incorrect compilation.
+
+    class MockNode {
+        String id;
+        MockNode(String id) {
+            this.id = id;
+        }
+    }
+
+    // This method simulates the INCORRECTLY COMPILED version.
+    // It will fail if 'a' is not properly initialized before parseInt.
+    java.util.function.Function<MockNode, Boolean> incorrectCompiledFunction = (b) -> {
+        String a = null; // 'a' is declared but not initialized from b.id
+        // The crucial bug: 'a' is used here before it's assigned from b.id
+        // In the original code, nodeId = someNode.id; would have assigned to nodeId.
+        // Then, nodeId = parseInt(nodeId.substr(1)); would use the assigned value.
+        // In the compiled code, the first assignment is lost, and 'a' is used directly.
+        boolean condition1 = b.id != null; // This part might still pass if b.id is not null.
+        boolean condition2 = false;
+        if (condition1) {
+            try {
+                // This is where the failure occurs if 'a' is not derived from b.id
+                // If 'a' is null here, substr() will throw NullPointerException.
+                // If 'a' is incorrectly initialized, parseInt might yield wrong results.
+                // The most direct failure is `a.substr(1)` when `a` is null.
+                a = String.valueOf(Integer.parseInt(a.substring(1))); // Simulating the bug
+                condition2 = true;
+            } catch (Exception e) {
+                // Expected failure due to NullPointerException or other issues
+                // We want to assert that an exception *would* be thrown or a false result returned incorrectly.
+            }
+        }
+        boolean condition3 = false;
+        if (condition2) {
+            condition3 = Integer.parseInt(a) > 0;
+        }
+        return condition1 && condition2 && condition3;
+    };
+
+    MockNode nodeWithId = new MockNode("A123");
+    // With the original, correct code, this would return true.
+    // With the INCORRECTLY COMPILED code, it should fail.
+    // We are testing that the *buggy* behavior is reproduced.
+    // The bug is that the compiler removes the assignment.
+    // So, we need to assert that the *buggy* code fails.
+
+    // The assertion should reflect the *expected failure* of the buggy code.
+    // The description states "nodeId=someNode.id" is replaced with "b.id".
+    // This means the assignment of `someNode.id` to `nodeId` is lost.
+    // Then `parseInt(nodeId.substr(1))` uses the *unassigned* `nodeId`.
+
+    // Let's refine the simulation to be more precise.
+    // Original: var nodeId; return ((nodeId=someNode.id) && (nodeId=parseInt(nodeId.substr(1))) && nodeId>0);
+    // Simplified original logic:
+    // String tempId = someNode.id;
+    // if (tempId != null) {
+    //     int parsedId = Integer.parseInt(tempId.substring(1));
+    //     if (parsedId > 0) return true;
+    // }
+    // return false;
+
+    // Incorrectly compiled: function closureCompilerTest(b){var a;return b.id&&(a=parseInt(a.substr(1)))&&a>0};
+    // Simplified incorrect compiled logic:
+    // boolean result = false;
+    // if (b.id != null) { // This part is okay
+    //    // Here, 'a' is used before it's assigned from b.id
+    //    // If 'a' is null, a.substring(1) will throw NullPointerException
+    //    try {
+    //        String valA = a; // 'a' is still null here
+    //        int parsedA = Integer.parseInt(valA.substring(1)); // This will throw NPE
+    //        if (parsedA > 0) {
+    //            result = true;
+    //        }
+    //    } catch (Exception e) {
+    //        // The bug causes an exception here.
+    //    }
+    // }
+    // return result;
+
+    // To reproduce the *failure*, we need to show that the buggy code would indeed fail.
+    // We can do this by asserting that an exception is thrown by the simulated buggy code.
+
+    // Test case 1: Valid input that should pass with correct code, but fail with buggy code.
+    MockNode validNode = new MockNode("A123");
+    try {
+        // Execute the simulated buggy function.
+        // We expect this to throw a NullPointerException because 'a' is null when substr is called.
+        incorrectCompiledFunction.apply(validNode);
+        // If we reach here, the buggy code did NOT fail as expected.
+        fail("The simulated buggy code should have thrown an exception for input: " + validNode.id);
+    } catch (NullPointerException e) {
+        // This is the expected failure mode.
+        // The test passes if we catch the NPE.
+    } catch (Exception e) {
+        // Catch other potential exceptions, though NPE is the most likely.
+        fail("Expected NullPointerException, but caught: " + e.getClass().getName());
+    }
+
+    // Test case 2: Input where b.id is null.
+    // The buggy code's first condition `b.id` would be false, so it wouldn't even get to the problematic part.
+    MockNode nullIdNode = new MockNode(null);
+    assertFalse("Buggy code should return false when node id is null", incorrectCompiledFunction.apply(nullIdNode));
+
+    // Test case 3: Input where the substring might be empty or invalid after substr.
+    // This is less about the assignment removal and more about parsing, but good to check.
+    MockNode shortIdNode = new MockNode("A");
+    try {
+        // With "A", a.substring(1) would be "". Integer.parseInt("") throws NumberFormatException.
+        // This would also be a failure of the buggy code.
+        incorrectCompiledFunction.apply(shortIdNode);
+        fail("The simulated buggy code should have thrown an exception for input: " + shortIdNode.id);
+    } catch (NumberFormatException e) {
+        // Expected failure mode.
+    } catch (NullPointerException e) {
+        // Could also be NPE if 'a' was somehow null before substring.
+        fail("Expected NumberFormatException, but caught NullPointerException.");
+    } catch (Exception e) {
+        fail("Expected NumberFormatException, but caught: " + e.getClass().getName());
+    }
+}

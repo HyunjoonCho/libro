@@ -1,0 +1,66 @@
+public void testHelpFormatterWrap() {
+    HelpFormatter formatter = new HelpFormatter();
+    Option option = new Option("t", "test", false, "This is a very long description that should wrap correctly across multiple lines without exceeding the specified width.");
+    CommandLine cl = new CommandLine();
+    cl.addOption(option);
+    StringWriter sw = new StringWriter();
+    PrintWriter pw = new PrintWriter(sw);
+    formatter.printHelp(pw, 80, cl, "Usage: app [options]", "Header", cl, "Footer");
+    pw.flush();
+    String helpText = sw.toString();
+    String[] lines = helpText.split("\n");
+    assertTrue(lines.length > 2); // Ensure there are multiple lines to check
+    // Check the length of lines beyond the first one, they should not exceed width + startPos
+    // The actual logic in HelpFormatter is a bit more complex and depends on the exact output,
+    // but the core issue is that subsequent lines are incorrectly offset.
+    // We'll check if any line *after* the first one is significantly longer than expected
+    // due to the incorrect wrapping logic.
+    // A simple check: find the line that starts with the option description and verify its length.
+    boolean descriptionStarted = false;
+    int descriptionLineCount = 0;
+    for (String line : lines) {
+        if (line.startsWith("  -t,--test")) {
+            descriptionStarted = true;
+            continue;
+        }
+        if (descriptionStarted) {
+            if (line.trim().isEmpty()) {
+                // End of description section
+                break;
+            }
+            if (descriptionLineCount > 0) {
+                // This is a wrapped line. It should not be excessively long.
+                // The original bug caused lines to be much longer than the width.
+                // We'll check if the line length is more than width + some buffer,
+                // which would indicate the bug.
+                // The exact expected length is hard to pin down without reproducing the buggy code,
+                // but a line significantly longer than 80 characters (our width) and also
+                // not starting with the expected indentation would be a symptom.
+                // A simpler check for the *buggy* behavior: if a line starts with spaces
+                // and then has content that *should* have been wrapped earlier, it's too long.
+                // The bug is that `startPos` is added incorrectly in `findWrapPos`.
+                // Let's assume the buggy code would produce a line that is much longer than 80 chars.
+                // A more precise test would require replicating the exact buggy `findWrapPos`.
+                // For this reproduction, we'll focus on the fact that the description lines are too long.
+                // The buggy `findWrapPos` would return a position that is `width` + `startPos` away,
+                // making the wrapped line extend far beyond the intended width.
+                // Let's check if the line *content* extends beyond the width if it were to start at the correct indent.
+                // This is tricky without the exact buggy code.
+                // A simpler, albeit less precise, reproduction: check if the line length is unexpectedly large.
+                // The bug report states "every line beyond the first".
+                // If the description is long enough to wrap, we expect multiple lines for it.
+                // Let's check if any of these subsequent lines are significantly longer than the width.
+                // The buggy code would make `pos` much larger than `width`.
+
+                // The most direct reproduction is to see that the text *after* the intended wrap point
+                // is still present on the same line, making it too long.
+                // The corrected code in the bug report returns `pos` which is the actual wrap point.
+                // The buggy code would add `startPos` to `width` when calculating the wrap point.
+                // Let's simulate this by checking if the line is indeed longer than the width.
+                assertTrue("Line " + descriptionLineCount + " is too long: " + line.length() + " chars. Content: '" + line + "'", line.length() <= 80 + 2); // Allow for some indentation/padding
+            }
+            descriptionLineCount++;
+        }
+    }
+    assertTrue("Description should have wrapped to multiple lines.", descriptionLineCount > 1);
+}

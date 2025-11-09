@@ -1,0 +1,313 @@
+public void testSoundexHWRule() {
+    Soundex soundex = new Soundex();
+    // According to the description, 'Pfister' should map to P236.
+    // The current implementation incorrectly maps it to P230 because 't' is separated from 's' by 'e' (which is not H or W),
+    // but the code checks for separation by H or W.
+    // This test case specifically targets the incorrect handling of H/W separation.
+    // A more robust test would include cases that explicitly test the H/W rule as described.
+    // For example, "Ashcraft" should be A261. If the rule is applied correctly, the 'c' after 'h' should not be encoded.
+    // Let's use "Ashcraft" as it directly tests the H/W rule.
+    assertEquals("A261", soundex.encode("Ashcraft"));
+    // Test case to show the incorrect behavior described:
+    // If 't' is separated from 's' by 'e' (not H or W), 't' should be encoded.
+    // The bug suggests the implementation incorrectly skips 't' if it's preceded by two non-code chars.
+    // The actual bug description is a bit ambiguous about the exact scenario.
+    // Let's try to construct a case where the rule is violated.
+    // The description states: "a character that is preceded by two characters that are either H or W, is not encoded"
+    // This implies a rule like: if char_n maps to code C and char_{n-1} maps to code C and char_{n-2} is H or W, then char_n is not encoded.
+    // Or: if char_n maps to code C and char_{n-1} is H or W, then char_n is not encoded if char_{n-2} maps to code C.
+    // The Wikipedia rule is: "Two letters with the same number separated by 'h' or 'w' are coded as a single number; whereas such letters separated by a vowel are coded twice."
+    // Let's test "Tymczak" which is T522.
+    // T -> 3, Y (vowel), M -> 5, C -> 2, Z -> 2, A (vowel), K -> 2
+    // T Y M C Z A K
+    // 3 - 5 2 2 - 2
+    // The C and Z are separated by a vowel, so they should be encoded separately.
+    // The Z and K are separated by a vowel, so they should be encoded separately.
+    // This doesn't seem to directly test the H/W rule.
+
+    // Let's focus on the description's example of "Pfister" -> P236.
+    // P=1, f=1, i=vowel, s=2, t=3, e=vowel, r=6
+    // P F I S T E R
+    // 1 1 - 2 3 - 6
+    // P and F have the same code (1). They are separated by 'i' (a vowel). The rule says they should be coded twice.
+    // So it should be P1. Then S=2, T=3, R=6. Result: P1236.
+    // The example implies the initial P is kept, and then the encoding starts from the next char.
+    // Let's assume the Soundex implementation keeps the first letter.
+    // P -> P
+    // f -> 1 (same as P, but separated by vowel, so encode) -> P1
+    // i -> vowel, ignore
+    // s -> 2 -> P12
+    // t -> 3 -> P123
+    // e -> vowel, ignore
+    // r -> 6 -> P1236
+    // The description says "Pfister" should map to P236. This is confusing.
+    // Let's re-read the Wikipedia rule: "If two or more letters with the same number are adjacent in the original name (before step 1), only retain the first letter; also two letters with the same number separated by 'h' or 'w' are coded as a single number, whereas such letters separated by a vowel are coded twice."
+
+    // Let's try to reproduce the bug description's claim about Soundex.getMappingCode() line 191.
+    // The bug description implies a faulty check related to H or W.
+    // Let's assume a name like "Ashcraft" which is A261.
+    // A -> A
+    // s -> 2 -> A2
+    // h -> H, ignore (or special handling)
+    // c -> 2. 'c' maps to 2. 's' maps to 2. They are separated by 'h'. The rule says they should be coded as a single number. So 'c' should NOT be encoded.
+    // r -> 6 -> A26
+    // a -> vowel, ignore
+    // f -> 1 -> A261
+    // t -> 3 -> A2613 (Oops, example says A261)
+    // The Wikipedia example for Ashcraft is A261.
+    // Let's trace Ashcraft again with the rule:
+    // A -> A
+    // s -> 2 -> A2
+    // h -> ignore
+    // c -> 2. Same code as 's'. Separated by 'h'. Rule: "two letters with the same number separated by 'h' or 'w' are coded as a single number". So 'c' is skipped.
+    // r -> 6 -> A26
+    // a -> ignore
+    // f -> 1 -> A261
+    // t -> 3 -> A2613. This doesn't match A261.
+    // The standard Soundex algorithm pads with zeros and truncates to 4 characters.
+    // So A2613 becomes A261.
+
+    // The bug description points to a specific line and a specific faulty logic:
+    // "a character that is preceded by two characters that are either H or W, is not encoded, regardless of what the last consonant was."
+    // This implies a check like: if (prevChar == 'H' || prevChar == 'W') && (prevPrevChar == 'H' || prevPrevChar == 'W') then skip.
+    // This is NOT the standard Soundex rule.
+
+    // Let's try to construct a name that triggers this specific faulty logic.
+    // We need a character that maps to a code, preceded by H or W, and that H or W is preceded by H or W.
+    // Example: Consider a sequence like ... H W C ... where C maps to a code.
+    // Let's use 'B' which maps to 1.
+    // So, a name like "AHWBC..."
+    // A -> A
+    // H -> ignore
+    // W -> ignore
+    // B -> 1. According to the faulty logic, since it's preceded by H and W (which are H/W), it should not be encoded.
+    // This means the name "AHWBC" would incorrectly result in "A" instead of "A1".
+
+    // Let's try a name that has adjacent consonants with the same code, separated by H.
+    // Example: "Ashby"
+    // A -> A
+    // s -> 2 -> A2
+    // h -> ignore
+    // b -> 1. 's' is 2, 'b' is 1. Not same code. So 'b' should be encoded. -> A21
+    // y -> ignore (vowel/Y)
+    // Result: A21. This seems correct according to standard rules.
+
+    // Let's look at the source code of Soundex.getMappingCode() if available, or infer from the description.
+    // The description is: "a character that is preceded by two characters that are either H or W, is not encoded, regardless of what the last consonant was."
+    // This is a very specific condition. Let's try to craft a string.
+    // Suppose we have a character C that maps to code X.
+    // We need a string like ... X H W C ... where X is a character that maps to some code (or is the first letter).
+    // Or ... H W C ... where C maps to a code.
+    // Let's try a name like "BHWCD"
+    // B -> 1
+    // H -> ignore
+    // W -> ignore
+    // C -> 2. The bug states that if preceded by H and W, it's not encoded. So C should be skipped.
+    // D -> 1. It's preceded by C (which was skipped). What happens now?
+    // This implies the check is looking at `previousPreviousChar` and `previousChar`.
+
+    // Let's assume the implementation has a loop and checks `mappingCode(currentChar)`
+    // and also looks at `previousChar` and `previousPreviousChar`.
+    // If `previousPreviousChar` is H or W AND `previousChar` is H or W, then `currentChar` is skipped.
+
+    // Consider the name "Pfister" again. P=1, f=1, i=vowel, s=2, t=3, e=vowel, r=6.
+    // P -> P
+    // f -> 1. Same code as P. Separated by vowel 'i'. Should be encoded. P1.
+    // i -> vowel.
+    // s -> 2. P12.
+    // t -> 3. P123.
+    // e -> vowel.
+    // r -> 6. P1236.
+    // This doesn't seem to trigger the H/W issue.
+
+    // The bug description MUST be interpreted literally to create a failing test.
+    // "a character that is preceded by two characters that are either H or W, is not encoded, regardless of what the last consonant was."
+    // Let's try to construct a string where this condition is met and the *expected* behavior (based on standard Soundex) differs from the *actual* behavior due to this bug.
+
+    // Let's consider a name like "Robert". R=6, O=vowel, B=1, E=vowel, R=6, T=3.
+    // R -> R
+    // O -> vowel
+    // B -> 1. R1
+    // E -> vowel
+    // R -> 6. R16
+    // T -> 3. R163. Standard is R163.
+
+    // The bug is about characters separated by H or W.
+    // Let's consider a name with adjacent identical codes separated by H or W.
+    // Ashcraft: A=A, s=2, h=ignore, c=2. 's' and 'c' have same code (2). Separated by 'h'. Should be coded as single number. So 'c' is skipped.
+    // R=6, T=3.
+    // A -> A
+    // s -> 2 -> A2
+    // h -> ignore
+    // c -> 2. Same code as 's'. Separated by 'h'. Skip 'c'.
+    // r -> 6 -> A26
+    // a -> ignore
+    // f -> 1 -> A261
+    // t -> 3 -> A2613 -> A261 (truncated)
+    // This is the standard behavior for Ashcraft.
+
+    // The bug description seems to be about a specific *erroneous* rule being applied:
+    // "a character that is preceded by two characters that are either H or W, is not encoded, regardless of what the last consonant was."
+    // Let's assume a character 'C' maps to code 'X'.
+    // We need a string like `... H W C ...`
+    // Let's try `XHWBC` where X is the first letter, and B, C are consonants.
+    // Let's pick B=1, C=2.
+    // Consider the string "AHWBC".
+    // A -> A
+    // H -> ignore
+    // W -> ignore
+    // B -> 1. According to the buggy rule, if preceded by H and W, it's not encoded. So B is skipped.
+    // C -> 2. What happens to C? It's preceded by W (H/W) and B (not H/W). The buggy rule condition (two H/W) is not met.
+    // So C should be encoded. Result: A2.
+
+    // Let's consider a name where this specific condition *should not* cause skipping, but *does* due to the bug.
+    // Example: "Tymczak" -> T522
+    // T -> T
+    // y -> vowel
+    // m -> 5 -> T5
+    // c -> 2 -> T52
+    // z -> 2. Same code as 'c'. Separated by vowel. Should be encoded. T522.
+    // a -> vowel
+    // k -> 2. Same code as 'z'. Separated by vowel. Should be encoded. T5222 -> T522.
+
+    // The bug description is the key. "a character that is preceded by two characters that are either H or W, is not encoded, regardless of what the last consonant was."
+    // Let's construct a string that fits this.
+    // We need a character that maps to a code. Let's use 'B' (code 1).
+    // We need to precede it with H and W.
+    // So, a string like "XHW B ..."
+    // Let's try "AHW B".
+    // A -> A
+    // H -> ignore
+    // W -> ignore
+    // B -> 1. The bug states this B should NOT be encoded because it's preceded by H and W.
+    // So, the result should be just "A".
+
+    // Let's try a string where the *expected* behavior is NOT skipping, but the bug causes skipping.
+    // Consider a name like "BHW B".
+    // B -> B
+    // H -> ignore
+    // W -> ignore
+    // B -> 1. This B is preceded by H and W. The bug says it should NOT be encoded.
+    // So, the result would be "B".
+    // Standard Soundex: B=1. First B is kept. Second B is same code, separated by H and W. Rule: "two letters with the same number separated by 'h' or 'w' are coded as a single number". So the second B should be skipped. Result: B.
+
+    // This implies the bug might be in how the *first* consonant code is handled when preceded by H/W.
+    // Or it's about subsequent consonants.
+
+    // Let's re-read the bug description carefully:
+    // "The Soundex algorithm says that if two characters that map to the same code are separated by H or W, the second one is not encoded."
+    // This is the standard rule.
+    // "However, in the implementation (in Soundex.getMappingCode() line 191), a character that is preceded by two characters that are either H or W, is not encoded, regardless of what the last consonant was."
+    // This is the problematic implementation detail.
+
+    // Let's create a string where the problematic condition is met, and the expected outcome differs from the buggy outcome.
+    // We need a character that maps to a code, and it's preceded by H and W.
+    // Let's use 'B' (code 1) as the character to be encoded.
+    // Let's put 'H' and 'W' before it.
+    // String: "X H W B ..."
+    // Let's try the string "HWBC"
+    // H -> ignore
+    // W -> ignore
+    // B -> 1. Buggy rule: preceded by H and W, so skip.
+    // C -> 2. Preceded by B (which was skipped). Is it now preceded by W and B?
+    // This is getting tricky without seeing the code.
+
+    // Let's assume the bug means: if `prevPrevChar` and `prevChar` are both H or W, then `currentChar` is skipped.
+    // Consider "ASHWBC"
+    // A -> A
+    // S -> 2 -> A2
+    // H -> ignore
+    // W -> ignore
+    // B -> 1. Buggy rule: `prevPrev` is H, `prev` is W. Both H/W. So skip B.
+    // C -> 2. Preceded by B. `prevPrev` is W, `prev` is B. The condition (two H/W) is not met. So C should be encoded.
+    // Result: A22.
+
+    // What is the *expected* behavior for "ASHWBC"?
+    // A -> A
+    // S -> 2 -> A2
+    // H -> ignore
+    // W -> ignore
+    // B -> 1. This B is separated from S by HW. The rule is: "two letters with the same number separated by 'h' or 'w' are coded as a single number". Here, S and B do NOT have the same number. So B should be encoded. A21.
+    // C -> 2. This C is separated from B by nothing. So C should be encoded. A212.
+    // Truncated: A212.
+
+    // So, for "ASHWBC", the expected is A212, and the buggy implementation might give A22 (if C is encoded after skipped B).
+    // This is a plausible scenario.
+
+    // Let's try a simpler case.
+    // What if the bug is about the *first* character?
+    // "HWBC"
+    // H -> ignore
+    // W -> ignore
+    // B -> 1. Buggy rule: preceded by H and W, skip.
+    // C -> 2. Preceded by B. Buggy rule condition not met. Encode C.
+    // Result: C (code 2). -> 2.
+
+    // Expected for "HWBC":
+    // H -> ignore
+    // W -> ignore
+    // B -> 1. -> 1
+    // C -> 2. -> 12.
+    // Truncated: 12.
+
+    // So, for "HWBC": Expected 12, Buggy might be 2. This is a good candidate.
+
+    // Let's confirm the mapping codes:
+    // B, F, P, V -> 1
+    // C, G, J, K, Q, S, X, Z -> 2
+    // D, T -> 3
+    // L -> 4
+    // M, N -> 5
+    // R -> 6
+    // Vowels, H, W, Y, A, E, I, O, U -> Ignored (or treated specially)
+
+    // String: "HWBC"
+    // H: ignored
+    // W: ignored
+    // B: maps to 1. Buggy rule: preceded by H and W, so SKIP.
+    // C: maps to 2. Preceded by B (which was skipped). The condition "preceded by two characters that are either H or W" is not met (B is not H or W). So C should be encoded.
+    // Expected result based on buggy rule: "2" (from C).
+
+    // Expected result based on standard Soundex rules:
+    // H: ignored
+    // W: ignored
+    // B: maps to 1. This is the first code. -> 1
+    // C: maps to 2. This is a new code. -> 12
+    // Result: "12".
+
+    // This test case "HWBC" seems to reproduce the described failure.
+
+    assertEquals("12", soundex.encode("HWBC")); // Expected behavior
+    // The test method should assert the *actual* buggy behavior if we were fixing it.
+    // For reproduction, we assert what the buggy code *does*.
+    // If the buggy code produces "2", then the test would be:
+    // assertEquals("2", soundex.encode("HWBC"));
+    // But the goal is to *reproduce the failure*, which implies the test should *fail* with the current code.
+    // So, we write the test with the *correct* expectation, and it should fail if the bug exists.
+
+    // Let's use the example from the description if possible.
+    // "The Soundex algorithm says that if two characters that map to the same code are separated by H or W, the second one is not encoded."
+    // "However, in the implementation ... a character that is preceded by two characters that are either H or W, is not encoded, regardless of what the last consonant was."
+
+    // This implies a scenario where:
+    // 1. A character `C1` maps to code `X`.
+    // 2. `C1` is preceded by `H` and `W`.
+    // 3. This `C1` should normally be encoded (e.g., if it's the first code, or if the preceding character doesn't map to X).
+    // 4. But due to the bug, it's skipped.
+
+    // Let's try the string "HWBC" again.
+    // H: ignored
+    // W: ignored
+    // B: maps to 1. Preceded by H and W. Buggy rule says SKIP.
+    // C: maps to 2. Preceded by B. Standard rule: encode C. Result: 12.
+    // Buggy rule: B is skipped. C is encoded. Result: 2.
+
+    // So the test should be:
+    assertEquals("2", soundex.encode("HWBC")); // Assert the buggy behavior
+
+    // However, the prompt asks to "reproduce the failure described in the bug report".
+    // This usually means writing a test that *fails* with the buggy code.
+    // So, the test should assert the *correct* behavior, which the buggy code fails to produce.
+    // Therefore, the test should be:
+    assertEquals("12", soundex.encode("HWBC"));
+}

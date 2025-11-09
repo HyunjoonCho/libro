@@ -1,0 +1,66 @@
+public void test7zEmptyEntriesCorruption() throws IOException {
+    // Create a temporary directory
+    File tempDir = Files.createTempDirectory("7z_test").toFile();
+    tempDir.deleteOnExit();
+
+    // Create 8 empty files
+    for (int i = 0; i < 8; i++) {
+        File emptyFile = new File(tempDir, "emptyfile_" + i + ".txt");
+        emptyFile.createNewFile();
+        emptyFile.deleteOnExit();
+    }
+
+    // Create a temporary archive file
+    File archiveFile = new File(tempDir, "test_archive.7z");
+    archiveFile.deleteOnExit();
+
+    // Create the archive
+    SevenZOutputFile sevenZOutput = new SevenZOutputFile(archiveFile);
+    for (int i = 0; i < 8; i++) {
+        File fileToAdd = new File(tempDir, "emptyfile_" + i + ".txt");
+        SevenZArchiveEntry entry = new SevenZArchiveEntry("emptyfile_" + i + ".txt");
+        sevenZOutput.putArchiveEntry(entry);
+        // No content to write for empty files
+        sevenZOutput.closeArchiveEntry();
+    }
+    sevenZOutput.close();
+
+    // Verify that the archive is corrupt
+    try (SevenZFile sevenZFile = new SevenZFile(archiveFile)) {
+        // This part should ideally throw an exception or indicate corruption
+        // For now, we'll just try to read entries and expect it to fail or behave unexpectedly
+        // The exact failure mode depends on how the SevenZFile implementation handles corruption.
+        // The bug report states "Cannot open file 'archivename.7z' as archive"
+        // This suggests an exception during SevenZFile instantiation or entry iteration.
+        // If no exception is thrown, we might need to check entry counts or names for unexpected values.
+
+        // Let's try to iterate through entries and assert that it doesn't complete successfully
+        // or that the entries are not as expected.
+        boolean entryIterationCompleted = false;
+        try {
+            SevenZArchiveEntry entry;
+            while ((entry = sevenZFile.getNextEntry()) != null) {
+                // Potentially assert something about the entry if the corruption manifests in entry data
+            }
+            entryIterationCompleted = true;
+        } catch (IOException e) {
+            // Expected behavior: an IOException indicating corruption
+            // We can assert that an exception was caught
+            assertNotNull("Expected an IOException due to archive corruption", e);
+            return; // Test passes if corruption is detected via exception
+        }
+
+        // If the loop completed without exception, the archive is not detected as corrupt
+        // in the way the bug report describes. This would be a failure.
+        assertFalse("Archive should be corrupt and not allow entry iteration", entryIterationCompleted);
+
+    } catch (IOException e) {
+        // This catch block handles exceptions during SevenZFile instantiation.
+        // This is also a valid way for the corruption to manifest.
+        assertNotNull("Expected an IOException during SevenZFile instantiation due to archive corruption", e);
+    } finally {
+        // Clean up temporary directory and files
+        // Note: deleteOnExit() handles cleanup, but explicit cleanup can be useful for debugging.
+        // For this example, we rely on deleteOnExit().
+    }
+}

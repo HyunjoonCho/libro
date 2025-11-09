@@ -1,0 +1,184 @@
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.junit.jupiter.api.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class TarArchiveInputStreamTest {
+
+    @Test
+    public void testUidGidAboveMaxInt() throws IOException {
+        // Simulate a PAX extended header with UID >= 0x80000000
+        // Value 4294967295 is 0xFFFFFFFF, the maximum unsigned 32-bit integer
+        String paxHeader = "18\u0000uid=4294967295\u0000\u0000";
+        byte[] tarData = paxHeader.getBytes(); // Minimal tar data to trigger PAX processing
+
+        try (ByteArrayInputStream bais = new ByteArrayInputStream(tarData);
+             TarArchiveInputStream tais = new TarArchiveInputStream(bais)) {
+
+            // We expect applyPaxHeadersToCurrentEntry to be called and process the UID
+            // The bug is that Integer.parseInt will throw a NumberFormatException
+            // The fix involves using Long.parseLong and updating TarArchiveEntry to store Long for uid/gid
+
+            // This test doesn't assert a specific return value because the failure
+            // is an exception. We are testing that the exception is NOT thrown
+            // after the fix. For the purpose of reproducing the failure,
+            // we can assert that the exception IS thrown.
+            // However, since we are to provide a test that *reproduces* the failure,
+            // and the prompt asks for a JUnit test method to be inserted,
+            // it implies a test that *would pass* if the fix were applied,
+            // but *fails* with the current buggy code.
+            // The best way to represent this is to attempt the operation that causes the failure.
+
+            // The original bug description implies that reading a tar entry with such a UID will fail.
+            // Let's simulate reading an entry that *would* have this PAX header.
+            // To do this, we need to construct a minimal tar entry structure that
+            // would be followed by the PAX header.
+
+            // A minimal tar entry header (512 bytes) followed by the pax header
+            byte[] tarEntryHeader = new byte[512];
+            // Set some basic fields, like name and size
+            // Name "test.txt"
+            System.arraycopy("test.txt".getBytes(), 0, tarEntryHeader, 0, 8);
+            // Size 0
+            // Mode (permissions)
+            // UID
+            // GID
+            // Mtime
+            // Checksum
+            // Type flag
+            // Link name
+            // Magic Number
+            // Version
+            // ... and so on for the 512 bytes.
+
+            // For simplicity and to focus on the PAX header processing,
+            // we can construct a scenario where only the PAX header is relevant.
+            // The bug is in applyPaxHeadersToCurrentEntry which is called by getNextTarEntry.
+
+            // Let's create a byte array that represents a PAX extended header.
+            // The format is: length \0 keyword=value \0 ... \0 \0
+            // The length is the total number of bytes in the header record, including the length field itself and the null terminators.
+            // For "uid=4294967295", the string is 16 bytes.
+            // The record is: 16 (length) + 0 (null) + 13 (uid=4294967295) + 0 (null) = 30 bytes.
+            // The length field itself is 8 bytes in ASCII representation. So, 8 + 30 = 38 bytes.
+            // Let's re-evaluate the length calculation as per the spec.
+            // The length field is the length of the *record* that follows it.
+            // So, if the record is "uid=4294967295\0", its length is 17 bytes.
+            // The length field itself would be "17" followed by a null byte. So, 17 + 1 = 18.
+            // The total record length is 18 (length field) + 17 (data) = 35 bytes.
+            // Let's use the example from the bug report: "18 uid=4294967295\0\0"
+            // This implies the record length is 18 bytes, and the content is "uid=4294967295\0".
+            // The length field is encoded as ASCII digits followed by a null byte.
+            // So, "18" (2 bytes) + null (1 byte) = 3 bytes for the length field.
+            // The data is "uid=4294967295" (16 bytes) + null (1 byte) = 17 bytes.
+            // Total length of the PAX record: 3 + 17 = 20 bytes.
+            // The bug report's example "18 uid=4294967295\0\0" might be slightly off or represent a different interpretation.
+            // Let's follow the structure that leads to NumberFormatException.
+
+            // Constructing a minimal tar entry that *would* have a PAX header.
+            // A tar entry record starts with a 512-byte header.
+            // If the size field indicates that there are extended attributes,
+            // the subsequent data blocks contain PAX headers.
+
+            // Let's craft a byte array that *starts* with a PAX header.
+            // The TarArchiveInputStream expects a stream of tar entries.
+            // Each entry starts with a 512-byte header.
+            // If the entry is of type 'x' (extended header), the data that follows *is* the PAX header content.
+
+            // Let's simulate a PAX extended header entry.
+            // The entry type 'x' indicates an extended header.
+            // The header of this entry will specify the size of the PAX data that follows.
+            // The PAX data itself is a sequence of key=value pairs terminated by null bytes.
+
+            // Example: "uid=4294967295"
+            // The full PAX record for this would be:
+            // Length of the record (e.g., "17") + null terminator + key=value + null terminator.
+            // Let's assume the length is calculated correctly and the issue is in parsing the value.
+
+            // We need to simulate the scenario where `applyPaxHeadersToCurrentEntry` is called
+            // with a key "uid" and a value "4294967295".
+
+            // Let's create a TarArchiveInputStream that starts with a PAX extended header.
+            // This requires constructing a valid tar file structure in memory.
+
+            // Minimal tar header for an extended header entry ('x')
+            byte[] tarHeaderForPax = new byte[512];
+            // Set name to be empty or a placeholder for extended header
+            tarHeaderForPax[257] = 'x'; // Entry type 'x' for extended header
+            // Set size of the PAX data. Let's assume the PAX data is "uid=4294967295\0"
+            // This string has length 17.
+            String paxDataString = "uid=4294967295\0";
+            int paxDataSize = paxDataString.length();
+            String sizeStr = Integer.toString(paxDataSize);
+            // Pad sizeStr with nulls to fit into the 12 bytes allocated for size in the header.
+            byte[] sizeBytes = new byte[12];
+            System.arraycopy(sizeStr.getBytes(), 0, sizeBytes, 0, sizeStr.length());
+            System.arraycopy(sizeBytes, 0, tarHeaderForPax, 100, 12); // Size field in tar header
+
+            // Combine the tar header for the PAX entry with the actual PAX data
+            ByteArrayInputStream paxStream = new ByteArrayInputStream(
+                    tarHeaderForPax, 0, tarHeaderForPax.length);
+            paxStream.write(paxDataString.getBytes());
+
+            // Now create the TarArchiveInputStream with this combined stream
+            try (TarArchiveInputStream taisWithPax = new TarArchiveInputStream(paxStream)) {
+                // The first call to getNextTarEntry should return the extended header entry.
+                // The subsequent processing within getNextTarEntry or when accessing the entry
+                // will trigger the bug.
+                // Specifically, when the stream is read to get the PAX header data,
+                // and then applyPaxHeadersToCurrentEntry is invoked.
+
+                // Let's try to read the entry. This should trigger the parsing.
+                TarArchiveEntry entry = taisWithPax.getNextTarEntry();
+
+                // The bug is in `applyPaxHeadersToCurrentEntry` which is called internally by `paxHeaders`.
+                // `paxHeaders` is called by `getNextTarEntry`.
+                // So, calling `getNextTarEntry` should be enough to trigger the `Integer.parseInt`.
+
+                // If the code were fixed, `entry` would be a valid TarArchiveEntry
+                // with userId set to 4294967295L.
+                // If the code is buggy, `getNextTarEntry` will throw a NumberFormatException.
+
+                // To reproduce the failure, we expect an exception.
+                // JUnit tests typically assert conditions that *should* be true.
+                // A test that reproduces a failure would *fail* if the bug is present.
+                // The prompt asks for a method to be inserted that reproduces the failure.
+                // This implies the test should be written such that it fails with the buggy code.
+
+                // We can wrap the call that is expected to fail in a try-catch and assert that the exception is caught.
+                // Or, more idiomatically for JUnit, use `assertThrows`.
+
+                // The specific line causing the failure is `Integer.parseInt(val)` inside `applyPaxHeadersToCurrentEntry`.
+                // This method is called when `paxHeaders` is processed, which is called by `getNextTarEntry`.
+
+                // So, the call to `getNextTarEntry()` is what triggers the problematic parsing.
+
+                // We are creating a test that *will fail* if the bug is present.
+                // The test itself is correct in its intent to expose the bug.
+                org.junit.jupiter.api.Assertions.assertThrows(NumberFormatException.class, () -> {
+                    // Re-create the stream and input for the assertion
+                    byte[] tarHeaderForPaxBug = new byte[512];
+                    tarHeaderForBug[257] = 'x'; // Entry type 'x' for extended header
+                    String paxDataStringBug = "uid=4294967295\0";
+                    int paxDataSizeBug = paxDataStringBug.length();
+                    String sizeStrBug = Integer.toString(paxDataSizeBug);
+                    byte[] sizeBytesBug = new byte[12];
+                    System.arraycopy(sizeStrBug.getBytes(), 0, sizeBytesBug, 0, sizeStrBug.length());
+                    System.arraycopy(sizeBytesBug, 0, tarHeaderForPaxBug, 100, 12);
+
+                    ByteArrayInputStream paxStreamBug = new ByteArrayInputStream(
+                            tarHeaderForPaxBug, 0, tarHeaderForPaxBug.length);
+                    paxStreamBug.write(paxDataStringBug.getBytes());
+
+                    try (TarArchiveInputStream taisBug = new TarArchiveInputStream(paxStreamBug)) {
+                        taisBug.getNextTarEntry(); // This call should throw NumberFormatException
+                    }
+                }, "Expected NumberFormatException for UID >= 0x80000000");
+            }
+        }
+    }
+}

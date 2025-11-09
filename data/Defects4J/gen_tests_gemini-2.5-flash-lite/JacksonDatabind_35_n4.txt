@@ -1,0 +1,60 @@
+public void testJaxbObjectTypeIdWrapperRegression() throws Exception {
+    // Recreate the setup from the original issue description
+    XmlMapper mapper = new XmlMapper();
+    // Need to enable the wrapper type id inclusion for the test
+    mapper.enable(MapperFeature.USE_WRAPPER_NAME_AS_PROPERTY_NAME);
+
+    // Define a simple wrapper class
+    @XmlRootElement
+    @XmlAccessorType(XmlAccessType.FIELD)
+    class Wrapper {
+        @XmlID
+        String id;
+
+        @XmlIDREF
+        @XmlElement(name="ref")
+        Object ref;
+
+        @Override
+        public String toString() {
+            return "Wrapper{" +
+                   "id='" + id + '\'' +
+                   ", ref=" + ref +
+                   '}';
+        }
+    }
+
+    // Define a simple referenced class
+    @XmlRootElement
+    class Referenced {
+        String value;
+
+        @Override
+        public String toString() {
+            return "Referenced{" +
+                   "value='" + value + '\'' +
+                   '}';
+        }
+    }
+
+    Referenced referenced = new Referenced();
+    referenced.value = "testValue";
+
+    Wrapper wrapper = new Wrapper();
+    wrapper.id = "wrapper1";
+    wrapper.ref = referenced;
+
+    // Serialize the wrapper object
+    String xml = mapper.writeValueAsString(wrapper);
+
+    // Deserialize the XML back into a wrapper object
+    // The issue is that the deserialization fails to correctly resolve the IDREF
+    Wrapper deserializedWrapper = mapper.readValue(xml, Wrapper.class);
+
+    // Assert that the deserialized object is correctly formed and the IDREF is resolved
+    assertNotNull(deserializedWrapper);
+    assertEquals("wrapper1", deserializedWrapper.id);
+    assertNotNull(deserializedWrapper.ref);
+    assertTrue(deserializedWrapper.ref instanceof Referenced);
+    assertEquals("testValue", ((Referenced) deserializedWrapper.ref).value);
+}

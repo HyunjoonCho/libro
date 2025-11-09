@@ -1,0 +1,39 @@
+public void testCreatePathStackOverflow() {
+    Map map = new HashMap();
+    map.put("a", null);
+    JXPathContext pathContext = JXPathContext.newContext(map);
+    pathContext.setFactory(new AbstractFactory() {
+        public boolean createObject(JXPathContext context, Pointer pointer, Object parent, String name, int index) {
+            Map parentMap = (Map) parent;
+            if (index > -1) {
+                List list = (List) parentMap.get(name);
+                if (list == null) {
+                    list = new ArrayList();
+                }
+                int size = list.size();
+                for (int i = size; i <= index; i++) {
+                    list.add(i, new HashMap()); // Do not set to 'null'
+                }
+                parentMap.put(name, list);
+            } else {
+                parentMap.put(name, new HashMap());
+            }
+            return true;
+        }
+    });
+    pathContext.createPath("a/b[1]/c");
+    // This second call should not cause a StackOverflowError
+    pathContext.createPath("a/b[2]/c");
+    // Assert that the map has been populated as expected to verify the operation
+    assertNotNull(map.get("a"));
+    Map aMap = (Map) map.get("a");
+    assertNotNull(aMap.get("b"));
+    List bList = (List) aMap.get("b");
+    assertTrue(bList.size() >= 3); // Should have elements at index 1 and 2
+    assertNotNull(bList.get(1));
+    assertNotNull(bList.get(2));
+    Map cMap1 = (Map) bList.get(1);
+    assertNotNull(cMap1);
+    Map cMap2 = (Map) bList.get(2);
+    assertNotNull(cMap2);
+}

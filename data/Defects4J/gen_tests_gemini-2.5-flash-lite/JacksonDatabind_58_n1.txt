@@ -1,0 +1,40 @@
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class JsonIgnorePropertiesThrowableTest {
+
+    @JsonIgnoreProperties("cause")
+    public static class MyException extends RuntimeException {
+        public MyException(String message) {
+            super(message);
+        }
+
+        // No-arg constructor for Jackson deserialization
+        public MyException() {
+            super();
+        }
+    }
+
+    @Test
+    public void testIgnoreCauseOnGAE() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        MyException originalException = new MyException("Test exception");
+        originalException.initCause(new Throwable("Original cause"));
+
+        // Serialize the exception
+        String json = mapper.writeValueAsString(originalException);
+
+        // Deserialize the exception
+        // This is the part that would fail on GAE due to reflection restrictions on private fields like 'cause'
+        // The test asserts that it *doesn't* fail, implying the @JsonIgnoreProperties annotation works as expected
+        // by preventing Jackson from trying to access and set the 'cause' field.
+        MyException deserializedException = mapper.readValue(json, MyException.class);
+
+        // Assert that the deserialization was successful and the 'cause' was not attempted to be set
+        assertNotNull(deserializedException);
+        assertNull(deserializedException.getCause(), "The 'cause' property should have been ignored and remain null.");
+        assertEquals("Test exception", deserializedException.getMessage());
+    }
+}

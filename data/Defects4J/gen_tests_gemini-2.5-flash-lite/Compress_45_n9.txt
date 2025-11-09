@@ -1,0 +1,70 @@
+public void testTarUtilsFormatLongOctalOrBinaryBytes() {
+    long value = 1024; // 0b10000000000
+    String binaryString = TarUtils.formatLongBinary(value);
+    String octalString = TarUtils.formatLongOctalOrBinaryBytes(value, false, false);
+    // The bug is that formatLongOctalOrBinaryBytes should use formatLongBinary's result
+    // if the length is less than 9, but it currently overwrites it.
+    // We expect the output of formatLongBinary to be preserved.
+    // formatLongBinary(1024) should yield "10000000000" (11 digits)
+    // formatLongOctalOrBinaryBytes(1024, false, false) currently yields "01400" (octal, 5 digits)
+    // The test should assert that the binary representation is used as expected.
+    // The original description implies the test would fail if the results *weren't* ignored,
+    // meaning the current behavior is incorrect.
+    // Let's assert what the *correct* behavior should be.
+    // If length < 9, it should be binary. 1024 is 11 bits, so it's longer than 8 bits.
+    // Let's try a value that is less than 9 bits, e.g., 128 (0b10000000)
+    value = 128; // 0b10000000, 8 bits
+    binaryString = TarUtils.formatLongBinary(value); // Should be "10000000"
+    octalString = TarUtils.formatLongOctalOrBinaryBytes(value, false, false); // Should be "200" if octal, or "10000000" if binary logic is applied correctly.
+    // Based on the description, the current implementation would likely produce "200"
+    // and the test should assert that it *should* be "10000000" for values fitting in 8 bits.
+    // However, the description says "if the length < 9". The binary string "10000000" has length 8.
+    // So, it seems the intention is that for values that *can* be represented in 8 bits or less,
+    // the binary format should be used.
+    // Let's test the boundary: 255 (0b11111111)
+    value = 255; // 0b11111111, 8 bits
+    binaryString = TarUtils.formatLongBinary(value); // "11111111"
+    octalString = TarUtils.formatLongOctalOrBinaryBytes(value, false, false); // Expected: "11111111" based on bug description. Actual: Likely octal "377".
+    assertEquals("11111111", octalString);
+
+    // Let's test a value that requires more than 8 bits, like 256 (0b100000000)
+    value = 256; // 0b100000000, 9 bits
+    binaryString = TarUtils.formatLongBinary(value); // "100000000"
+    octalString = TarUtils.formatLongOctalOrBinaryBytes(value, false, false); // Expected: "100000000" based on bug description. Actual: Likely octal "400".
+    assertEquals("100000000", octalString);
+
+    // The description "if the length < 9, formatLongBinary is executed, then overwritten by the results of formatBigIntegerBinary."
+    // implies that formatLongOctalOrBinaryBytes *itself* is the one doing the overwriting.
+    // And it seems to be defaulting to octal or some other representation when it shouldn't.
+    // The fix mentioned is to use Long.decode() instead of valueOf() for createLong,
+    // and for createNumber, use Long if hex string has more than 8 digits.
+    // This suggests the issue is in the internal logic of TarUtils.formatLongOctalOrBinaryBytes.
+
+    // Let's re-read carefully: "if the length < 9, formatLongBinary is executed, then overwritten by the results of formatBigIntegerBinary."
+    // This implies formatLongOctalOrBinaryBytes calls formatLongBinary internally, and then something else overwrites it.
+    // The test should try to trigger this path and assert the *incorrect* output.
+    // The description implies the *current* behavior is wrong.
+    // If formatLongBinary produces a string of length < 9, it should be used.
+    // What if formatLongBinary produces a string of length >= 9?
+    // Example: 256 -> "100000000" (length 9). The description says "if the length < 9".
+    // So, if length is exactly 9, the condition is false.
+    // Let's test with a value that produces a binary string of length < 9.
+    // Value 127: binary is "1111111" (length 7).
+    value = 127; // 0b1111111
+    // The method TarUtils.formatLongOctalOrBinaryBytes(value, false, false) is called.
+    // Inside, it likely checks if the value fits in 8 bits. 127 fits.
+    // It should then call formatLongBinary(127) which returns "1111111".
+    // The bug description implies this result is then overwritten.
+    // Let's assume the overwriting results in an octal representation, which is "177".
+    // So, the expected *incorrect* output is "177".
+    String result = TarUtils.formatLongOctalOrBinaryBytes(value, false, false);
+    assertEquals("177", result); // Asserting the incorrect behavior described.
+
+    // Let's try another value that fits in 8 bits: 255
+    value = 255; // 0b11111111
+    // Binary is "11111111" (length 8). The condition "length < 9" is true.
+    // It should use the binary string "11111111".
+    // The bug description implies it gets overwritten, likely to octal "377".
+    result = TarUtils.formatLongOctalOrBinaryBytes(value, false, false);
+    assertEquals("377", result); // Asserting the incorrect behavior described.
+}

@@ -1,0 +1,71 @@
+public void testDuplicateHeaderNames() throws IOException {
+    String csvData = "Col1,Col2,Col2,Col3,Col4\n1,2,3,4,5\n4,5,6,7,8";
+    CSVFormat myFormat = CSVFormat.RFC4180.withDelimiter(",")
+                                     .withQuoteChar('"')
+                                     .withQuotePolicy(CSVFormat.Quote.MINIMAL)
+                                     .withIgnoreSurroundingSpaces(true)
+                                     .withHeader()
+                                     .withSkipHeaderRecord(true);
+
+    StringReader reader = new StringReader(csvData);
+    MappingIterator<Object> iterator = new CsvMapper().reader(Object.class)
+                                                     .with(myFormat)
+                                                     .readValues(reader);
+
+    List<Object> records = iterator.readAll();
+    Map<String, List<String>> headerMap = iterator.getParser().getHeader();
+
+    // Assert that the header map contains the duplicate column name,
+    // and that the values associated with it are correct.
+    // The exact expected behavior for duplicate headers isn't explicitly defined in the bug,
+    // but a common approach is to either throw an error or handle them as distinct.
+    // This test assumes the parser should at least not crash and ideally indicate the duplicates.
+    // If the parser is expected to ignore duplicates, this assertion would change.
+    // Here, we'll check if the number of headers is as expected after parsing.
+    // A more robust test might inspect the content of the header map more deeply if
+    // the intended behavior for duplicates was clearer.
+
+    // For now, let's check if the number of columns parsed is consistent with the header row.
+    // The bug description implies the header map is inconsistent.
+    // A simple check is to see if the number of columns in the first data row matches
+    // the number of distinct header names we might expect, or if the header map size
+    // reflects the actual columns.
+
+    // Based on the description, the header map is expected to be inconsistent.
+    // Let's assert that the number of entries in the header map is NOT equal to the number of columns in the header line.
+    // The header line has 5 columns: Col1, Col2, Col2, Col3, Col4.
+    // If "Col2" is used as a key, one of them will be overwritten.
+    // Therefore, the header map size would likely be 4 (Col1, Col2, Col3, Col4).
+    assertThat(headerMap.size()).isEqualTo(4);
+
+    // We can also check the values for the duplicate header to see how it was handled.
+    // The bug implies the second "Col2" overwrites the first.
+    assertThat(headerMap.get("Col2")).isNotNull();
+    // The content of the list for "Col2" would depend on the implementation.
+    // If it overwrites, it might only contain the last value's index.
+    // If it's intended to list all indices, this would need further clarification.
+    // For the purpose of reproducing the *inconsistency*, checking the size is a good start.
+
+    // Let's also check the actual parsed data to ensure it aligns with the flawed header.
+    assertThat(records).hasSize(2);
+    assertThat(records.get(0)).isInstanceOf(Map.class);
+    Map<String, String> firstRecord = (Map<String, String>) records.get(0);
+
+    // If "Col2" was overwritten, accessing it will give the value from the *last* "Col2" column.
+    // The data is: 1,2,3,4,5. The second column is '2', the third is '3'.
+    // If the header map key "Col2" maps to the *last* "Col2", then accessing "Col2" should yield "3".
+    // This is a speculative assertion based on how map overwriting typically works.
+    // If the bug meant that the *first* Col2 is kept, this assertion would fail.
+    // The core of the bug is the inconsistency, which is shown by headerMap.size() != 5.
+    // Let's assume for this reproduction that the latest column name wins.
+    assertThat(firstRecord.get("Col2")).isEqualTo("3");
+    assertThat(firstRecord.get("Col1")).isEqualTo("1");
+    assertThat(firstRecord.get("Col3")).isEqualTo("4");
+    assertThat(firstRecord.get("Col4")).isEqualTo("5");
+
+    Map<String, String> secondRecord = (Map<String, String>) records.get(1);
+    assertThat(secondRecord.get("Col2")).isEqualTo("6");
+    assertThat(secondRecord.get("Col1")).isEqualTo("4");
+    assertThat(secondRecord.get("Col3")).isEqualTo("7");
+    assertThat(secondRecord.get("Col4")).isEqualTo("8");
+}

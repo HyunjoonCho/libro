@@ -1,0 +1,82 @@
+import com.google.javascript.jscomp.CheckSideEffects;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class WeirdObjectLiteralTest {
+
+    @Test
+    public void testWeirdObjectLiteral() {
+        String jsCode = "/**\n" +
+                        " * @param {{text: string}}\n" +
+                        " * @return {string}\n" +
+                        " */\n" +
+                        "function temp1(opt_data) {\n" +
+                        " return opt_data.text;\n" +
+                        "}\n" +
+                        "\n" +
+                        "/**\n" +
+                        " * @param {{activity: (boolean|number|string|null|Object)}}\n" +
+                        " * @return {string}\n" +
+                        " */\n" +
+                        "function temp2(opt_data) {\n" +
+                        " /** @notypecheck */\n" +
+                        " function __inner() {\n" +
+                        " return temp1(opt_data.activity);\n" +
+                        " }\n" +
+                        " return __inner();\n" +
+                        "}\n" +
+                        "\n" +
+                        "/**\n" +
+                        " * @param {{n: number, text: string, b: boolean}}\n" +
+                        " * @return {string}\n" +
+                        " */\n" +
+                        "function temp3(opt_data) {\n" +
+                        " return 'n: ' + opt_data.n + ', t: ' + opt_data.text + '.';\n" +
+                        "}\n" +
+                        "\n" +
+                        "function callee() {\n" +
+                        " var output = temp3({\n" +
+                        " n: 0,\n" +
+                        " text: 'a string',\n" +
+                        " b: true\n" +
+                        " })\n" +
+                        " alert(output);\n" +
+                        "}\n" +
+                        "\n" +
+                        "callee();";
+
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setCompilationLevel(CompilerOptions.CompilationLevel.ADVANCED_OPTIMIZATIONS);
+        options.addErrorForCompiler(CheckSideEffects.USELESS_SIDE_EFFECTS); // Example of adding a specific error check
+        options.setPrettyPrint(true); // For easier debugging if needed
+
+        SourceFile sourceFile = SourceFile.fromCode("repro.js", jsCode);
+        compiler.compile(SourceFile.NO_CALLABLES, sourceFile, options);
+
+        // The original bug report indicates an ERROR, not a compilation failure.
+        // We are testing that the compiler *does not* report the specific error mentioned.
+        // If the compiler *does* report the error, the test will fail because compiler.getErrorManager().getErrorCount() will be > 0.
+        // In a real scenario, you might inspect compiler.getErrors() for the specific error code.
+        // For this example, we assume that if the compilation is successful without the specific error, the test passes.
+        // If the specific error was known, we would check for its presence or absence.
+
+        // If the bug is fixed, the compilation should succeed without the specific error.
+        // If the bug is present, the compilation will likely fail or produce unexpected output/warnings.
+        // This test verifies the *absence* of the bug's symptom (the incorrect error).
+        assertEquals("Compilation failed with unexpected errors.", 0, compiler.getErrorManager().getErrorCount());
+
+        // Optionally, if you wanted to assert that a *specific* error is NOT present:
+        // boolean specificErrorFound = false;
+        // for (JSError error : compiler.getErrors()) {
+        //     if (error.getLineNumber() == 30 && error.getCharno() == 22) { // Approximate location from bug report
+        //         specificErrorFound = true;
+        //         break;
+        //     }
+        // }
+        // assertFalse("The specific 'actual parameter does not match formal parameter' error was found.", specificErrorFound);
+    }
+}

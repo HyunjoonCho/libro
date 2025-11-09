@@ -1,0 +1,35 @@
+public void testDependencySortingWithClosurePassFalse() throws Exception {
+    Compiler compiler = new Compiler();
+    CompilerOptions compilerOptions = new CompilerOptions();
+    compilerOptions.setClosurePass(false);
+    compilerOptions.setPrettyPrint(true);
+
+    DependencyOptions dependencyOptions = new DependencyOptions();
+    dependencyOptions.setDependencySorting(true);
+    dependencyOptions.setClosureEntryPass(false); // Ensure closure entry pass is off
+    compilerOptions.setDependencyOptions(dependencyOptions);
+
+    List<SourceFile> inputs = new ArrayList<>();
+    inputs.add(SourceFile.fromCode("a.js", "goog.provide('a');\nvar x = 1;"));
+    inputs.add(SourceFile.fromCode("b.js", "goog.provide('b');\ngoog.require('a');\nvar y = 2;"));
+    inputs.add(SourceFile.fromCode("c.js", "goog.provide('c');\ngoog.require('b');\nvar z = 3;"));
+
+    // The expected order is a.js, b.js, c.js
+    // If sorting does not work, the order might be different.
+    // We check for the presence of concatenated code in the expected order.
+    // This is a simplified check. A more robust test might involve AST comparison.
+
+    Result result = compiler.compile(inputs, new ArrayList<SourceFile>(), compilerOptions);
+    if (result.errors.length > 0) {
+        fail("Compilation failed with errors: " + Arrays.toString(result.errors));
+    }
+
+    String output = result.compiledCode;
+
+    // Check if the files are concatenated in the expected order.
+    // We expect 'a' to come before 'b', and 'b' to come before 'c'.
+    // This is a fragile test as it relies on string manipulation and specific code patterns.
+    // A better test would involve checking the AST or specific JS execution order.
+    assertTrue("File 'a.js' should appear before 'b.js'", output.indexOf("var x = 1;") < output.indexOf("var y = 2;"));
+    assertTrue("File 'b.js' should appear before 'c.js'", output.indexOf("var y = 2;") < output.indexOf("var z = 3;"));
+}

@@ -1,0 +1,66 @@
+import org.apache.commons.compress.archivers.sevenz.SevenZFile;
+import org.junit.Test;
+
+import java.io.File;
+import java.io.IOException;
+
+import static org.junit.Assert.fail;
+
+public class SevenZipTest {
+
+    @Test
+    public void testLargeDictionary() {
+        // This test assumes you have a 7z archive named "large_dictionary.7z"
+        // created with 7-Zip using a dictionary size of 16MB or larger.
+        // The actual file creation process is outside the scope of this test method.
+        File archiveFile = new File("large_dictionary.7z");
+
+        // Create a dummy file if it doesn't exist, so the test doesn't fail immediately
+        // due to file not found. The actual failure should occur during SevenZFile instantiation.
+        if (!archiveFile.exists()) {
+            try {
+                archiveFile.createNewFile();
+                // Note: This dummy file won't actually cause the UnsupportedOptionsException.
+                // For the test to reproduce the bug, a real problematic archive is needed.
+                // However, for the purpose of demonstrating the test structure, we proceed.
+            } catch (IOException e) {
+                // Ignore, test will likely fail later anyway.
+            }
+        }
+
+        try {
+            // Attempt to open the archive. This is expected to throw UnsupportedOptionsException
+            // if the dictionary size is too large for the current implementation.
+            new SevenZFile(archiveFile);
+            // If the above line does not throw an exception, the test fails.
+            fail("Expected UnsupportedOptionsException for large dictionary size.");
+        } catch (org.tukaani.xz.UnsupportedOptionsException e) {
+            // This is the expected exception, so the test passes.
+            assertTrue(e.getMessage().contains("LZMA dictionary is too big"));
+        } catch (IOException e) {
+            // Any other IOException is unexpected in this specific bug scenario.
+            fail("Unexpected IOException: " + e.getMessage());
+        } finally {
+            // Clean up the dummy file if it was created.
+            if (archiveFile.exists() && archiveFile.length() == 0) {
+                archiveFile.delete();
+            }
+        }
+    }
+
+    // Helper method to assert that a condition is true.
+    // In a real JUnit setup, you would use Assert.assertTrue().
+    private void assertTrue(boolean condition) {
+        if (!condition) {
+            throw new AssertionError("Assertion failed");
+        }
+    }
+
+    // Helper method to assert that a string contains a specific sequence.
+    // In a real JUnit setup, you would use String.contains().
+    private void assertTrue(String actual, String expectedSubstring) {
+        if (actual == null || !actual.contains(expectedSubstring)) {
+            throw new AssertionError("Expected '" + actual + "' to contain '" + expectedSubstring + "'");
+        }
+    }
+}

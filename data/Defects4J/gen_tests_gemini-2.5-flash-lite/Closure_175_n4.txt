@@ -1,0 +1,41 @@
+public void testAdvancedOptimizations() {
+    CompilerOptions options = new CompilerOptions();
+    options.setCompilationLevel(CompilationLevel.ADVANCED_OPTIMIZATIONS);
+    options.setPrettyPrint(true);
+    options.setLanguageIn(LanguageMode.ECMASCRIPT3);
+    options.setLanguageOut(LanguageMode.ECMASCRIPT3);
+    options.setClosurePass(true);
+
+    String code = "window[\"anchor\"] = function (obj, modifiesProp) {" +
+                  " return (function (saved) {" +
+                  " return modifiesProp(obj) + saved;" +
+                  " })(obj[\"prop\"]);" +
+                  " }";
+
+    String externs = "var window = {};\n" +
+                     "window.anchor = function(obj, modifiesProp) {};";
+
+    SourceFile input = SourceFile.fromCode("input.js", code);
+    SourceFile extern = SourceFile.fromCode("window.js", externs);
+
+    List<SourceFile> inputs = new ArrayList<>();
+    inputs.add(input);
+
+    List<SourceFile> externsList = new ArrayList<>();
+    externsList.add(extern);
+
+    Compiler compiler = new Compiler();
+    compiler.compile(externsList, inputs, options);
+
+    String compiledCode = compiler.toSource();
+
+    // The expected output is not precisely known due to the nature of the optimization,
+    // but the key is that 'a.prop' should be preserved in the closure.
+    // The bug described is that 'a.prop' is being incorrectly optimized away.
+    // We will assert that the compiled code does NOT contain the erroneous optimization.
+    // The erroneous optimization would result in something like:
+    // window.anchor = function(a, b) { return b(a) + a.prop };
+    // The correct behavior should preserve the saved value.
+    assertFalse(compiledCode.contains("return b(a) + a.prop"));
+    assertTrue(compiledCode.contains("saved")); // Indicating the closure is likely preserved
+}

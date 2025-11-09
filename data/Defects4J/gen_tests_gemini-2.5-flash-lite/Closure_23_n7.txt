@@ -1,0 +1,30 @@
+public void testFoldArrayAccessSideEffects() {
+    // The original code is JavaScript: console.log([console.log('hello, '), 'world!'][1]);
+    // This test aims to reproduce the incorrect optimization where the side effect
+    // of the first element in the array access is lost.
+    // In Java, we'll simulate this by checking if a function with a side effect
+    // passed as the first element of an array access is evaluated.
+
+    // We need a way to track if the side effect occurred.
+    // A simple mutable object can be used.
+    final AtomicBoolean sideEffectOccurred = new AtomicBoolean(false);
+
+    // A function that has a side effect.
+    Supplier<String> sideEffectFunction = () -> {
+        sideEffectOccurred.set(true);
+        return "hello, ";
+    };
+
+    // Simulate the array access where the first element has a side effect.
+    // The 'world!' is the element at index 1.
+    String[] array = {sideEffectFunction.get(), "world!"};
+    String result = (String) array[1]; // Accessing the second element
+
+    // Assert that the side effect did NOT occur due to the faulty optimization.
+    // In a real compiler scenario, the peephole optimization would remove the
+    // evaluation of sideEffectFunction.get().
+    assertFalse("Side effect should have been optimized away incorrectly.", sideEffectOccurred.get());
+
+    // Assert that the expected result is still produced, even though the side effect was lost.
+    assertEquals("world!", result);
+}

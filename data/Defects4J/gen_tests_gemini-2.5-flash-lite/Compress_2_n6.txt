@@ -1,0 +1,41 @@
+public void testArDelete() throws Exception {
+    File archiveFile = new File("bla.ar");
+    Archive archive = new Archive(archiveFile);
+
+    // Create an archive with two entries
+    archive.addEntry(new ArchiveEntry("test1.xml", "content1".getBytes()));
+    archive.addEntry(new ArchiveEntry("test2.xml", "content2".getBytes()));
+    archive.save();
+
+    // Delete one entry
+    archive.deleteEntry("test2.xml");
+    archive.save();
+
+    // Verify that the deleted entry is no longer accessible
+    ArchiveEntry entry = archive.getNextEntry();
+    assertNotNull(entry);
+    assertEquals("test1.xml", entry.getName());
+    assertNull(archive.getNextEntry());
+
+    // Verify that the archive file still contains the deleted entry's data
+    // This is the core of the bug: the entry is removed from the index but not from the file content
+    // We can't directly assert the file content here without deeper knowledge of the Archive implementation,
+    // but the command line output in the bug report implies this is the case.
+    // The subsequent attempt to add a new file should fail due to the corrupted state.
+
+    // Attempt to add a new entry, which should trigger the "Inappropriate file type or format" error
+    // We expect an exception here. The exact exception type might depend on the implementation.
+    try {
+        archive.addEntry(new ArchiveEntry("test3.txt", "content3".getBytes()));
+        archive.save();
+        fail("Expected an exception when adding to a corrupted archive.");
+    } catch (Exception e) {
+        // This is the expected behavior, indicating the archive is in an invalid state.
+        assertTrue(e.getMessage().contains("Inappropriate file type or format") ||
+                   e.getMessage().contains("Invalid archive format")); // Be flexible with error messages
+    } finally {
+        // Clean up
+        archive.close();
+        archiveFile.delete();
+    }
+}

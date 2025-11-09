@@ -1,0 +1,53 @@
+public void testEmbeddedPojoInTree() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    ListAttributeSerializer serializer = new ListAttributeSerializer();
+    SimpleModule module = new SimpleModule();
+    module.addSerializer(ListAttribute.class, serializer);
+    mapper.registerModule(module);
+
+    ListAttribute listAttribute = new ListAttribute("String", Arrays.asList("item1", "item2"));
+    ObjectNode rootNode = mapper.createObjectNode();
+    rootNode.set("list", mapper.valueToTree(listAttribute));
+
+    // The bug is that "items" field becomes an EmbeddedObjectNode
+    // This assertion checks for that behavior.
+    JsonNode itemsNode = rootNode.get("list").get("items");
+    assertTrue(itemsNode instanceof POJONode);
+}
+
+// Helper classes to make the test runnable
+static class ListAttribute {
+    private String itemJsonKey;
+    private List<String> items;
+
+    public ListAttribute(String itemJsonKey, List<String> items) {
+        this.itemJsonKey = itemJsonKey;
+        this.items = items;
+    }
+
+    public String getItemJsonKey() {
+        return itemJsonKey;
+    }
+
+    public List<String> getItems() {
+        return items;
+    }
+}
+
+static class ListAttributeSerializer extends JsonSerializer<ListAttribute> {
+    @Override
+    public void serialize(ListAttribute value, JsonGenerator jgen, SerializerProvider provider) throws IOException {
+        jgen.writeStartObject();
+        jgen.writeStringField("itemType", value.getItemJsonKey());
+        jgen.writeObjectField("items", value.getItems());
+        jgen.writeEndObject();
+    }
+
+    @Override
+    public void serializeWithType(ListAttribute value, JsonGenerator jgen, SerializerProvider provider, TypeSerializer typeSer) throws IOException {
+        typeSer.writeTypePrefixForObject(value, jgen);
+        jgen.writeStringField("itemType", value.getItemJsonKey());
+        jgen.writeObjectField("items", value.getItems());
+        typeSer.writeTypeSuffixForObject(value, jgen);
+    }
+}

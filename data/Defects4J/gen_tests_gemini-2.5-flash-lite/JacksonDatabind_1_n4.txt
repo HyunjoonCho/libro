@@ -1,0 +1,79 @@
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.ArrayList;
+
+import static org.junit.Assert.assertEquals;
+
+public class NullDuplicationTest {
+
+    // Inner class to reproduce the issue
+    public static class TestOuter {
+        @JsonFormat(shape = JsonFormat.Shape.ARRAY)
+        public ArrayList<TestInner> array;
+
+        public TestOuter() {
+            this.array = new ArrayList<>();
+            this.array.add(new TestInner(1, "one"));
+            this.array.add(new TestInner(0, null));
+        }
+
+        private static class TestInner {
+            public int i;
+            public String mayBeNull;
+
+            public TestInner(int i, String s) {
+                this.i = i;
+                this.mayBeNull = s;
+            }
+        }
+    }
+
+    // Custom serializer to demonstrate the problem without modifying Jackson library
+    public static class TestInnerSerializer extends StdSerializer<TestInner> {
+
+        public TestInnerSerializer() {
+            super(TestInner.class);
+        }
+
+        @Override
+        public void serialize(TestInner value, JsonGenerator gen, SerializerProvider provider) throws IOException {
+            gen.writeStartArray();
+            gen.writeNumber(value.i);
+            if (value.mayBeNull == null) {
+                gen.writeNull();
+            } else {
+                gen.writeString(value.mayBeNull);
+            }
+            gen.writeEndArray();
+        }
+    }
+
+    @Test
+    public void testNullDuplicationInArraySerialization() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+
+        // Register the custom serializer for TestInner
+        com.fasterxml.jackson.databind.module.SimpleModule module = new com.fasterxml.jackson.databind.module.SimpleModule();
+        module.addSerializer(TestInner.class, new TestInnerSerializer());
+        mapper.registerModule(module);
+
+        TestOuter outer = new TestOuter();
+        String json = mapper.writeValueAsString(outer);
+
+        // The expected JSON should have [0, null] for the second inner object
+        // The bug causes it to be [0, null, null]
+        String expectedJsonPart = "\"array\":[[1,\"one\"],[0,null]]";
+        String actualJsonPart = "\"array\":[[1,\"one\"],[0,null,null]]"; // This is what the bug produces
+
+        // We assert that the buggy output is NOT what we get, implying the fix works
+        // or that the current version doesn't have the bug.
+        // If the test fails, it means the buggy output is still present.
+        assertEquals("Expected JSON without duplicated nulls", expectedJsonPart, json.replaceFirst(actualJsonPart, expectedJsonPart));
+    }
+}

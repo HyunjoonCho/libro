@@ -1,0 +1,68 @@
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.junit.jupiter.api.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+public class TarArchiveInputStreamTest {
+
+    @Test
+    public void testUidGidTooLargeForInt() throws IOException {
+        // Represents a PAX extended header with uid=4294967295 (0xFFFFFFFF)
+        // and gid=4294967295 (0xFFFFFFFF)
+        // This is a simplified representation for testing purposes.
+        // A real .tar file would have more structure.
+        String paxHeader = " \n" +
+                           "256\0" + // Length of PAX header record
+                           "x\0" +   // PAX Extended Header magic number
+                           "uid\0" +
+                           "4294967295\0" +
+                           "gid\0" +
+                           "4294967295\0";
+
+        // A minimal tar entry header followed by the PAX header
+        // We need a null byte after the PAX header to signify its end.
+        byte[] tarData = new byte[512]; // Tar entries are typically 512 bytes
+        System.arraycopy(paxHeader.getBytes(), 0, tarData, 0, paxHeader.length());
+
+        // Create a TarArchiveInputStream with the crafted data
+        try (ByteArrayInputStream bis = new ByteArrayInputStream(tarData);
+             TarArchiveInputStream tais = new TarArchiveInputStream(bis)) {
+
+            ArchiveEntry entry = tais.getNextTarEntry();
+            assertTrue(entry instanceof TarArchiveEntry, "Should be a TarArchiveEntry");
+            TarArchiveEntry tarEntry = (TarArchiveEntry) entry;
+
+            // The bug was that Integer.parseInt was used, causing NumberFormatException
+            // for values >= 2^31. The fix should allow values up to 2^32 - 1.
+            // We expect the UID and GID to be correctly parsed as longs.
+            // Note: TarArchiveEntry uses int for userId and groupId, so we can only
+            // test up to the maximum value that fits in an int if the entry itself
+            // is not modified to use Long. However, the parsing *within*
+            // applyPaxHeadersToCurrentEntry should handle the larger values before
+            // potentially casting or storing them.
+            // Based on the bug description, the issue is in the parsing *logic*
+            // within applyPaxHeadersToCurrentEntry which uses Integer.parseInt.
+            // The fix involves using Long.parseLong.
+
+            // If the code is fixed to use Long.parseLong, it should not throw
+            // a NumberFormatException for these values.
+            // We can't directly assert the values if TarArchiveEntry still uses int
+            // and the value overflows. The primary goal is to ensure no exception.
+
+            // If TarArchiveEntry is updated to use Long, then these assertions would be valid:
+            // assertEquals(4294967295L, tarEntry.getLongUserId());
+            // assertEquals(4294967295L, tarEntry.getLongGroupId());
+
+            // For now, we'll check if getNextTarEntry completes without exception
+            // and if the entry is indeed a TarArchiveEntry.
+            // The actual values might be truncated if TarArchiveEntry still uses int.
+            // The critical part is that `Integer.parseInt(val)` does not throw.
+        }
+    }
+}

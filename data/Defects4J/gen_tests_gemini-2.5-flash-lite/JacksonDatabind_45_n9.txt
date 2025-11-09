@@ -1,0 +1,67 @@
+public void testIssue1154() throws Exception {
+    final String JSON_NUMBER_VALUE = "123";
+    final String JSON_STRING_VALUE = "\"123\"";
+
+    // Test case 1: Explicitly defined as NUMBER, should not be parsed as string
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.enable(MapperFeature.USE_STD_BEAN_NAMING);
+    SimpleModule module = new SimpleModule();
+    module.addDeserializer(Object.class, new ToStringDeserializer());
+    mapper.registerModule(module);
+
+    // Explicitly define the field as NUMBER (using annotation for demonstration)
+    class NumberBean {
+        @JsonFormat(shape = JsonFormat.Shape.NUMBER)
+        public Object value;
+    }
+    NumberBean bean1 = new NumberBean();
+    bean1.value = JSON_NUMBER_VALUE; // This should be treated as a number
+
+    String json1 = mapper.writeValueAsString(bean1);
+    // Expecting the output to be a number, not a string
+    assertTrue(json1.contains("\"value\":123"));
+
+    // Deserialize back and check the type
+    NumberBean deserializedBean1 = mapper.readValue(json1, NumberBean.class);
+    assertTrue(deserializedBean1.value instanceof Number);
+    assertEquals(Integer.valueOf(123), deserializedBean1.value);
+
+
+    // Test case 2: Explicitly defined as NUMBER, but locale might suggest string
+    // This is to ensure NUMBER shape takes precedence
+    mapper.setLocale(Locale.GERMANY); // Locale might influence number formatting, but shape should override
+
+    // Explicitly define the field as NUMBER
+    class NumberBeanWithLocale {
+        @JsonFormat(shape = JsonFormat.Shape.NUMBER)
+        public Object value;
+    }
+    NumberBeanWithLocale bean2 = new NumberBeanWithLocale();
+    bean2.value = JSON_NUMBER_VALUE;
+
+    String json2 = mapper.writeValueAsString(bean2);
+    // Expecting the output to be a number, not a string
+    assertTrue(json2.contains("\"value\":123"));
+
+    // Deserialize back and check the type
+    NumberBeanWithLocale deserializedBean2 = mapper.readValue(json2, NumberBeanWithLocale.class);
+    assertTrue(deserializedBean2.value instanceof Number);
+    assertEquals(Integer.valueOf(123), deserializedBean2.value);
+
+    // Test case 3: Explicitly defined as STRING, should be parsed as string
+    class StringBean {
+        @JsonFormat(shape = JsonFormat.Shape.STRING)
+        public Object value;
+    }
+    StringBean bean3 = new StringBean();
+    bean3.value = JSON_NUMBER_VALUE; // This should be treated as a string
+
+    String json3 = mapper.writeValueAsString(bean3);
+    // Expecting the output to be a string
+    assertTrue(json3.contains("\"value\":\"123\""));
+
+    // Deserialize back and check the type
+    StringBean deserializedBean3 = mapper.readValue(json3, StringBean.class);
+    assertTrue(deserializedBean3.value instanceof String);
+    assertEquals("123", deserializedBean3.value);
+}

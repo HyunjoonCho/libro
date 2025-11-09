@@ -1,0 +1,80 @@
+public void testCustomCollectionDeserialization() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    // Configure Jackson to use immutable collections
+    mapper.setAnnotationIntrospector(new JacksonAnnotationIntrospector() {
+        @Override
+        public Class<?> findPOJOBuilder(AnnotatedClass ac) {
+            if (ac.getRawClass().equals(MyStringCollection.class)) {
+                return MyStringCollection.Builder.class;
+            }
+            return super.findPOJOBuilder(ac);
+        }
+    });
+    mapper.registerModule(new SimpleModule() {
+        @Override
+        public void setupModule(SetupContext context) {
+            context.addDeserializers(new Deserializers.Base() {
+                @Override
+                public JsonDeserializer<?> findBeanDeserializer(JavaType type, BeanDescription beanDesc, BeanSerializerFactory beanSerializerFactory) {
+                    if (type.getRawClass().equals(MyStringCollection.class)) {
+                        // Use a standard collection deserializer for String collections
+                        return new CollectionDeserializers.StringCollectionDeserializer(type, null, null);
+                    }
+                    return super.findBeanDeserializer(type, beanDesc, beanSerializerFactory);
+                }
+            });
+        }
+    });
+
+    MyObjectWithCollection obj = new MyObjectWithCollection();
+    obj.strings = new MyStringCollection(Arrays.asList("a", "b", "c"));
+    String json = mapper.writeValueAsString(obj);
+
+    // This deserialization should now work without error
+    MyObjectWithCollection deserializedObj = mapper.readValue(json, MyObjectWithCollection.class);
+    assertNotNull(deserializedObj);
+    assertNotNull(deserializedObj.strings);
+    assertEquals(3, deserializedObj.strings.size());
+    assertTrue(deserializedObj.strings.contains("a"));
+    assertTrue(deserializedObj.strings.contains("b"));
+    assertTrue(deserializedObj.strings.contains("c"));
+}
+
+// Helper classes for the test
+static class MyStringCollection extends AbstractCollection<String> implements Serializable {
+    private static final long serialVersionUID = 1L;
+    private final List<String> delegate;
+
+    public MyStringCollection(Collection<String> delegate) {
+        this.delegate = new ArrayList<>(delegate);
+    }
+
+    // For deserialization, Jackson needs a way to create an instance.
+    // The workaround is to provide a builder or a no-arg constructor.
+    // Here we use a builder pattern.
+    public static class Builder {
+        private List<String> list = new ArrayList<>();
+
+        public void add(String value) {
+            list.add(value);
+        }
+
+        public MyStringCollection build() {
+            return new MyStringCollection(list);
+        }
+    }
+
+    @Override
+    public Iterator<String> iterator() {
+        return delegate.iterator();
+    }
+
+    @Override
+    public int size() {
+        return delegate.size();
+    }
+}
+
+static class MyObjectWithCollection {
+    public MyStringCollection strings;
+}

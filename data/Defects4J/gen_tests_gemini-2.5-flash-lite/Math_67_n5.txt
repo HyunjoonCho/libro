@@ -1,0 +1,37 @@
+public void testMultiStartUnivariateRealOptimizerGetResult() {
+    UnivariateRealFunction polynomial = new PolynomialFunction(new double[]{-1, 0, 1});
+    MultiStartUnivariateRealOptimizer optimizer = new MultiStartUnivariateRealOptimizer(new BrentOptimizer(polynomial, 1e-10, 1e-10, 1e-10));
+    optimizer.setNumberOfStarts(10);
+    optimizer.setMaxEvaluations(100);
+    optimizer.optimize(polynomial, GoalType.MAXIMIZE, -1000, 1000);
+    double result = optimizer.getResult();
+    double functionValue = optimizer.getFunctionValue();
+    // The optimize method should return the best result, which should be the same as getResult() and getFunctionValue()
+    // In the case of a polynomial x^2 - 1, the maximum is at x = 1000 or x = -1000, depending on the optimizer's range.
+    // Let's assume the optimizer finds a local maximum near 0 for this specific setup, but the bug is about getResult() returning the *last* run, not necessarily the best.
+    // To reproduce the bug, we need to ensure the last run is NOT the best. This is hard to guarantee with a simple setup.
+    // However, the description implies that getResult() *should* return optima[0], which is the best result.
+    // The test case below checks if getResult() returns a value that is indeed the best among the results.
+    // If the bug is present, getResult() might return a suboptimal value.
+    // We'll assert that the result is close to the known maximum of the function within the range.
+    // For x^2 - 1, the maximum in [-1000, 1000] is at the boundaries.
+    // However, the optimizer might find a local optimum.
+    // Let's test a function where the global optimum is clearly identifiable and different from a potential last run.
+    // Consider f(x) = -x^2. The maximum is at x=0.
+    UnivariateRealFunction negQuadratic = new PolynomialFunction(new double[]{0, 0, -1});
+    MultiStartUnivariateRealOptimizer negQuadraticOptimizer = new MultiStartUnivariateRealOptimizer(new BrentOptimizer(negQuadratic, 1e-10, 1e-10, 1e-10));
+    negQuadraticOptimizer.setNumberOfStarts(5); // Fewer starts to make it slightly easier to reason about
+    negQuadraticOptimizer.setMaxEvaluations(100);
+    double bestResult = negQuadraticOptimizer.optimize(negQuadratic, GoalType.MAXIMIZE, -10, 10);
+
+    // If the bug is present, optimizer.getResult() might return a value from a run that didn't find the maximum at 0.
+    // For example, if one of the starts leads to a result like 5, and the best is 0.
+    // The test should verify that getResult() IS the best result.
+    // The description implies that the current implementation returns the *last* result, which might not be the best.
+    // The fix suggests that getResult() should return optima[0], which is by convention the best result.
+
+    // We will assert that the result returned by getResult() is the same as the result from optimize()
+    // and that it's close to the expected best value (0 for -x^2).
+    assertEquals(bestResult, optimizer.getResult(), 1e-9);
+    assertTrue(Math.abs(optimizer.getResult()) < 1e-9); // Check if the result is close to 0
+}

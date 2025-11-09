@@ -1,0 +1,35 @@
+public void testZipLocalVersionNeededToExtractMismatch() throws IOException {
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    ZipArchiveOutputStream zaos = null;
+    ZipArchiveInputStream zais = null;
+    try {
+        zaos = new ZipArchiveOutputStream(new BufferedOutputStream(baos));
+        ZipArchiveEntry entry = new ZipArchiveEntry("test.txt");
+        entry.setMethod(ZipEntry.DEFLATED);
+        zaos.putArchiveEntry(entry);
+        zaos.write("This is a test.".getBytes());
+        zaos.closeArchiveEntry();
+        zaos.finish();
+
+        zais = new ZipArchiveInputStream(new ByteArrayInputStream(baos.toByteArray()));
+        ZipArchiveEntry localEntry = zais.getNextZipEntry();
+        assertNotNull(localEntry);
+        // With DEFLATED and data descriptors, version needed should be at least 2.0
+        // If no data descriptors are used (which is the case when not using BufferedOutputStream),
+        // it might be INITIAL_VERSION (1.0) or versionNeededToExtract(zipMethod, hasZip64Extra(ze))
+        // The bug is that it's set to INITIAL_VERSION (1.0) even when DEFLATED.
+        // The correct value when using DEFLATED and data descriptors should be DATA_DESCRIPTOR_MIN_VERSION (2.0).
+        // The test checks if the local header version is NOT 2.0 (indicating the bug).
+        // A passing test would assert that it IS 2.0 after the fix.
+        // For reproducing the bug, we assert it's NOT the expected value.
+        assertTrue("Local header version needed to extract should be greater than 1.0 for DEFLATED",
+                   localEntry.getVersionNeededToExtract() != 10); // 10 represents 1.0
+    } finally {
+        if (zais != null) {
+            zais.close();
+        }
+        if (zaos != null) {
+            zaos.close();
+        }
+    }
+}

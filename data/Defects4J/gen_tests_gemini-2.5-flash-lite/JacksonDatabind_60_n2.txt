@@ -1,0 +1,183 @@
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Arrays;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+
+public class PolymorphicTypeLostTest {
+
+    private static class RemoteCall {
+        private Object[] args;
+
+        @JsonCreator
+        public RemoteCall(@JsonProperty("args") Object[] args) {
+            this.args = args;
+        }
+
+        public Object[] getArgs() {
+            return args;
+        }
+    }
+
+    private static class CommandAPDU {
+        private byte[] apdu;
+
+        @JsonCreator
+        public CommandAPDU(@JsonProperty("bytes") byte[] apdu) {
+            this.apdu = apdu.clone();
+            // Simulate parsing logic
+            System.out.println("CommandAPDU creator called");
+        }
+
+        @JsonValue
+        public byte[] getBytes() {
+            return apdu.clone();
+        }
+    }
+
+    @Test
+    public void testPolymorphicTypeLostWithJsonValue() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+        mapper.enableDefaultTyping();
+
+        byte[] data = {0x41, 0x4B, 0x51, 0x45, 0x41, 0x61, (byte) 0x8f, (byte) 0x80, 0x30, 0x30, 0x30, 0x41}; // Example byte array
+        CommandAPDU commandAPDU = new CommandAPDU(data);
+
+        // Simulate the enclosing object structure as described in the bug report
+        RemoteCall remoteCall = new RemoteCall(new Object[]{
+                "dummyType", // This part might be adjusted based on actual serialization
+                commandAPDU
+        });
+
+        String json = mapper.writeValueAsString(remoteCall);
+
+        // The core of the bug is that the type information for CommandAPDU is lost or misrepresented
+        // We expect the deserialization to correctly reconstruct CommandAPDU using its @JsonCreator
+        // and not just treat it as a byte array [B.
+
+        // Perform deserialization
+        RemoteCall deserializedRemoteCall = mapper.readValue(json, RemoteCall.class);
+        Object[] deserializedArgs = deserializedRemoteCall.getArgs();
+
+        // Assert that the deserialized object is indeed a CommandAPDU and its byte array matches
+        // The exact assertion depends on how the default typing is represented in the JSON.
+        // The bug report suggests it becomes "[B" and a base64 encoded string.
+        // Let's assume the structure is [type, value] for polymorphic types.
+
+        // We need to inspect the deserializedArgs to find the CommandAPDU and verify its type and content.
+        // The bug report indicates the type becomes "[B" and the value is base64.
+        // If the default typing is correctly applied, the type should be the actual class name.
+
+        // Let's try to find the CommandAPDU object in the deserialized arguments.
+        // It's likely to be the second element if the first is a type identifier.
+        Object potentialCommandAPDU = null;
+        if (deserializedArgs.length > 1) {
+            // Assuming the structure is [typeString, valueObject] for polymorphic types
+            if (deserializedArgs[1] instanceof CommandAPDU) {
+                potentialCommandAPDU = deserializedArgs[1];
+            } else {
+                // If default typing is used, the type might be a string before the actual object
+                // This part is tricky and depends heavily on the exact default typing configuration and output.
+                // The bug report implies the type information itself is problematic.
+                // For instance, it might be a JsonNode or a Map before being fully resolved.
+
+                // A more robust test would involve inspecting the JSON string itself to see the structure
+                // and then asserting based on that structure.
+
+                // Given the description, the issue is that it deserializes to a byte array instead of CommandAPDU.
+                // So, we'll assert that the second argument is NOT a byte array and IS a CommandAPDU.
+                // If it deserialized incorrectly, it would likely be a byte[] or a Map representing the byte array.
+            }
+        }
+
+        // The primary goal is to ensure that deserialization results in a CommandAPDU object,
+        // not just a raw byte array, and that the constructor is invoked.
+        // The bug report implies the constructor is NOT invoked correctly and type is lost.
+
+        // Let's assert that the deserialized object is an instance of CommandAPDU.
+        // This implicitly tests if the @JsonCreator was used and if the type was preserved.
+        // We can also check the content of the byte array.
+
+        // The bug report states: "the typing of the object is changed to "[B", which is deserialized to a byte array."
+        // This means that if we were to directly deserialize the CommandAPDU part, it would fail to create CommandAPDU.
+        // Let's simulate that failure scenario by extracting the relevant part of the JSON if possible,
+        // or by asserting the type in the deserialized structure.
+
+        // A more direct test of the described failure:
+        // If the JSON was written as: mapper.writeValueAsString(commandAPDU)
+        // It would serialize to a base64 string of the byte array, not a CommandAPDU object.
+        // But the bug is within a larger structure.
+
+        // Let's focus on the deserialized structure within RemoteCall.
+        // We expect the second element of args to be a CommandAPDU object.
+        // If the bug is present, it might be a byte array, or a Map that Jackson tries to interpret as a byte array.
+
+        // Assert that the second argument is an instance of CommandAPDU.
+        // If the bug exists, this assertion will fail.
+        // We will also check if the byte array content is correct.
+
+        // The bug report says "I would have expected verbose typing and usage of the constructor marked with @JsonCreator".
+        // This means the deserialized object should be CommandAPDU, and its constructor should have been called.
+        // We can't directly assert constructor invocation easily in a JUnit test without more intricate mocking or logging.
+        // However, if the object is correctly deserialized as CommandAPDU, the constructor must have been used.
+
+        // Let's refine the assertion based on the bug description.
+        // The bug is that it deserializes to a byte array.
+        // So, we need to check that the deserialized object is NOT a byte array.
+
+        Object actualObject = null;
+        // Traverse the deserialized structure to find the CommandAPDU or what it was deserialized into.
+        // This traversal logic might need adjustment based on the actual JSON output.
+        // Assuming the structure is [type, value] or similar for polymorphic types.
+        for (Object arg : deserializedArgs) {
+            if (arg instanceof CommandAPDU) {
+                actualObject = arg;
+                break;
+            } else if (arg instanceof byte[]) {
+                // This is the failure case described in the bug.
+                // We should NOT find a raw byte array here if the fix works.
+                // However, to reproduce the bug, we might assert that it IS a byte array.
+                // For this test, we want to assert the CORRECT behavior, so we expect CommandAPDU.
+            }
+            // Handle cases where Jackson might deserialize into intermediate types like Map or JsonNode
+            // before full type resolution. The current test setup with enableDefaultTyping()
+            // should ideally resolve to the correct class.
+        }
+
+        // Assert that we found a CommandAPDU object.
+        // If the bug is present, 'actualObject' will be null or a byte array.
+        // This assertion verifies the fix. To reproduce the bug, we'd assert the opposite.
+        // Let's write the test to verify the fix, as per common practice for regression tests.
+        // If this test passes, the bug is fixed. If it fails, the bug is present.
+
+        // To truly "reproduce the failure", we would assert the incorrect behavior.
+        // The incorrect behavior is that it deserializes to a byte array, not CommandAPDU.
+        // So, let's assert that the object found is NOT a byte array, and IS a CommandAPDU.
+
+        // Let's re-evaluate the goal: "reproduces the failure described in the bug report."
+        // This means the test should FAIL with the buggy code and PASS with the fixed code.
+        // Therefore, the assertions should reflect the INCORRECT behavior.
+
+        Object potentiallyIncorrectObject = null;
+        if (deserializedArgs.length > 1) {
+            // The bug description implies the type information is lost and it becomes "[B"
+            // and deserializes to a byte array. Let's assume the second element is the target.
+            potentiallyIncorrectObject = deserializedArgs[1];
+        }
+
+        // Assert that the deserialized object is a byte array, which is the described failure.
+        // If this test passes, it means the buggy code indeed deserializes it as a byte array.
+        assertArrayEquals("Deserialized object should be a byte array due to the bug", data, (byte[]) potentiallyIncorrectObject);
+
+        // Note: This test is written to FAIL if the bug is fixed, and PASS if the bug is present.
+        // This is how you reproduce a failure. To then verify a fix, you'd invert the assertion.
+    }
+}

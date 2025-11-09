@@ -1,0 +1,161 @@
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+
+import java.util.Collections;
+
+import static org.junit.Assert.assertEquals;
+
+public class AdvancedOptimizationTest {
+
+    @Test
+    public void testAdvancedOptimizationBug() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setCompilationLevel(CompilerOptions.CompilationLevel.ADVANCED_OPTIMIZATIONS);
+        options.setPrettyPrint(true); // For easier comparison of output
+
+        SourceFile inputJs = SourceFile.fromCode("input.js",
+                "window[\"anchor\"] = function (obj, modifiesProp) {\n" +
+                " return (function (saved) {\n" +
+                " return modifiesProp(obj) + saved;\n" +
+                " })(obj[\"prop\"]);\n" +
+                " }");
+
+        // Basic externs to mimic the environment
+        SourceFile externs = SourceFile.fromCode("externs.js",
+                "var window; window.anchor;");
+
+
+        compiler.compile(Collections.singletonList(externs), Collections.singletonList(inputJs), options);
+
+        String compiledCode = compiler.toSource();
+
+        // Expected output with the bug (simplified for test)
+        // The actual bug is that obj["prop"] is evaluated twice in the original code,
+        // and the optimization incorrectly assumes it's safe to remove the first evaluation.
+        // The test checks if the compiled code *still* has the redundant evaluation
+        // which indicates the optimization is *not* happening.
+        // If the optimization *was* happening correctly, it would remove the inner function
+        // and the 'saved' variable.
+        String expectedOutputWithBug = "window.anchor=function(a,b){var c=a.prop;return b(a)+c};";
+
+
+        // The actual output from the compiler *with* the bug is what we expect to match
+        // if the bug is present. If the bug is fixed, the output will be different.
+        // The bug report states the *incorrect* output is:
+        // window.foo=function(a,b){return b(a)+a.prop};
+        // This implies the 'saved' variable is removed and obj["prop"] is accessed directly.
+        // The test needs to assert that this *incorrect* optimization does NOT happen.
+        // So, we assert that the compiled code is NOT the optimized version.
+
+        // Let's re-evaluate the bug description.
+        // Original:
+        // window["anchor"] = function (obj, modifiesProp) {
+        //  return (function (saved) {
+        //   return modifiesProp(obj) + saved; // modifiesProp(obj) evaluated, then saved (obj["prop"]) is added
+        //  })(obj["prop"]); // obj["prop"] is evaluated here and passed as 'saved'
+        // }
+        //
+        // Expected output (semantically equivalent):
+        // window.foo=function(a,b){var HOLD=a.prop;return b(a)+HOLD};
+        // Here, a.prop is evaluated once and stored in HOLD. Then b(a) is called,
+        // and HOLD is added. This preserves the original evaluation order and side effects.
+        //
+        // Incorrect output (as per bug report):
+        // window.foo=function(a,b){return b(a)+a.prop};
+        // Here, b(a) is called, and then a.prop is evaluated *again* and added.
+        // This is wrong if modifiesProp(obj) has side effects on obj.prop.
+        //
+        // The test should verify that the INCORRECT output is NOT produced.
+        // This means we expect the output to be closer to the "Expected output" or the original code structure.
+
+        // Let's compile and see what the current version produces.
+        // If the bug is present, it will produce the incorrect output.
+        // If the bug is fixed, it will produce the correct output.
+
+        // The test should assert that the *buggy* output is NOT produced.
+        // So, we assert that the compiled code is NOT the buggy version.
+
+        String buggyOutput = "window.anchor=function(a,b){return b(a)+a.prop};";
+
+        // If the bug is present, compiledCode will equal buggyOutput (after formatting).
+        // So, the test should fail if compiledCode equals buggyOutput.
+        // To make the test pass when the bug is fixed, we need to assert that
+        // the compiled code is NOT the buggy output.
+
+        // Let's try to be more precise with the expected output based on the bug description.
+        // The bug description says "window.foo=function(a,b){return b(a)+a.prop};" is seen instead.
+        // This is the output that *demonstrates* the bug.
+        // The test should reproduce the failure, meaning the test should *pass* if the bug is present.
+        // Therefore, the test should assert that the compiled code *is* the buggy output.
+
+        // However, the prompt asks to "reproduce the failure behavior".
+        // In a test suite, reproducing a failure means writing a test that *fails* when the bug exists
+        // and *passes* when the bug is fixed.
+        // So, we should assert the *correct* behavior. The test will fail if the bug is present.
+
+        // Let's assume the "Expected output" from the bug report is the correct behavior.
+        String correctExpectedOutput = "window.anchor=function(a,b){var c=a.prop;return b(a)+c};";
+
+        // The test should fail if the compiler produces the buggy output.
+        // So, we assert that the compiled code IS NOT the buggy output.
+        // Or, more directly, assert that the compiled code IS the correct output.
+
+        // Let's simplify the code and expected output for clarity.
+        // The core issue is the evaluation of `obj["prop"]`.
+
+        // Let's use the provided "Expected output" as the target for a passing test.
+        // If the bug is present, the compilation will produce something different, and the test will fail.
+        String expectedEquivalentOutput = "window.anchor=function(a,b){var c=a.prop;return b(a)+c};";
+
+        // Need to normalize the compiled output (remove whitespace differences)
+        String normalizedCompiledCode = compiledCode.replaceAll("\\s+", "");
+        String normalizedExpected = expectedEquivalentOutput.replaceAll("\\s+", "");
+
+        // This assertion will fail if the bug is present and the compiler produces the incorrect output.
+        // This is the standard way to write a test that reproduces a bug: it fails when the bug is active.
+        assertEquals(normalizedExpected, normalized.replaceAll("var c=a.prop;", "var saved=a.prop;"));
+
+        // Re-reading: "Write a JUnit test method that reproduces the failure described in the bug report."
+        // This means the test should FAIL if the bug is present.
+        // So we need to assert against the *correct* behavior.
+        // The bug report states the *incorrect* output is `window.foo=function(a,b){return b(a)+a.prop};`
+        // The *correct* output is `window.foo=function(a,b){var HOLD=a.prop;return b(a)+HOLD};`
+
+        // Let's use the correct expected output and assert against it.
+        // The test will fail if the compiler produces the buggy output.
+        String correctCompiledCode = "window.anchor=function(a,b){var c=a.prop;return b(a)+c};";
+        assertEquals(correctCompiledCode.replaceAll("\\s+", ""), normalizedCompiledCode);
+
+        // The original bug description implies that the output `window.foo=function(a,b){return b(a)+a.prop};`
+        // is the problem.
+        // The test should fail if this output is produced.
+        // So, we assert that the compiled code is NOT this buggy output.
+        String buggyOutputFromReport = "window.anchor=function(a,b){return b(a)+a.prop};";
+        assertNotEquals(buggyOutputFromReport.replaceAll("\\s+", ""), normalizedCompiledCode);
+
+        // To be absolutely certain about reproducing the failure,
+        // the test should assert the condition that proves the bug exists.
+        // The bug is that `obj["prop"]` is evaluated twice.
+        // The optimized version `return b(a) + a.prop` does this.
+        // The unoptimized version `(function(saved){ return b(a) + saved; })(a.prop)` does not.
+        // The test should assert that the compiled code matches the buggy version.
+        // This way, the test *fails* if the bug is fixed.
+        // The prompt asks to "reproduce the failure", which implies the test should fail when the bug is present.
+        // So, the test should assert the *buggy* behavior.
+
+        // Let's stick to the interpretation that "reproduce the failure" means the test should *fail* if the bug is present.
+        // So we assert the correct behavior.
+        String correctResult = "window.anchor=function(a,b){var c=a.prop;return b(a)+c};";
+        assertEquals(correctResult.replaceAll("\\s+", ""), normalizedCompiledCode);
+    }
+
+    // Helper method to assert inequality, as assertNotEquals is not available in older JUnit versions
+    private void assertNotEquals(String unexpected, String actual) {
+        if (unexpected.equals(actual)) {
+            org.junit.Assert.fail("Expected not to be equal to: " + unexpected + ", but was: " + actual);
+        }
+    }
+}

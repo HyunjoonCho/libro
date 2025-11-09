@@ -1,0 +1,30 @@
+public void testUnixSymlinkWithInvalidMode() throws IOException {
+    File invalidEntryJar = createInvalidEntryJar();
+    try (ZipFile zipFile = new ZipFile(invalidEntryJar)) {
+        ZipArchiveEntry entry = zipFile.getEntry("META-INF/maven/");
+        assertNotNull(entry);
+        assertFalse(entry.isUnixSymlink());
+    } finally {
+        invalidEntryJar.delete();
+    }
+}
+
+private File createInvalidEntryJar() throws IOException {
+    File jar = File.createTempFile("invalid-entry", ".jar");
+    jar.deleteOnExit();
+    try (ZipArchiveOutputStream zipOutputStream = new ZipArchiveOutputStream(jar)) {
+        ZipArchiveEntry entry = new ZipArchiveEntry("META-INF/maven/");
+        // Set Unix permissions to 177777 (octal) which is 65535 in decimal.
+        // This value is problematic as it includes the LINK_FLAG but also other bits
+        // that are not typical for a symlink.
+        entry.setUnixMode(65535);
+        zipOutputStream.putArchiveEntry(entry);
+        zipOutputStream.closeArchiveEntry();
+
+        ZipArchiveEntry dirEntry = new ZipArchiveEntry("META-INF/");
+        dirEntry.setUnixMode(16877); // drwxr-xr-x
+        zipOutputStream.putArchiveEntry(dirEntry);
+        zipOutputStream.closeArchiveEntry();
+    }
+    return jar;
+}

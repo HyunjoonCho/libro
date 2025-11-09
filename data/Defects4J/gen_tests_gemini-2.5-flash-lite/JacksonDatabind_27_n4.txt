@@ -1,0 +1,61 @@
+public void testExternalTypeIdBeforePojo() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(new AfterburnerModule());
+
+    // Simple POJO with a field that uses external type id
+    class Item {
+        public String name;
+        public Object value;
+
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "@type")
+        @JsonSubTypes({
+                @JsonSubTypes.Type(value = StringValue.class, name = "string"),
+                @JsonSubTypes.Type(value = IntValue.class, name = "integer")
+        })
+        public Object getValue() {
+            return value;
+        }
+
+        public void setValue(Object value) {
+            this.value = value;
+        }
+    }
+
+    class StringValue {
+        public String stringValue;
+
+        public StringValue() {}
+        public StringValue(String stringValue) { this.stringValue = stringValue; }
+    }
+
+    class IntValue {
+        public int intValue;
+
+        public IntValue() {}
+        public IntValue(int intValue) { this.intValue = intValue; }
+    }
+
+    // Test case 1: Type ID comes before the POJO
+    String json1 = "{\"@type\":\"string\", \"value\":{\"stringValue\":\"hello\"}}";
+    Item item1 = mapper.readValue(json1, Item.class);
+    assertNotNull(item1);
+    assertNotNull(item1.value);
+    assertTrue(item1.value instanceof StringValue);
+    assertEquals("hello", ((StringValue) item1.value).stringValue);
+
+    // Test case 2: Type ID comes before the POJO, different subtype
+    String json2 = "{\"@type\":\"integer\", \"value\":{\"intValue\":123}}";
+    Item item2 = mapper.readValue(json2, Item.class);
+    assertNotNull(item2);
+    assertNotNull(item2.value);
+    assertTrue(item2.value instanceof IntValue);
+    assertEquals(123, ((IntValue) item2.value).intValue);
+
+    // Test case 3: POJO comes before Type ID (should still work)
+    String json3 = "{\"value\":{\"stringValue\":\"world\"}, \"@type\":\"string\"}";
+    Item item3 = mapper.readValue(json3, Item.class);
+    assertNotNull(item3);
+    assertNotNull(item3.value);
+    assertTrue(item3.value instanceof StringValue);
+    assertEquals("world", ((StringValue) item3.value).stringValue);
+}

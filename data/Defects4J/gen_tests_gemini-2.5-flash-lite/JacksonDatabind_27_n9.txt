@@ -1,0 +1,171 @@
+public void testExternalTypeIdBeforePojo() throws Exception {
+    // This test case is hypothetical as the original bug report did not provide
+    // specific code or data that failed.
+    // It aims to reproduce a scenario where an external type identifier might be
+    // deserialized *before* the actual POJO it's supposed to describe,
+    // leading to deserialization errors.
+
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(new AfterburnerModule()); // Assuming AfterburnerModule is relevant
+
+    // Define a simple structure with an external type identifier
+    // Assume 'type' is the external type identifier property and 'data' is the actual POJO
+    // The failure is hypothesized to occur if 'type' is encountered before 'data' in the JSON.
+
+    String jsonWithExternalTypeIdFirst = "{"
+            + "\"@type\": \"com.example.MyBean\"," // External type ID
+            + "\"value\": 123"                   // POJO property
+            + "}";
+
+    // This would ideally throw an exception during deserialization if the bug exists.
+    // The specific exception type might vary, but it would indicate a failure
+    // to correctly associate the type ID with the POJO.
+    try {
+        // We need a class that Jackson can deserialize to, and that uses external type IDs.
+        // For demonstration, let's assume a base class and a derived class.
+        // In a real scenario, these would be defined in the project.
+        // For this test, we'll use a simplified structure that mimics the problem.
+
+        // If the bug is related to Afterburner, it might be specific to how it handles
+        // annotated types or property ordering.
+
+        // Let's assume a scenario where we have a wrapper object that holds the type.
+        // This is a common pattern for external type IDs.
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_OBJECT)
+        @JsonSubTypes({ @JsonSubTypes.Type(value = MyBean.class, name = "com.example.MyBean") })
+        interface MyType {
+        }
+
+        class MyBean implements MyType {
+            public int value;
+
+            // Default constructor needed for deserialization
+            public MyBean() {
+            }
+
+            public MyBean(int value) {
+                this.value = value;
+            }
+
+            @Override
+            public boolean equals(Object o) {
+                if (this == o) return true;
+                if (o == null || getClass() != o.getClass()) return false;
+                MyBean myBean = (MyBean) o;
+                return value == myBean.value;
+            }
+
+            @Override
+            public int hashCode() {
+                return Objects.hash(value);
+            }
+        }
+
+        // The problematic JSON structure where the type ID comes before the actual data.
+        // In a WRAPPER_OBJECT scenario, the JSON would look like:
+        // { "com.example.MyBean" : { "value" : 123 } }
+        // However, the description mentions "type id comes before POJO", which might imply
+        // a different structure or a specific ordering issue within a single JSON object.
+        // Let's try to simulate that by having a wrapper object that holds both.
+
+        // Consider a scenario where the JSON is structured like this:
+        // { "typeId": "com.example.MyBean", "pojoData": { "value": 123 } }
+        // And Jackson is configured to use "typeId" for type resolution.
+
+        // For the purpose of this test, let's assume the bug is related to
+        // a direct deserialization of a structure where the type information
+        // is embedded and its position causes an issue.
+        // If @JsonTypeInfo is used on the property itself, the JSON might look like:
+        // { "data": { "@type": "com.example.MyBean", "value": 123 } }
+        // or even:
+        // { "@type": "com.example.MyBean", "data": { "value": 123 } }
+
+        // Let's try to create a JSON structure that might trigger this,
+        // simulating the "type id comes before POJO" by having the type field
+        // listed first in the JSON string.
+
+        // Assume a base class with a type property and a data property.
+        // This is a simplified representation of what might be happening internally.
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "@type", include = JsonTypeInfo.As.PROPERTY, visible = true)
+        @JsonSubTypes({
+                @JsonSubTypes.Type(value = MyDataHolder.class, name = "com.example.MyDataHolder")
+        })
+        interface HasExternalType {
+        }
+
+        class MyDataHolder implements HasExternalType {
+            @JsonProperty("@type")
+            public String type; // The external type identifier
+
+            @JsonProperty("data")
+            public MyBean pojoData; // The actual POJO
+
+            // Default constructor
+            public MyDataHolder() {
+            }
+
+            public MyDataHolder(String type, MyBean pojoData) {
+                this.type = type;
+                this.pojoData = pojoData;
+            }
+
+            @Override
+            public boolean equals(Object o) {
+                if (this == o) return true;
+                if (o == null || getClass() != o.getClass()) return false;
+                MyDataHolder that = (MyDataHolder) o;
+                return Objects.equals(type, that.type) &&
+                       Objects.equals(pojoData, that.pojoData);
+            }
+
+            @Override
+            public int hashCode() {
+                return Objects.hash(type, pojoData);
+            }
+        }
+
+        // JSON where the "@type" field comes before the "data" field.
+        String failingJson = "{"
+                + "\"@type\": \"com.example.MyDataHolder\","
+                + "\"data\": { \"value\": 456 }"
+                + "}";
+
+        // Attempt to deserialize. If the bug exists, this might throw an exception
+        // or result in an incorrectly deserialized object (e.g., pojoData being null).
+        MyDataHolder result = mapper.readValue(failingJson, MyDataHolder.class);
+
+        // Assert that the deserialization was successful and the data is correct.
+        // If the bug is present, this assertion might fail due to an exception
+        // being thrown before this point, or because `result.pojoData` is null.
+        assertNotNull(result);
+        assertNotNull(result.pojoData);
+        assertEquals(456, result.pojoData.value);
+        assertEquals("com.example.MyDataHolder", result.type);
+
+    } catch (Exception e) {
+        // If an exception occurs, it might be the bug manifesting.
+        // For a test case, we want to assert that a specific type of exception
+        // *is* thrown if the bug is present, or that no exception is thrown
+        // and the deserialization is correct.
+        // If the goal is to *reproduce* the failure, we might want to fail the test
+        // if the expected exception is not thrown, or if no exception is thrown
+        // but the result is incorrect.
+
+        // For the purpose of reproducing the *failure behavior*, we will re-throw
+        // the exception if it occurs, indicating that the test failed as expected
+        // if the bug is present. If no exception occurs, and the assertions pass,
+        // then the bug is not present in this specific scenario.
+
+        // A more robust test would check for a specific exception type if known.
+        // e.g., `assertTrue(e instanceof SomeJacksonDeserializationException)`
+        // However, without knowing the exact exception, re-throwing is a way
+        // to fail the test if *any* exception occurs during the presumed failing operation.
+        throw e;
+    }
+}
+
+// Dummy classes to make the example compilable within the test method context.
+// In a real project, these would be actual classes being tested.
+// Need to import Objects for hashCode/equals if used.
+// Need to import JsonTypeInfo, JsonSubTypes, JsonProperty for Jackson annotations.
+// Assuming these imports are available in the test class context.

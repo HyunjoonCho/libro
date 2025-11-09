@@ -1,0 +1,121 @@
+import org.apache.commons.math3.optim.ConvergenceChecker;
+import org.apache.commons.math3.optim.PointValuePair;
+import org.apache.commons.math3.optim.SimpleValueChecker;
+import org.apache.commons.math3.optim.nonlinear.scalar.ObjectiveFunction;
+import org.apache.commons.math3.optim.nonlinear.scalar.leastsquares.LevenbergMarquardtOptimizer;
+import org.apache.commons.math3.util.RealVector;
+import org.junit.Test;
+import static org.junit.Assert.assertTrue;
+
+public class LevenbergMarquardtOptimizerTest {
+
+    @Test
+    public void testVectorialConvergenceCheckerIgnored() {
+        LevenbergMarquardtOptimizer optimizer = new LevenbergMarquardtOptimizer(new SimpleValueChecker()); // Using a default checker here, the key is that a checker is passed
+
+        // Define a simple objective function and initial guess
+        // This function is designed to be simple and have a clear minimum
+        // f(x, y) = (x - 1)^2 + (y - 2)^2
+        // Minimum at (1, 2)
+        org.apache.commons.math3.analysis.MultivariateFunction function = values -> {
+            double x = values[0];
+            double y = values[1];
+            return (x - 1.0) * (x - 1.0) + (y - 2.0) * (y - 2.0);
+        };
+
+        double[] startPoint = {0.0, 0.0}; // Start away from the minimum
+
+        // Set up the optimization problem
+        ObjectiveFunction objectiveFunction = new ObjectiveFunction(function);
+
+        // We will try to use a checker that is unlikely to converge quickly
+        // For demonstration, let's create a mock checker that always returns false
+        // In a real scenario, this would be a custom checker with specific criteria
+        ConvergenceChecker<PointValuePair> mockChecker = (point1, point2) -> false;
+
+        // Although we are passing a custom checker to the optimizer constructor,
+        // the bug report states it's ignored. We'll verify this by seeing if
+        // the optimizer uses its default stopping criteria or the provided one.
+        // A simple way to observe this is to provide an initial guess that,
+        // if the custom checker were effective, might stop the optimization early,
+        // but given the bug, it will likely continue until default criteria are met.
+
+        // Let's set up the optimizer with a custom checker
+        LevenbergMarquardtOptimizer optimizerWithCustomChecker = new LevenbergMarquardtOptimizer(mockChecker);
+
+        // Perform the optimization
+        PointValuePair result = optimizerWithCustomChecker.optimize(
+                objectiveFunction,
+                new org.apache.commons.math3.optim.InitialGuess(startPoint),
+                new org.apache.commons.math3.optim.GoalType.MINIMIZE
+        );
+
+        // The bug implies that the optimizer will not use the `mockChecker`.
+        // If the `mockChecker` were used and always returned false, the optimization
+        // might not converge or would stop based on iteration limits, not the checker's logic.
+        // However, the actual behavior described is that the *parameter* is ignored,
+        // meaning the optimizer likely proceeds with its internal default convergence checks
+        // or a different checker if one was hardcoded.
+        //
+        // To demonstrate the bug, we need to show that the provided checker is *not*
+        // influencing the outcome in a way that a custom checker *should*.
+        //
+        // A key aspect of the bug is that the `VectorialConvergenceChecker` is ignored.
+        // This means even if we provide a checker, it might not be invoked or its return
+        // value might not be respected.
+        //
+        // Let's assume the bug means the `LevenbergMarquardtOptimizer` constructor
+        // that takes a `ConvergenceChecker` doesn't properly use it.
+        //
+        // The test should verify that the optimizer *does not* behave as if the checker
+        // was correctly applied.
+        //
+        // A reasonable expectation if the checker *was* ignored and default criteria applied
+        // would be convergence to the actual minimum.
+        //
+        // The issue is subtle: how to *prove* a checker was ignored?
+        //
+        // One way is to create a checker that *would* stop the optimization immediately
+        // if it were respected, and show that the optimization *doesn't* stop immediately.
+        //
+        // Let's refine the test:
+        // We'll create a checker that *always* returns true, and an initial guess
+        // that is *not* at the minimum. If the checker is respected, it should stop immediately.
+        // If ignored, it will proceed to find the minimum.
+
+        ConvergenceChecker<PointValuePair> immediateStopChecker = (p1, p2) -> true;
+
+        LevenbergMarquardtOptimizer optimizerToTest = new LevenbergMarquardtOptimizer(immediateStopChecker);
+
+        PointValuePair resultWithImmediateStopChecker = optimizerToTest.optimize(
+                objectiveFunction,
+                new org.apache.commons.math3.optim.InitialGuess(startPoint),
+                new org.apache.commons.math3.optim.GoalType.MINIMIZE
+        );
+
+        // If the `immediateStopChecker` was respected, the optimization would stop
+        // after the first iteration (or before the first actual step if the initial guess
+        // is checked against itself). The resulting point would be the `startPoint`.
+        //
+        // If the `VectorialConvergenceChecker` parameter is ignored, the optimizer will
+        // proceed with its default convergence logic, eventually finding the minimum.
+        // The result should be close to the actual minimum (1, 2).
+
+        double[] optimalPoint = resultWithImmediateStopChecker.getPoint();
+        double[] actualMinimum = {1.0, 2.0};
+        double tolerance = 1e-6; // A small tolerance for floating point comparisons
+
+        // Assert that the result is NOT the starting point, implying the immediate stop checker was ignored.
+        // This indicates that the optimizer continued to search for the minimum.
+        boolean notAtStartPoint = Math.abs(optimalPoint[0] - startPoint[0]) > tolerance ||
+                                  Math.abs(optimalPoint[1] - startPoint[1]) > tolerance;
+
+        assertTrue("The optimizer should not have stopped at the initial guess if the convergence checker was ignored.", notAtStartPoint);
+
+        // Additionally, assert that the optimizer actually found the minimum (or close to it)
+        boolean foundMinimum = Math.abs(optimalPoint[0] - actualMinimum[0]) < tolerance &&
+                               Math.abs(optimalPoint[1] - actualMinimum[1]) < tolerance;
+
+        assertTrue("The optimizer should have converged to the actual minimum.", foundMinimum);
+    }
+}

@@ -1,0 +1,55 @@
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.xml.DOMFactory;
+import org.apache.xerces.parsers.DOMParser;
+import org.w3c.dom.Document;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
+
+import java.io.IOException;
+import java.io.StringReader;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+public class JXPathBugTest {
+
+    @Test
+    public void testResetNamespaceLoop() throws SAXException, IOException {
+        String xml = "<foo xmlns:b=\"bla\" xmlns=\"test111\">\n" +
+                     "  <b:bar>a</b:bar>\n" +
+                     "  <test xmlns=\"\"></test>\n" +
+                     "</foo>";
+
+        DOMParser parser = new DOMParser();
+        parser.parse(new InputSource(new StringReader(xml)));
+        Document document = parser.getDocument();
+
+        JXPathContext context = JXPathContext.newContext(document);
+        context.setFactory(new DOMFactory());
+
+        // The node '/foo/test' has an empty namespace.
+        // The original code would get the namespace URI (empty string),
+        // then try to resolve it with getPrefix(), which would loop infinitely
+        // because the namespace resolver doesn't have an entry for the empty string
+        // and keeps looking for it.
+        // The expected XPath should be '/foo/test[1]' because the 'test' node
+        // is in the default namespace of the parent 'foo', which is 'test111',
+        // but the 'test' node itself explicitly declares an empty namespace.
+        // The bug fix introduces a check for nsURI.length() == 0 in NamespaceResolver.getPrefix.
+        // If it's 0, it returns null directly, preventing the loop.
+        // The DOMNodePointer.asPath() then correctly handles the no-namespace case.
+        try {
+            Object result = context.selectSingleNode("/foo/test");
+            if (result != null) {
+                assertEquals("/foo/test[1]", context.asPath(result));
+            } else {
+                fail("Node '/foo/test' not found.");
+            }
+        } catch (Exception e) {
+            // If the loop still occurs, an exception will be thrown (e.g., StackOverflowError or similar)
+            // or if the XPath is still wrong, the assertion will fail.
+            // We catch general exceptions here to indicate that something unexpected happened.
+            fail("An exception occurred while testing asPath() on node with reset namespace: " + e.getMessage());
+        }
+    }
+}

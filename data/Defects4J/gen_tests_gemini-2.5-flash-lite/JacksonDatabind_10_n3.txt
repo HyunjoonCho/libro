@@ -1,0 +1,108 @@
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import com.fasterxml.jackson.databind.util.StdConverter;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class JsonAnyGetterJsonSerializeTest {
+
+    // Dummy Serializer and Converter for testing
+    public static class MySerializer extends StdSerializer<String> {
+        public MySerializer() {
+            super(String.class);
+        }
+
+        @Override
+        public void serialize(String value, com.fasterxml.jackson.core.JsonGenerator gen, com.fasterxml.jackson.databind.SerializerProvider provider) throws IOException {
+            gen.writeString("serialized_" + value);
+        }
+    }
+
+    public static class MyConverter extends StdConverter<Map<String, String>, Map<String, String>> {
+        @Override
+        public Map<String, String> convert(Map<String, String> value) {
+            Map<String, String> converted = new HashMap<>();
+            for (Map.Entry<String, String> entry : value.entrySet()) {
+                converted.put(entry.getKey(), "converted_" + entry.getValue());
+            }
+            return converted;
+        }
+    }
+
+    // Class with JsonAnyGetter and JsonSerialize
+    public static class MyObjectWithAnyGetter {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public MyObjectWithAnyGetter() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(using = MySerializer.class) // This should be ignored according to the bug report
+        @JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+    
+    // Class with JsonAnyGetter and JsonSerialize converter
+    public static class MyObjectWithAnyGetterConverter {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public MyObjectWithAnyGetterConverter() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(converter = MyConverter.class) // This should be ignored according to the bug report
+        @JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+
+    @Test
+    public void testJsonAnyGetterWithJsonSerializeUsing() throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        MyObjectWithAnyGetter obj = new MyObjectWithAnyGetter();
+
+        // Expected JSON if JsonSerialize was ignored (the default behavior for JsonAnyGetter)
+        // The bug report implies that with @JsonSerialize(using = MySerializer.class),
+        // the values should NOT be "serialized_value1", "serialized_value2"
+        // but rather just "value1", "value2".
+        String expectedJson = "{\"key1\":\"value1\",\"key2\":\"value2\"}";
+
+        String actualJson = mapper.writeValueAsString(obj);
+
+        // Assert that the serializer was NOT applied, confirming the bug.
+        // If the bug were fixed, the expectedJson would be different.
+        assertEquals(expectedJson, actualJson);
+    }
+    
+    @Test
+    public void testJsonAnyGetterWithJsonSerializeConverter() throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        MyObjectWithAnyGetterConverter obj = new MyObjectWithAnyGetterConverter();
+
+        // Expected JSON if JsonSerialize converter was ignored (the default behavior for JsonAnyGetter)
+        // The bug report implies that with @JsonSerialize(converter = MyConverter.class),
+        // the values should NOT be "converted_value1", "converted_value2"
+        // but rather just "value1", "value2".
+        String expectedJson = "{\"key1\":\"value1\",\"key2\":\"value2\"}";
+
+        String actualJson = mapper.writeValueAsString(obj);
+
+        // Assert that the converter was NOT applied, confirming the bug.
+        // If the bug were fixed, the expectedJson would be different.
+        assertEquals(expectedJson, actualJson);
+    }
+}

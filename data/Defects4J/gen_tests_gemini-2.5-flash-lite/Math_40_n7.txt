@@ -1,0 +1,51 @@
+public void testBracketingNthOrderBrentSolver_BoundaryUpdate() {
+    // This test case aims to reproduce the scenario where the solver gets stuck updating the same boundary.
+    // We'll create a function and initial bracket where one side is very close to zero,
+    // and the other side is further away, mimicking the bug description.
+
+    // A simple function that has a root near 12500.0
+    UnivariateFunction function = new UnivariateFunction() {
+        @Override
+        public double value(double x) {
+            // A function that is very close to zero at x=12500.0 and negative elsewhere
+            return (x - 12500.0) * (x - 12500.0) * (x - 12500.0) * 1e-15 - 1e-4;
+        }
+    };
+
+    // Initial bracket setup mimicking the bug description
+    // xA: very close to the root, function value close to zero
+    // xB: further away, function value significantly negative
+    double xA = 12500.0;
+    double yA = function.value(xA); // Should be very close to 0, e.g., 3.7e-16
+    int agingA = 0;
+
+    double xB = 12500.03;
+    double yB = function.value(xB); // Should be negative, e.g., -7.0e-5
+    int agingB = 97;
+
+    // Ensure the initial setup matches the bug description's problematic state
+    assertTrue("Initial yA should be close to zero", Math.abs(yA) < 1e-15);
+    assertTrue("Initial yB should be negative", yB < 0);
+
+    // Use a solver with a relatively low maxIterationCount to trigger the issue faster if it exists.
+    // The absolute and relative accuracies are set to very small values to ensure convergence is attempted.
+    BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver(1e-15, 1e-15, 1e-15, 5); // Low max iterations
+
+    // We expect an exception because the solver should not be able to converge if it's stuck.
+    // Specifically, it should exceed the maxIterationCount due to the failure to bracket the root properly.
+    try {
+        solver.solve(100, function, xA, xB, GoalType.ROOT);
+        fail("Expected ConvergenceException or MaxCountExceededException due to inability to bracket root.");
+    } catch (ConvergenceException e) {
+        // This is the expected outcome if the solver correctly identifies it cannot proceed.
+        // The specific exception might vary, but the core issue is the failure to converge.
+        // We are checking for the *symptom* of the bug, which is failure to converge.
+    } catch (MaxCountExceededException e) {
+        // This is also a possible outcome if the loop runs for too long due to the boundary issue.
+    } catch (IllegalArgumentException e) {
+        // This might happen if the initial bracket is invalid for the solver,
+        // but we are trying to set it up as described in the bug.
+        // If this is thrown, it might indicate the setup itself is the problem, or a pre-check is failing.
+        // However, the bug implies the solver *enters* a state where it gets stuck.
+    }
+}

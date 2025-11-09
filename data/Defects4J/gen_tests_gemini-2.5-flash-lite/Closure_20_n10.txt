@@ -1,0 +1,84 @@
+public void testStringConversionOptimization() {
+    // Mock object that returns undefined for valueOf
+    Object obj = new Object() {
+        public String valueOf() {
+            return null; // Representing undefined in Java
+        }
+    };
+
+    // The problematic optimization: String(obj) should be "[object Object]"
+    // but the compiler might optimize it to obj.toString() or similar,
+    // which could lead to unexpected results if valueOf is undefined.
+    // In Java, we can't directly replicate the JavaScript undefined behavior for valueOf.
+    // However, we can simulate a scenario where a custom toString might be called
+    // if valueOf is not properly handled or if the default Object.toString() is used.
+
+    // If the underlying issue is that the compiler incorrectly assumes valueOf
+    // will always return a valid string or primitive, and falls back to
+    // a less safe method, we can test that fallback.
+
+    // In Java, String.valueOf(obj) is the equivalent of String(obj) in JS.
+    // String.valueOf(obj) for a custom object will call obj.toString() by default.
+    // The default Object.toString() returns "[object Object]".
+    // If the optimization incorrectly replaces String(obj) with something that
+    // relies on valueOf and that valueOf is "undefined" (or null in Java's case),
+    // it could result in "undefined" or an error.
+
+    // Let's simulate the scenario where the optimization might fail.
+    // If the optimization incorrectly uses a method that would return null
+    // when String.valueOf() should return "[object Object]".
+
+    // We can't directly test the JS undefined behavior in Java.
+    // However, we can test that String.valueOf() on an object that *would* have
+    // an undefined valueOf (if it were JS) still results in the expected "[object Object]".
+    // In Java, the equivalent of "valueOf: function() { return undefined; }"
+    // for an Object is tricky. If an object doesn't override valueOf,
+    // it inherits from Object.
+
+    // Let's assume the bug is that the compiler might try to be too clever
+    // and call a method that returns null/empty when it should fall back to toString.
+    // We'll test the expected behavior of String.valueOf() on a plain object.
+    String result = String.valueOf(obj);
+
+    // If the optimization were to incorrectly try to use a method that returns null
+    // for a valueOf-like operation, and this bypassed the default toString,
+    // the result might be null or an empty string. We assert the correct behavior.
+    assertEquals("[object Object]", result);
+
+    // To further simulate the bug, imagine a scenario where the compiler
+    // replaces String(f) with f.valueOf() + "". If f.valueOf() returns null,
+    // then null + "" in JS results in "null". In Java, this is not directly testable
+    // in the same way because Java doesn't have the same JS type coercion.
+    // The closest we can get is to ensure that if a custom valueOf *were* to return null,
+    // the standard String.valueOf() still works as expected.
+
+    // Let's create an object that explicitly returns null from a method named valueOf
+    // to see if String.valueOf() handles it correctly (it should).
+    Object objWithNullValueOf = new Object() {
+        @SuppressWarnings("unused") // To avoid compiler warnings about unused method
+        public String valueOf() {
+            return null;
+        }
+        // Override toString to ensure it's not called if valueOf is prioritized incorrectly
+        @Override
+        public String toString() {
+            return "This should not be seen";
+        }
+    };
+
+    // If the optimization incorrectly used objWithNullValueOf.valueOf() + "",
+    // it would result in "null" in JS. In Java, String.valueOf(objWithNullValueOf)
+    // will call toString() if valueOf() returns null or if valueOf() is not found/applicable.
+    // The default Object.toString() is called here.
+    String resultWithNullValueOf = String.valueOf(objWithNullValueOf);
+    assertEquals("[object Object]", resultWithNullValueOf);
+
+    // The core of the bug is likely in the compiler's optimization logic
+    // for String conversion. The Java test needs to assert the *correct* behavior
+    // that the compiler *should* produce, which is equivalent to the JS expected output.
+    // The JS bug is that String(f) where f.valueOf() is undefined, results in "undefined"
+    // instead of the default "[object Object]".
+    // In Java, String.valueOf(obj) on an object where valueOf() returns null
+    // *should* result in "[object Object]" (via toString). If it resulted in "null",
+    // that would be a bug. We are asserting the correct behavior.
+}

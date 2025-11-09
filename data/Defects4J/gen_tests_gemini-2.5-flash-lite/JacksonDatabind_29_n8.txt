@@ -1,0 +1,66 @@
+public void testPolymorphicWithNullTypeId() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.addAbstractTypeResolver(new SimpleAbstractTypeResolver().addMapping(MyAbstractType.class, MyConcreteType.class));
+    mapper.registerModule(module);
+
+    // Test with null type id explicitly provided
+    String json = "{\"@type\": null, \"value\": \"test\"}";
+    try {
+        mapper.readValue(json, MyAbstractType.class);
+        fail("Expected an exception when type id is null");
+    } catch (JsonMappingException e) {
+        // Expected exception
+    }
+
+    // Test with missing type id (should also fail if no defaultImpl is set)
+    json = "{\"value\": \"test\"}";
+    try {
+        mapper.readValue(json, MyAbstractType.class);
+        fail("Expected an exception when type id is missing");
+    } catch (JsonMappingException e) {
+        // Expected exception
+    }
+
+    // Test with defaultImpl set (this should work)
+    mapper.setDefaultTyping(DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY, "@type");
+    MyAbstractType result = mapper.readValue(json, MyAbstractType.class);
+    assertTrue(result instanceof MyConcreteType);
+    assertEquals("test", ((MyConcreteType) result).getValue());
+}
+
+// Dummy classes for the test
+abstract class MyAbstractType {
+}
+
+class MyConcreteType extends MyAbstractType {
+    private String value;
+
+    public MyConcreteType() {
+    }
+
+    public MyConcreteType(String value) {
+        this.value = value;
+    }
+
+    public String getValue() {
+        return value;
+    }
+
+    public void setValue(String value) {
+        this.value = value;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        MyConcreteType that = (MyConcreteType) o;
+        return Objects.equals(value, that.value);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(value);
+    }
+}

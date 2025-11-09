@@ -1,0 +1,158 @@
+public void testContainsWithSpecialCharacters() throws IOException {
+    String html = "<html><body>" +
+            "<div class='a-row a-spacing-medium'><span class='a-size-base'>I'll Ship &amp; Pay</span></div>" +
+            "<div class='a-row a-spacing-medium'><span class='a-size-base'>I'll Send &amp; Pay</span></div>" +
+            "<div class='a-row a-spacing-medium'><span class='a-color-price'>Varies</span></div>" +
+            "</body></html>";
+    Document doc = Jsoup.parse(html);
+
+    // Test case that fails in 1.10.1 but passes in 1.8.3
+    // The original bug report implies that when the elements *don't* exist,
+    // the selector with :contains() should return 0 elements.
+    // However, the provided HTML *does* contain the elements, and the issue
+    // is likely related to how special characters like ' and & are handled
+    // within the :contains() selector, causing it to match incorrectly or not at all
+    // depending on the version and the exact characters.
+
+    // Based on the description, the failing selectors in 1.10.1 return 9 elements
+    // when they *should* return 0 if the text doesn't match, or the correct count
+    // if it does match. The bug description is a bit ambiguous about whether the
+    // test is failing because it *finds* elements when it shouldn't, or *doesn't find*
+    // elements when it should. The provided HTML suggests the former.
+
+    // Let's simulate the scenario described where the selectors *should* match
+    // the specific text, and see how the versions differ.
+    // The bug report states "in a webpage that no such element exists, Jsoup selector find 9 elements".
+    // This implies that the selector *incorrectly* matches elements.
+
+    // Re-creating the problematic selectors from the bug report.
+    // The key issue seems to be how ':contains()' handles special characters like ' and &.
+
+    // Selector 1: Should match "I'll Ship & Pay"
+    Elements elements1 = doc.select("div.a-row.a-spacing-medium span.a-size-base:contains(I'll Ship & Pay)");
+    // In the buggy version (1.10.1), this might incorrectly match other elements or fail to match.
+    // The bug report suggests it incorrectly finds 9 elements when the text isn't present.
+    // Here, we have the text present, so we expect a specific count.
+    // Let's assume the bug is that it *doesn't* match correctly when special chars are involved.
+    // Or, it matches *too much*. The description "find 9 elements, which broke my unit test" suggests
+    // it's finding more than it should, or finding elements that don't strictly match.
+
+    // Let's test the exact selectors from the bug report and assert the expected behavior
+    // for the *correct* behavior (which the older version might have had).
+
+    // Selector from bug report: "div.a-row.a-spacing-medium span.a-size-base:contains(I'll Ship & Pay)"
+    // The HTML entity for '&' is '&amp;', so the text in the HTML is "I'll Ship & Pay".
+    // The :contains() selector should ideally handle this.
+    Elements result1 = doc.select("div.a-row.a-spacing-medium span.a-size-base:contains(I'll Ship & Pay)");
+    // Assert that it finds the correct element. In this specific HTML, there's one.
+    // The bug report is about it finding 9 elements when *no such element exists*.
+    // This test case *does* have the element, so we're testing the contains logic with special chars.
+    // If the bug is that it fails to match due to '&', we'd expect 0 here.
+    // If the bug is that it matches *too broadly*, it might find more.
+    // Let's assume the intended behavior is to find the exact text.
+    assertEquals(1, result1.size()); // Expecting 1 match for "I'll Ship & Pay"
+
+    // Selector from bug report: "div.a-row.a-spacing-medium span.a-size-base:contains(I'll Send & Pay)"
+    Elements result2 = doc.select("div.a-row.a-spacing-medium span.a-size-base:contains(I'll Send & Pay)");
+    assertEquals(1, result2.size()); // Expecting 1 match for "I'll Send & Pay"
+
+    // Selector from bug report: "div.a-row.a-spacing-medium span.a-color-price:contains(Varies)"
+    Elements result3 = doc.select("div.a-row.a-spacing-medium span.a-color-price:contains(Varies)");
+    assertEquals(1, result3.size()); // Expecting 1 match for "Varies"
+
+    // Now, let's try to reproduce the failure condition described: "in a webpage that no such element exists, Jsoup selector find 9 elements"
+    // This means a selector that *should* find 0, finds 9.
+    // This implies the :contains() logic is too lenient or flawed with special characters.
+    // Let's craft a selector that *should not* match based on the HTML provided.
+    // For example, searching for text with a character that isn't properly escaped or handled.
+
+    // If the bug is that '&' is not handled, then searching for "I'll Ship & Pay" might
+    // incorrectly match something else if the parser interprets '&' differently.
+    // The bug report implies the failure happens when the element *doesn't exist*.
+    // Let's simulate a non-existent element scenario.
+
+    // Create HTML where the specific text is *not* present.
+    String htmlNoMatch = "<html><body>" +
+            "<div class='a-row a-spacing-medium'><span class='a-size-base'>Some Other Text</span></div>" +
+            "</body></html>";
+    Document docNoMatch = Jsoup.parse(htmlNoMatch);
+
+    // Selector that *should* find 0 elements in htmlNoMatch.
+    // If this selector incorrectly returns > 0 elements (e.g., 9 as per bug report), the test fails.
+    // The specific text "I'll Ship & Pay" is not in htmlNoMatch.
+    // According to the bug report, this selector would incorrectly return 9 elements.
+    Elements failingSelectorResult = docNoMatch.select("div.a-row.a-spacing-medium span.a-size-base:contains(I'll Ship & Pay)");
+
+    // The assertion here is that the *buggy* behavior is to find elements when it shouldn't.
+    // So, if the test were run with the buggy version, this assertion would fail.
+    // To *reproduce* the failure, we'd assert that the size is NOT 0.
+    // However, to write a *correct* test that would pass with the fix, we assert it's 0.
+    // The goal is to write a test that *would have failed* with the old code.
+    // So, we need to assert the behavior described in the bug report.
+    // "in a webpage that no such element exists, Jsoup selector find 9 elements"
+
+    // This implies the test should assert that the size is *not* zero,
+    // to show that the buggy version incorrectly found elements.
+    // Let's assume the bug is that :contains(text with '&') incorrectly matches *any* element in the scope.
+    // If we assume the buggy version returned 9 elements:
+    // assertFalse(failingSelectorResult.size() == 0); // This would indicate the bug is present.
+
+    // However, the prompt asks to "reproduce the failure behavior". A test method
+    // is usually written to assert the *correct* behavior, and it fails if the
+    // implementation is incorrect.
+    // So, the test should assert the *expected correct* behavior, and it will fail
+    // when run against the buggy code.
+
+    // Correct behavior: If the text is not present, :contains() should return 0 elements.
+    assertEquals(0, failingSelectorResult.size()); // This assertion would FAIL with the buggy code.
+
+    // Let's consider the possibility that the '&' was the issue.
+    // If the selector was "div.a-row.a-spacing-medium span.a-size-base:contains(I'll Ship)",
+    // and the '&' caused issues, it might still match.
+    // The bug report mentions "I'm not sure whether '**' or '&' processing changed in newer version."
+    // The most direct way to reproduce the described failure is to use the selector
+    // that is reported to fail and assert its *incorrect* outcome.
+
+    // Let's re-read: "Jsoup selector find 9 elements, which broke my unit test."
+    // This means the test expected 0, but got 9.
+    // So, the test should assert that the result size is 0. If it's not 0, the test fails.
+
+    // Test case 1: Selector with Ampersand, text present
+    // In the provided HTML, "I'll Ship & Pay" is present.
+    // The selector "div.a-row.a-spacing-medium span.a-size-base:contains(I'll Ship & Pay)"
+    // should correctly find 1 element.
+    Elements correctMatch1 = doc.select("div.a-row.a-spacing-medium span.a-size-base:contains(I'll Ship & Pay)");
+    assertEquals(1, correctMatch1.size());
+
+    // Test case 2: Selector with Ampersand, text NOT present
+    // Use the HTML without the specific text.
+    // The selector "div.a-row.a-spacing-medium span.a-size-base:contains(I'll Ship & Pay)"
+    // should find 0 elements.
+    Elements noMatch1 = docNoMatch.select("div.a-row.a-spacing-medium span.a-size-base:contains(I'll Ship & Pay)");
+    // THIS ASSERTION WOULD FAIL IN THE BUGGY VERSION (1.10.1) because it would return > 0 (e.g., 9).
+    assertEquals(0, noMatch1.size());
+
+    // Test case 3: Selector with Apostrophe, text present
+    // The HTML contains "I'll Ship & Pay".
+    // Selector "div.a-row.a-spacing-medium span.a-size-base:contains(I'll Ship)"
+    // This selector should find the element containing "I'll Ship & Pay".
+    Elements correctMatch2 = doc.select("div.a-row.a-spacing-medium span.a-size-base:contains(I'll Ship)");
+    assertEquals(1, correctMatch2.size());
+
+    // Test case 4: Selector with Apostrophe, text NOT present
+    // Use the HTML without the specific text.
+    // The selector "div.a-row.a-spacing-medium span.a-size-base:contains(I'll Ship)"
+    // should find 0 elements.
+    Elements noMatch2 = docNoMatch.select("div.a-row.a-spacing-medium span.a-size-base:contains(I'll Ship)");
+    // THIS ASSERTION WOULD FAIL IN THE BUGGY VERSION if it incorrectly matches other elements.
+    assertEquals(0, noMatch2.size());
+
+    // The core of the failure seems to be the :contains() logic with special characters
+    // leading to incorrect matches when the target text is not present.
+    // The most direct reproduction of the failure is to test a selector that *should* return 0
+    // but is reported to return 9 in the buggy version.
+    // The selector "div.a-row.a-spacing-medium span.a-size-base:contains(I'll Ship & Pay)"
+    // on HTML where this text is absent is the key.
+    // The test method should assert the *correct* behavior, which is 0.
+    // This test will pass with the fix and fail with the buggy version.
+}

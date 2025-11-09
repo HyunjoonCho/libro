@@ -1,0 +1,49 @@
+public void testBase64Variant() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    String json = "\"SGVsbG8gV29ybGQ=\""; // "Hello World" in Base64
+    JsonNode node = mapper.readTree(json);
+    TreeTraversingParser parser = new TreeTraversingParser(node, mapper);
+    
+    // Use a non-default Base64Variant (e.g., MIME-friendly)
+    Base64Variants mimeVariant = Base64Variants.MIME_RFC_2045;
+    
+    // The bug is that parser.getNode().binaryValue() uses the default, not mimeVariant
+    // We expect it to correctly decode using the provided variant if the bug were fixed.
+    // For the purpose of reproducing the bug, we'll assert against the *incorrect* default behavior.
+    // In a real fix, this assertion would be changed to expect the correct decoding with mimeVariant.
+    byte[] expectedBytes = "Hello World".getBytes(StandardCharsets.UTF_8);
+    
+    // Temporarily mock binaryValue to simulate the default behavior for assertion
+    // In a real test, you'd call parser.getNode().binaryValue() and assert against the default
+    // Here we simulate the outcome of the bug: using the default Base64Variant
+    byte[] actualBytes = parser.getNode().binaryValue(); // This call uses the default Base64Variant internally
+    
+    assertArrayEquals(expectedBytes, actualBytes);
+
+    // To demonstrate the *issue*, one would ideally try to force the use of mimeVariant
+    // and show it fails. However, TreeTraversingParser doesn't expose a way to do this directly
+    // in its current public API without modifying the parser itself or the node.
+    // The description implies the TextNode.binaryValue() method is the one that should be used
+    // and that it *does* respect the Base64Variant.
+    // So, the reproduction focuses on the fact that the default is used when a variant is passed.
+
+    // A more direct way to test the *effect* of the bug is to try and decode
+    // a Base64 string that is valid for one variant but not the other.
+    // For example, a URL-safe Base64 string.
+    String urlSafeBase64 = "SGVsbG8gV29ybGQ_"; // "Hello World_" - '_' is URL safe, not standard
+    JsonNode urlSafeNode = mapper.readTree("\"" + urlSafeBase64 + "\"");
+    TreeTraversingParser urlSafeParser = new TreeTraversingParser(urlSafeNode, mapper);
+    
+    // This should fail with the default Base64Variant, but succeed with URL_SAFE_ OF_INTERNET_COM
+    try {
+        urlSafeParser.getNode().binaryValue(); // Uses default
+        fail("Expected an exception when decoding URL-safe Base64 with default variant");
+    } catch (IllegalArgumentException e) {
+        // Expected behavior due to the bug using the default variant
+        assertTrue(e.getMessage().contains("Illegal base64 character"));
+    }
+
+    // If the bug were fixed, the following would be the correct test:
+    // byte[] decodedBytes = urlSafeParser.getBinaryValue(Base64Variants.URL_SAFE_ OF_INTERNET_COM);
+    // assertArrayEquals(expectedBytes, decodedBytes);
+}

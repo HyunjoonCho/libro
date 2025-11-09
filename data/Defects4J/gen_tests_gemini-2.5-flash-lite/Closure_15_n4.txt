@@ -1,0 +1,77 @@
+public void testIssue125() {
+    // Simulate the JavaScript scenario where 'key in dataSlot' is checked after 'delete dataSlot[key]'
+    // In Java, this would be represented by checking for the presence of a key in a Map
+    // after attempting to remove it.
+
+    Map<String, String> customData = new HashMap<>();
+    customData.put("key", "value");
+
+    String keyToRemove = "key";
+    String retval = customData.get(keyToRemove);
+    boolean hadKey = customData.containsKey(keyToRemove);
+
+    // Simulate the incorrect order of operations in the compiled JavaScript
+    if (customData != null) {
+        customData.remove(keyToRemove); // This happens before checking if the key was present
+    }
+
+    // The original JavaScript code incorrectly checks 'key in dataSlot' *after* deletion.
+    // To reproduce the *failure*, we need to check if the key is *still* in the map
+    // after the deletion, which should be false, but the original logic would have
+    // returned the retval based on the *pre-deletion* check.
+    //
+    // The key point of the bug is that the `hadKey` variable captures the state *before*
+    // deletion, but the compiled code's return logic effectively re-evaluates the presence
+    // of the key *after* deletion.
+    //
+    // Let's simulate the return logic that would be affected by the incorrect order.
+    // If we were to strictly follow the flawed logic:
+    // We retrieve `retval` and `hadKey` correctly.
+    // Then we delete the key.
+    // The original JS code's `return hadKey ? retval : null;` would still use the `hadKey`
+    // variable captured *before* deletion.
+    //
+    // The *problem* described is that the compiled version *changes the semantic*
+    // by executing `key in dataSlot` *after* `delete dataSlot[key]`.
+    //
+    // To reproduce the *failure*, we need to show that the compiled code's behavior
+    // is different from the intended behavior. The intended behavior is that if the
+    // key existed, you get its value. The bug is that the compiled code might
+    // incorrectly return null even if the key *did* exist.
+    //
+    // The description states: "console.log(testRemoveKey("key")); // 'value'"
+    // and "console.log("key" in customData); // false" in the *original* code.
+    //
+    // The *compiled* code output is: "null" and "false".
+    //
+    // This means the `testRemoveKey` function returned `null` instead of `'value'`.
+    // This happens because in the compiled version, the check `a && b in a` is performed
+    // *after* `a && delete a[b]`. If `a` is not null, `b in a` will be false after deletion.
+    //
+    // So, to reproduce the failure, we need to ensure our Java test reflects the
+    // incorrect return value from the compiled JavaScript.
+
+    String result = hadKey ? retval : null; // This correctly reflects the *original* intent
+
+    // Now, let's simulate the compiled code's logic for the return statement:
+    // `return a && b in a ? c : null`
+    // In Java, this would be:
+    boolean keyStillPresent = customData.containsKey(keyToRemove);
+    String compiledResult = keyStillPresent ? retval : null;
+
+    // The failure is that the compiled version returns null when it should return retval.
+    // This happens because the `key in dataSlot` check is done *after* deletion.
+    // So, if the key was present initially, `retval` is correct, but if the check
+    // `key in dataSlot` is performed *after* deletion, it will be false, leading to null.
+
+    // Let's assert the *incorrect* behavior of the compiled code.
+    // The compiled code returned null, not 'value'.
+    assertNull("Compiled version should return null due to incorrect key check order", compiledResult);
+    // We also assert that the key is indeed not in customData after deletion, which is correct.
+    assertFalse("Key should not be present after deletion", customData.containsKey(keyToRemove));
+
+    // If we wanted to assert the *correct* behavior (from the uncompiled code),
+    // we would assert:
+    // assertEquals("Original version should return the value", "value", result);
+    // But the request is to reproduce the *failure*. The failure is the compiled output.
+}

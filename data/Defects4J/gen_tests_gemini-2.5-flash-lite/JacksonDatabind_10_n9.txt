@@ -1,0 +1,118 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+import com.fasterxml.jackson.databind.util.StdConverter;
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class JsonAnyGetterAndSerializeTest {
+
+    public static class MyConverter extends StdConverter<Map<String, String>, Map<String, String>> {
+        @Override
+        public Map<String, String> convert(Map<String, String> value) {
+            Map<String, String> converted = new HashMap<>();
+            for (Map.Entry<String, String> entry : value.entrySet()) {
+                converted.put(entry.getKey(), entry.getValue().toUpperCase());
+            }
+            return converted;
+        }
+    }
+
+    public static class MySerializer extends StdSerializer<Map<String, String>> {
+        public MySerializer() {
+            super(Map.class, false);
+        }
+
+        @Override
+        public void serialize(Map<String, String> value, JsonGenerator gen, org.
+                fasterxml.jackson.databind.SerializerProvider provider) throws IOException {
+            gen.writeStartObject();
+            for (Map.Entry<String, String> entry : value.entrySet()) {
+                gen.writeStringField(entry.getKey(), entry.getValue().toLowerCase());
+            }
+            gen.writeEndObject();
+        }
+    }
+
+    public static class TestObjectWithConverter {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public TestObjectWithConverter() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(converter = MyConverter.class)
+        @JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+    public static class TestObjectWithSerializer {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public TestObjectWithSerializer() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(using = MySerializer.class)
+        @JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+    
+    // This test reproduces the described bug
+    @Test
+    public void testJsonAnyGetterWithJsonSerializeConverterIgnored() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        TestObjectWithConverter obj = new TestObjectWithConverter();
+        String json = mapper.writeValueAsString(obj);
+        
+        // The expected output should have values converted to uppercase by MyConverter
+        // However, due to the bug, MyConverter is ignored and the original values are serialized.
+        // The actual output will be {"key1":"value1","key2":"value2"}
+        // The expected output IF THE BUG WAS FIXED would be {"key1":"VALUE1","key2":"VALUE2"}
+        // For the purpose of reproducing the bug, we assert against the incorrect output.
+        assertEquals("{\"key1\":\"value1\",\"key2\":\"value2\"}", json); 
+    }
+
+    @Test
+    public void testJsonAnyGetterWithJsonSerializeIgnored() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        TestObjectWithSerializer obj = new TestObjectWithSerializer();
+        String json = mapper.writeValueAsString(obj);
+
+        // The expected output should have values converted to lowercase by MySerializer.
+        // However, due to the bug, MySerializer is ignored and the original values are serialized.
+        // The actual output will be {"key1":"value1","key2":"value2"}
+        // The expected output IF THE BUG WAS FIXED would be {"key1":"value1","key2":"value2"}
+        // Wait, the description says "Jackson ignores JsonSerialize annotation when there is JsonAnyGetter annotation."
+        // and then gives an example with @JsonSerialize(using = MySerializer.class)
+        // and then says "except @JsonSerialize(keyUsing = MyKeySerializer.class)"
+        // and then says "For the time being I will use @JsonAnyGetter public Map<String, JsonNode> getParameters(){ return new MyConverter().convert(parameters); }"
+        // This implies the issue is with @JsonSerialize(using=...) and @JsonSerialize(converter=...) when @JsonAnyGetter is present.
+        // The example with @JsonSerialize(using = MySerializer.class) should also fail if MySerializer is ignored.
+        // Let's re-evaluate the expected output based on the description.
+        // If MySerializer is ignored, the default serialization of Map<String, String> should occur.
+        // So the output should be the original values.
+        // The description is a bit confusing because MySerializer.serialize converts to lowercase,
+        // but the bug report implies that the annotation is simply ignored.
+        // Let's assume "ignored" means the custom serializer is NOT invoked.
+        // If the custom serializer is not invoked, then Jackson will use its default behavior for Map<String, String>.
+        // The default behavior would be to serialize the values as strings.
+        // So, the output should be the original values, not transformed by MySerializer.
+        // Therefore, the assertion should be against the original values.
+        assertEquals("{\"key1\":\"value1\",\"key2\":\"value2\"}", json);
+    }
+}

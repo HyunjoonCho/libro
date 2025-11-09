@@ -1,0 +1,89 @@
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
+import org.junit.jupiter.api.Test;
+
+import java.lang.reflect.Field;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+public class ToStringStyleMemoryLeakTest {
+
+    @Test
+    public void testThreadLocalLeak() throws Exception {
+        // Use a custom style to ensure the ThreadLocal is accessed
+        ToStringStyle.setDefaultStyle(ToStringStyle.MULTI_LINE_STYLE);
+
+        // Trigger the creation of the ThreadLocal by calling a method that uses it
+        // We need to do this in a way that might be done in a container environment,
+        // potentially by multiple threads, though for reproduction we focus on the leak itself.
+        // A simple call to a method that uses the default style is enough.
+        ToStringBuilder.reflectionToString("test");
+
+        // Now, attempt to access the ThreadLocal through reflection.
+        // The goal is to see if it's still present after the operation.
+        // In a real container scenario, this ThreadLocal would persist across requests/reloads.
+
+        // We'll use reflection to check for the presence of the ThreadLocal.
+        // The actual leak is that the ThreadLocalMap entry for this ThreadLocal
+        // is not removed. This is hard to test directly in a simple JUnit test
+        // without simulating a container environment and multiple reloads.
+
+        // However, we can demonstrate the *potential* for a leak by showing
+        // that the ThreadLocal exists and is not explicitly cleared by the library.
+        // The bug report indicates the lack of an API to clear it.
+
+        // Let's try to access the internal ThreadLocal instance.
+        // This is fragile as it relies on internal implementation details,
+        // but necessary to demonstrate the point of the bug report.
+        Field field = ToStringStyle.class.getDeclaredField("CURRENT_STYLE_‌కు");
+        field.setAccessible(true);
+        ThreadLocal<?> threadLocal = (ThreadLocal<?>) field.get(null);
+
+        // If the ThreadLocal exists and has a value, it means it was set.
+        // The leak happens because this value is not cleared when the thread
+        // is reused by a container.
+        // We can't directly assert "no leak" in a simple test, but we can assert
+        // that the mechanism *exists* and is not cleaned up by default.
+
+        // A more practical test is to ensure that if we *were* to clear it,
+        // we could. The bug is that there's no public API to do so.
+        // So, the test's purpose is to confirm the *existence* of the problematic ThreadLocal
+        // and the lack of a public cleanup mechanism.
+
+        // We can simulate a scenario where a thread might be reused.
+        // In a container, threads are often pooled. If the ThreadLocal is not cleared,
+        // it can hold references that prevent garbage collection.
+
+        // For the purpose of demonstrating the *bug*, the critical part is that
+        // the ThreadLocal is created and managed internally without a public cleanup.
+        // The test below confirms the existence of the ThreadLocal.
+        // A true leak test would require a more complex setup (e.g., simulating webapp reload).
+
+        // Assert that the ThreadLocal was indeed created and is accessible.
+        assertNotNull(threadLocal, "The CURRENT_STYLE_‌కు ThreadLocal should exist.");
+
+        // We can also check if the ThreadLocal has a value associated with the current thread.
+        // This confirms it has been used.
+        assertNotNull(threadLocal.get(), "The CURRENT_STYLE_‌కు ThreadLocal should have a value for the current thread after usage.");
+
+        // The core of the bug is the lack of a public API to remove the ThreadLocal.
+        // If there were a public method like `ToStringStyle.clearCurrentStyle()`,
+        // we would call it here and then assert that `threadLocal.get()` is null.
+        // Since there isn't, we can't perform that assertion.
+
+        // The test implicitly passes if no NullPointerException or other exceptions
+        // occur during the reflection access, indicating the ThreadLocal is present.
+        // The actual memory leak is a runtime phenomenon in specific environments (like web containers)
+        // that this simple unit test cannot fully replicate, but it confirms the
+        // presence of the problematic ThreadLocal.
+
+        // To make this test more concrete about the *lack of cleanup*,
+        // we can try to demonstrate that even after setting a default style,
+        // the ThreadLocal might retain a value if it was previously set.
+        // However, the simplest reproduction is demonstrating the ThreadLocal's existence.
+
+        // Let's reset the default style to avoid affecting other tests.
+        ToStringStyle.setDefaultStyle(ToStringStyle.DEFAULT_STYLE);
+    }
+}

@@ -1,0 +1,136 @@
+public void testBigUserId() throws IOException {
+    byte[] header = new byte[100];
+    // Set UID to a value > 2^21 (0x200000)
+    // Example: 62410554 (decimal) which is 0x3B1896A (hex)
+    // This value should fit in 8 bytes, but the parser expects only 7 bytes for the value + null terminator.
+    // The header needs to be constructed to mimic a tar file entry with this large UID.
+    // We will place the UID at the correct offset within the header.
+    // The UID field in the tar header starts at offset 108 and is 8 bytes long.
+    // However, the TarUtils.parseOctal expects a string representation of the octal number
+    // and has a check for length. The issue arises because the parser is too strict.
+    // For simplicity, we'll simulate the problematic input that would cause parseOctal to fail.
+    // The error message "Invalid byte 52 at offset 7 in '62410554' len=8" suggests the issue
+    // is in parsing the string representation of the number.
+    // Let's craft a header where the UID field contains the decimal string "62410554"
+    // followed by null bytes. The TarUtils.parseOctal method is called with this string.
+
+    // Tar header structure:
+    // Offset | Field      | Size
+    // -------|------------|-----
+    // 0      | name       | 100
+    // 100    | mode       | 8
+    // 108    | uid        | 8  <-- This is where the problem lies
+    // 116    | gid        | 8
+    // 124    | size       | 12
+    // 136    | mtime      | 12
+    // 148    | chksum     | 8
+    // 156    | typeflag   | 1
+    // 157    | linkname   | 100
+    // 257    | magic      | 6
+    // 263    | version    | 2
+    // 265    | uname      | 32
+    // 297    | gname      | 32
+    // 329    | devmajor   | 8
+    // 337    | devminor   | 8
+    // 345    | prefix     | 155
+    // 500    | ...        | ...
+
+    // We need to create a TarArchiveInputStream and feed it a header that causes the issue.
+    // The issue seems to be in TarUtils.parseOctal when it encounters a valid numeric string
+    // that is too long for its internal buffer or checks.
+    // The error message indicates it's trying to parse "62410554" and failing at offset 7.
+    // This implies the parser is expecting a number that fits within a certain byte representation,
+    // and "62410554" as a decimal string is causing issues.
+
+    // Let's create a byte array representing a tar header.
+    // We will focus on the UID field.
+    byte[] tarHeader = new byte[512]; // Standard tar header size
+
+    // Set the filename (required)
+    System.arraycopy("testfile".getBytes(), 0, tarHeader, 0, "testfile".length());
+
+    // Set the mode (required) - e.g., 0644
+    String mode = "000644";
+    System.arraycopy(mode.getBytes(), 0, tarHeader, 100, mode.length());
+
+    // Set the UID - this is the problematic field.
+    // The decimal string "62410554" needs to be represented in octal and fit within 8 bytes,
+    // null-terminated. The issue is that TarUtils.parseOctal itself seems to have a limitation
+    // or incorrect parsing logic for certain valid numeric strings.
+    // The error "Invalid byte 52 at offset 7 in '62410554'" implies that the parser is trying
+    // to interpret the decimal string directly or is failing due to its length/format.
+    // Let's put the decimal string "62410554" directly into the UID field, assuming the bug
+    // is that it's not properly converting or validating this string representation.
+    // The actual octal representation of 62410554 is 03610442526.
+    // If we put the decimal string "62410554" into the header, the TarUtils.parseOctal method
+    // is called with this string. The error occurs within parseOctal.
+    // Let's simulate the situation by directly placing the decimal string into the UID field
+    // and padding with nulls. The length of "62410554" is 8.
+    String uidString = "62410554"; // This is decimal
+    System.arraycopy(uidString.getBytes(), 0, tarHeader, 108, uidString.length());
+    // Pad the rest of the UID field with null bytes
+    for (int i = uidString.length(); i < 8; i++) {
+        tarHeader[108 + i] = 0;
+    }
+
+    // Set the GID (required) - e.g., 0
+    String gid = "0000000";
+    System.arraycopy(gid.getBytes(), 0, tarHeader, 116, gid.length());
+
+    // Set the size (required) - e.g., 0 for an empty file
+    String size = "00000000000";
+    System.arraycopy(size.getBytes(), 0, tarHeader, 124, size.length());
+
+    // Set the mtime (required) - e.g., 0
+    String mtime = "00000000000";
+    System.arraycopy(mtime.getBytes(), 0, tarHeader, 136, mtime.length());
+
+    // Set the checksum (required) - calculate a dummy checksum or set to spaces
+    String chksum = "0000000"; // Placeholder, usually calculated
+    System.arraycopy(chksum.getBytes(), 0, tarHeader, 148, chksum.length());
+
+    // Set the typeflag (required) - e.g., regular file
+    tarHeader[156] = (byte) '0';
+
+    // Set magic and version
+    System.arraycopy("ustar".getBytes(), 0, tarHeader, 257, 5);
+    tarHeader[262] = 0; // null terminator for magic
+    tarHeader[263] = '0';
+    tarHeader[264] = '0';
+
+    // Create a ByteArrayInputStream from the header
+    // We need to simulate the structure of a tar archive.
+    // A tar archive consists of file entries, each starting with a 512-byte header,
+    // followed by the file data, and ending with a zero-filled block (or two).
+    // For this test, we only need to trigger the parsing of the header that causes the error.
+    // We can create a TarArchiveInputStream and provide it with a stream that starts with our crafted header.
+
+    // We need to provide enough data for getNextTarEntry to read the header.
+    // A minimal tar entry would be the header followed by the data size (0 in this case)
+    // and then the end-of-file marker (two zero blocks).
+    // The TarArchiveInputStream.getNextTarEntry reads 512 bytes for the header.
+    // If the header parsing fails, the exception is thrown.
+
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    baos.write(tarHeader);
+    // Add padding to make it a full block if necessary, though getNextTarEntry should read 512 bytes regardless.
+    // The critical part is the content of the tarHeader.
+
+    ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+    TarArchiveInputStream tarInput = new TarArchiveInputStream(bais);
+
+    // Now, attempt to read the next entry. This should trigger the exception.
+    try {
+        tarInput.getNextTarEntry();
+        // If we reach here, the test failed because the exception was not thrown.
+        fail("Expected IllegalArgumentException for invalid UID format");
+    } catch (IllegalArgumentException e) {
+        // Check if the exception message is related to the parsing error.
+        assertTrue(e.getMessage().contains("Invalid byte") || e.getMessage().contains("numeric value out of range"));
+        // The original bug report mentions "Invalid byte 52 at offset 7 in '62410554' len=8"
+        // So, we can be more specific if desired, but a general check is usually sufficient.
+        // assertTrue(e.getMessage().contains("62410554")); // This might be too specific if the exact string changes.
+    } finally {
+        IOUtils.closeQuietly(tarInput);
+    }
+}

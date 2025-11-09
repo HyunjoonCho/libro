@@ -1,0 +1,61 @@
+public void testZipArchiveEntryEqualsAndHashCode() throws IOException {
+    ZipArchiveOutputStream zaos = null;
+    ZipArchiveInputStream zais = null;
+    try {
+        File zipFile = File.createTempFile("test", ".zip");
+        zipFile.deleteOnExit();
+        zaos = new ZipArchiveOutputStream(zipFile);
+
+        ZipArchiveEntry entry1 = new ZipArchiveEntry("test/file");
+        zaos.putArchiveEntry(entry1);
+        zaos.write("content1".getBytes());
+        zaos.closeArchiveEntry();
+
+        // Create a second entry with a name that is likely to cause a hash collision
+        // (e.g., by having the same hash code as "test/file" or by being equal
+        // after some transformation if the equals/hashCode is flawed).
+        // For demonstration, let's try a name that differs slightly but might collide.
+        // A more robust test would involve finding actual colliding names based on
+        // ZipArchiveEntry's hashCode implementation.
+        // For this example, we'll simulate the scenario by creating an entry
+        // that *should* be distinct but might be treated as equal due to the bug.
+        // The bug description implies that if setName() is used *after* construction,
+        // it might not correctly update the internal state for equals/hashCode.
+        // Let's simulate that by creating an entry, then changing its name.
+        ZipArchiveEntry entry2 = new ZipArchiveEntry("test/file"); // Initial name
+        entry2.setName("test/file_collision"); // Changed name later
+        zaos.putArchiveEntry(entry2);
+        zaos.write("content2".getBytes());
+        zaos.closeArchiveEntry();
+
+
+        zaos.finish();
+        zaos.close();
+
+        zais = new ZipArchiveInputStream(new FileInputStream(zipFile));
+        ZipArchiveEntry entry;
+        int count = 0;
+        while ((entry = zais.getNextZipEntry()) != null) {
+            count++;
+            // Read the entry to ensure it's not corrupted
+            byte[] buffer = new byte[1024];
+            int len;
+            while ((len = zais.read(buffer)) > 0) {
+                // Consume the data
+            }
+        }
+        zais.close();
+
+        // Assert that we found the expected number of entries.
+        // If the equals/hashCode bug caused overwrites, we might find fewer entries.
+        assertEquals("Should have found 2 entries", 2, count);
+
+        // A more specific check would be to verify the content of each entry,
+        // but the primary issue is the corruption of the index leading to missing
+        // or incorrect entries. The count check addresses the symptom of missing entries.
+
+    } finally {
+        IOUtils.closeQuietly(zaos);
+        IOUtils.closeQuietly(zais);
+    }
+}

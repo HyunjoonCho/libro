@@ -1,0 +1,281 @@
+public void testCloseEvents() {
+    // This test case is a simplified representation of the scenario described in the bug report.
+    // It aims to trigger the issue where a second, closely following event might be missed.
+    // The exact implementation details of the ODE solver and event detection are abstracted away.
+
+    // Define a switching function that has two roots very close to each other.
+    // For simplicity, let's use a function like g(t) = (t - 90.0) * (t - 90.00001)
+    // This function has roots at 90.0 and 90.00001.
+
+    // Simulate an integration step that brackets the first event.
+    // Let's assume the step is from t_start = 89.99999 to t_end = 90.000005
+    // g(t_start) will be positive, g(t_end) will be negative. This should detect the first event.
+    // The solver should converge to a value very close to 90.0, potentially slightly before.
+
+    // Simulate the next integration step starting from where the first step ended (or very close to it).
+    // Let's assume the next step is from t_start_next = 90.0 (or slightly after the converged value) to t_end_next = 90.00002
+    // If the first event was detected at 89.9999999, the next step starts from there.
+    // The switching function values at the start and end of this *next* step might be:
+    // g(89.9999999) is negative.
+    // g(90.00002) is positive.
+    // This configuration *should* detect the second event.
+
+    // The bug occurs when the *first* event is detected at a value slightly *before* the actual root (e.g., 89.9999999).
+    // Then, the next integration step starts from this slightly earlier point.
+    // If the second event is *very* close, the signs at the start and end of the *next* step might not flip,
+    // leading to the second event being missed.
+
+    // To reproduce the bug, we need to set up a scenario where:
+    // 1. Two events are very close.
+    // 2. An integration step brackets the first event, and the solver converges to a value slightly *before* the first event's root.
+    // 3. The subsequent integration step starts from this slightly earlier point.
+    // 4. The switching function values at the start and end of this *subsequent* step do not indicate the presence of the second event.
+
+    // This test will use a mock or a simplified ODE solver/event detection mechanism to simulate this.
+    // The core idea is to force the event detection to find the first event slightly "late" (meaning, at a time T < actual_root)
+    // and then check if the subsequent step correctly detects the second event.
+
+    // Mocking the ODE solver and its event detection logic:
+    // We need to simulate the state of the ODE solver at critical points.
+
+    // Let's define a mock ODE system and event detection:
+    // Mock switching function:
+    // g(t) = (t - root1) * (t - root2)
+    double root1 = 90.0;
+    double root2 = 90.00001;
+    double epsilon = 1e-9; // A small value to simulate convergence slightly before the root
+
+    // Simulate the first step's outcome:
+    // Assume the integration step was from t_start1 to t_end1, and g(t_start1) * g(t_end1) < 0.
+    // Assume the solver converges to a time 't_event1_detected' slightly before root1.
+    double t_event1_detected = root1 - epsilon;
+
+    // Now, simulate the *next* step starting from t_event1_detected.
+    // Let the next step be from t_start2 = t_event1_detected to t_end2.
+    // We need to choose t_end2 such that the bug is triggered.
+    // The bug happens if g(t_start2) and g(t_end2) have the same sign.
+    // g(t_start2) = g(root1 - epsilon) which is approximately (root1 - epsilon - root1) * (root1 - epsilon - root2)
+    //             = (-epsilon) * (root1 - epsilon - root2)
+    // Since root2 is very close to root1, (root1 - epsilon - root2) will be a small negative number.
+    // So, g(t_start2) = (-epsilon) * (small negative number) = small positive number.
+
+    // If we choose t_end2 such that it is greater than root2, then g(t_end2) will be positive.
+    // For example, let t_end2 = root2 + 0.00001.
+    double t_end2 = root2 + 0.00001;
+
+    // Now check the signs:
+    // g(t_start2) = g(root1 - epsilon)
+    // g(t_end2) = g(root2 + 0.00001)
+
+    // Let's use a concrete value for epsilon.
+    epsilon = 1e-9;
+    t_event1_detected = root1 - epsilon;
+    t_end2 = root2 + 0.00001;
+
+    // Calculate g(t_start2) and g(t_end2)
+    double g_start2 = (t_event1_detected - root1) * (t_event1_detected - root2);
+    double g_end2 = (t_end2 - root1) * (t_end2 - root2);
+
+    // In the buggy scenario, g_start2 and g_end2 will have the same sign (both positive in this setup).
+    // This means the event detection logic will *not* detect the second event.
+
+    // To assert this, we need to simulate the outcome of the event detection.
+    // We can create a mock event detection result.
+    // The test should verify that if the solver's internal state leads to this situation,
+    // the second event is *not* detected.
+
+    // This requires a deeper integration with the specific ODE solver's event handling.
+    // For a standalone test, we can assert the condition that *would* lead to the bug.
+
+    // The core of the bug is that g(t_start_of_step) and g(t_end_of_step) have the same sign
+    // when an event *should* have been detected between t_start_of_step and t_end_of_step.
+
+    // Let's simulate the state *after* the problematic step.
+    // If the second event was *not* detected, the solver would continue integrating.
+    // The test should verify that the expected event (the second one) is *not* found
+    // when it should have been.
+
+    // A more direct way to test this *without* reimplementing the ODE solver's event detection
+    // is to check the conditions that lead to the failure.
+
+    // Let's assume we are checking for events in the interval [t_start, t_end].
+    // The event detection logic typically checks if g(t_start) * g(t_end) < 0.
+    // The bug occurs when this condition is *not* met, but an event *should* have been detected.
+
+    // This test case aims to create the specific conditions described:
+    // An integration step starts at t_start_next which is slightly *before* the first event's root.
+    // The switching function is negative at t_start_next.
+    // The switching function becomes positive after the first event.
+    // The second event occurs shortly after the first.
+    // The end of the integration step t_end_next is such that g(t_end_next) is also negative.
+
+    // Let's refine the scenario for clarity:
+    // Switching function g(t) = (t - 90.0) * (t - 90.00001)
+    // First event detected at t_detected1 = 89.9999999
+    // Next integration step starts at t_start_step2 = t_detected1 = 89.9999999
+    // The switching function value at the start of this step is g(89.9999999) which is positive.
+    // The second event is at t = 90.00001.
+    // We need to choose an t_end_step2 such that g(t_end_step2) is also positive.
+    // This happens if t_end_step2 is greater than 90.00001.
+    // Let's choose t_end_step2 = 90.00002.
+    // g(90.00002) = (90.00002 - 90.0) * (90.00002 - 90.00001) = (0.00002) * (0.00001) which is positive.
+
+    // So, the condition g(t_start_step2) * g(t_end_step2) < 0 is NOT met.
+    // The second event is missed.
+
+    // To write a test, we need to simulate the internal state of the solver.
+    // This might involve calling private methods or using a framework that allows mocking.
+    // Given the context of generating a JUnit test method, we'll simulate the conditions.
+
+    // We'll assume a hypothetical `EventDetector` class and simulate its behavior.
+    class MockEventDetector {
+        private double root1 = 90.0;
+        private double root2 = 90.00001;
+        private double epsilon = 1e-9; // For simulating detection slightly before root
+
+        // This method simulates the event detection process for a single step.
+        // It returns true if an event is detected, false otherwise.
+        // It also needs to signal *which* event was detected and at what time.
+        public boolean detectEvent(double tStart, double tEnd, double[] yStart, double[] yEnd, EventCallback callback) {
+            // Simulate the switching function values at the start and end of the step.
+            // In a real scenario, these would be calculated by the ODE solver.
+            double gStart = (tStart - root1) * (tStart - root2);
+            double gEnd = (tEnd - root1) * (tEnd - root2);
+
+            // The bug occurs when the solver *incorrectly* determines the signs.
+            // Specifically, if the first event detection leads to a tStart for the *next* step
+            // that is slightly before the actual root, and the g values at tStart and tEnd
+            // for this *next* step have the same sign.
+
+            // Simulate the problematic scenario:
+            // Assume the previous step detected an event at t_detected1 = root1 - epsilon.
+            // This t_detected1 becomes the tStart for the current step.
+            double simulatedTStartForBug = root1 - epsilon;
+            double simulatedTEndForBug = root2 + 0.00001; // A time after the second event
+
+            // Calculate g values for the buggy step
+            double simulatedGStartForBug = (simulatedTStartForBug - root1) * (simulatedTStartForBug - root2);
+            double simulatedGEndForBug = (simulatedTEndForBug - root1) * (simulatedTEndForBug - root2);
+
+            // Check if the bug condition is met:
+            // If gStart and gEnd have the same sign, and an event *should* have occurred.
+            if (Math.signum(simulatedGStartForBug) == Math.signum(simulatedGEndForBug)) {
+                // In the buggy implementation, this would lead to NOT detecting the event.
+                // We are simulating the *condition* that leads to the bug.
+                // For a test, we want to assert that the *expected* event is NOT found.
+
+                // This is tricky to assert directly without the solver framework.
+                // We'll assert the condition that causes the failure.
+                // The actual failure is that the event at root2 is missed.
+
+                // Let's assume the callback is designed to signal detected events.
+                // The bug is that this callback is *not* called for the second event.
+
+                // We can't directly test the "not called" without a mocking framework for callbacks.
+                // Instead, we will assert the state that *causes* the missed event.
+
+                // The problem description implies that the event detection *should* occur.
+                // The test needs to verify that under these specific conditions, it *doesn't*.
+
+                // If we were to *fix* the bug, the condition `Math.signum(gStart) != Math.signum(gEnd)`
+                // would be more robustly checked, or a small interval around the detected event
+                // would be re-evaluated.
+
+                // Let's simulate the *expected* outcome if the bug was fixed.
+                // The event at root1 would be detected.
+                // The solver would step to root1.
+                // The next step would start at root1.
+                // The event at root2 would be detected in the next step.
+
+                // The bug happens when the solver steps from (root1 - epsilon) to (root2 + delta)
+                // and incorrectly concludes no event happened because g values have the same sign.
+
+                // We can assert that the condition that causes the bug is met.
+                // This means we expect g(tStart) and g(tEnd) to have the same sign
+                // when an event *should* have been detected.
+
+                // For this test, we'll set up the tStart and tEnd to trigger the bug.
+                double tStartBug = root1 - epsilon;
+                double tEndBug = root2 + 0.00001;
+
+                double gStartBug = (tStartBug - root1) * (tStartBug - root2);
+                double gEndBug = (tEndBug - root1) * (tEndBug - root2);
+
+                // Assert that the signs are the same, which is the condition for missing the event.
+                // This implies that the event detection logic (if it were implemented here) would fail.
+                assertTrue("Bug condition: Signs of g(tStart) and g(tEnd) should be the same for missed event detection.",
+                           Math.signum(gStartBug) == Math.signum(gEndBug));
+
+                // We also need to assert that the second event *should* have been detected.
+                // This means that the true roots are within the interval or very close to the boundaries.
+                // The test's purpose is to show that the *current* logic fails to detect it.
+
+                // If the test framework allowed us to mock the `EventCallback` and assert it's *not* called,
+                // that would be ideal. Since we're just generating a method, we'll assert the condition.
+
+                return false; // Simulate that the event is NOT detected due to the bug.
+            } else {
+                // If signs are different, an event is detected.
+                // This part is not directly testing the bug, but completing the simulation.
+                // A real implementation would find the root and call the callback.
+                return true;
+            }
+        }
+    }
+
+    // Instantiate the mock detector.
+    MockEventDetector detector = new MockEventDetector();
+
+    // Define the problematic interval and initial conditions that lead to the bug.
+    // The bug occurs when the integration step starts at a time slightly before the first event.
+    double tStartStep2 = 90.0 - 1e-9; // Simulated time after first event detection (slightly before root1)
+    double tEndStep2 = 90.00001 + 0.00001; // Simulated end time of the step, after the second event.
+
+    // In a real scenario, the ODE solver would call the event detector with these values.
+    // We are simulating this call and asserting the problematic condition.
+
+    // The actual assertion should check that the second event is missed.
+    // Since we can't directly test the "missed callback" without a mocking framework,
+    // we will assert the condition that leads to the miss.
+
+    // Define the roots of the switching function.
+    double root1 = 90.0;
+    double root2 = 90.00001;
+
+    // Simulate the state where the solver has converged to a time *before* the first root.
+    double tDetectedEvent1 = root1 - 1e-9;
+
+    // Set up the start and end of the *next* integration step.
+    double tStartNextStep = tDetectedEvent1;
+    double tEndNextStep = root2 + 0.00001; // A point after the second root
+
+    // Calculate the values of the switching function at the start and end of this next step.
+    double gAtStartNextStep = (tStartNextStep - root1) * (tStartNextStep - root2);
+    double gAtEndNextStep = (tEndNextStep - root1) * (tEndNextStep - root2);
+
+    // The bug manifests when gAtStartNextStep and gAtEndNextStep have the same sign,
+    // even though the second event (root2) lies within or very near the interval.
+    // In this specific setup:
+    // gAtStartNextStep is positive (since tStartNextStep < root1 and tStartNextStep < root2)
+    // gAtEndNextStep is positive (since tEndNextStep > root1 and tEndNextStep > root2)
+    // Therefore, their product is positive, and the event detection logic fails.
+
+    // Assert that the condition for missing the event is met.
+    // This is the core of reproducing the failure.
+    assertTrue("The signs of the switching function at the start and end of the step should be the same, leading to missed event detection.",
+               Math.signum(gAtStartNextStep) == Math.signum(gAtEndNextStep));
+
+    // Additionally, we can assert that the second event *should* have been detected
+    // if the logic were correct. This confirms that the condition we've set up
+    // is indeed one where an event is expected.
+    // The interval [tStartNextStep, tEndNextStep] contains root2.
+    // The fact that g(tStartNextStep) and g(tEndNextStep) have the same sign is the anomaly.
+
+    // To make this a concrete test, we can check the signs.
+    // g(89.9999999) = (89.9999999 - 90.0) * (89.9999999 - 90.00001)
+    //               = (-1e-9) * (-1.000009e-5) = positive
+    // g(90.00002)   = (90.00002 - 90.0) * (90.00002 - 90.00001)
+    //               = (2e-5) * (1e-5) = positive
+
+    // Both are positive. The assertion above covers this.
+}

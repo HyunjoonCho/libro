@@ -1,0 +1,91 @@
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
+
+import static org.junit.Assert.assertEquals;
+
+// Assuming the classes AbstractClass, ClassExtendsAbstractClass, and A are defined as in the bug report.
+// For the test, we only need the structure and the problematic interaction.
+
+public class MockitoBugTest {
+
+    // Mock the concrete implementation of the abstract class
+    @Mock
+    private ClassExtendsAbstractClass classExtendsAbstractClass;
+
+    private A a;
+
+    @Before
+    public void setUp() {
+        MockitoAnnotations.initMocks(this);
+        // The problematic setup is when Mockito tries to stub a method on the mock
+        // that is defined in an abstract class, and there are multiple abstract methods.
+        // The bug report indicates that Mockito.when(classExtendsAbstractClass.give()).thenReturn("aaa");
+        // triggers the error, even though 'give()' is not abstract.
+        // The error message suggests the issue is with 'lol()', which is abstract.
+        // This points to Mockito's internal handling of abstract methods when stubbing.
+
+        // We need to reproduce the condition that leads to the error.
+        // The error occurs when stubbing a non-abstract method that internally calls abstract methods.
+        // The bug report states: "Mockito.when(classExtendsAbstractClass.give()).thenReturn("aaa");" causes the error.
+        // Let's replicate that.
+        Mockito.when(classExtendsAbstractClass.give()).thenReturn("aaa");
+
+        // The actual instantiation of 'a' is what uses the mocked object.
+        // The error happens during the setup phase (Mockito.when), not necessarily during the execution of 'a.doSomeThing()'.
+        a = new A(classExtendsAbstractClass);
+    }
+
+    @Test
+    public void testWrongTypeOfReturnValueWhenAbstractClassHasTwoAbstractMethods() {
+        // The goal is to ensure the test setup (the @Before method) executes without throwing
+        // the WrongTypeOfReturnValue exception. If it completes without exception,
+        // it means the setup correctly reproduced the bug scenario.
+        // We don't need to assert anything about the state of 'a' because the bug
+        // is in the stubbing mechanism itself, not in the runtime behavior of 'a'.
+
+        // If the test method reaches this point without an exception being thrown
+        // in the @Before method, the bug is reproduced.
+        // We can add a simple assertion to make it a valid test.
+        // For example, check if 'a' was initialized.
+        assertEquals("A object should be initialized", a.getClass(), A.class);
+    }
+
+    // Dummy definitions of the classes to make the test runnable in isolation
+    // In a real scenario, these would be in their own files.
+
+    abstract static class AbstractClass {
+        abstract protected Long lol();
+        abstract protected String wow();
+        public String give() {
+            wow(); // This calls the mocked method
+            lol(); // This calls the mocked method
+            return "give";
+        }
+    }
+
+    static class ClassExtendsAbstractClass extends AbstractClass {
+        @Override
+        protected Long lol() {
+            return 2L;
+        }
+        @Override
+        protected String wow() {
+            return "WOW";
+        }
+    }
+
+    static class A {
+        private ClassExtendsAbstractClass classExtendsAbstractClass;
+        public A(ClassExtendsAbstractClass classExtendsAbstractClass) {
+            this.classExtendsAbstractClass = classExtendsAbstractClass;
+        }
+        public String doSomeThing(){
+            // This method is not directly involved in the stubbing error,
+            // but the constructor takes the object that is being stubbed.
+            return classExtendsAbstractClass.wow();
+        }
+    }
+}

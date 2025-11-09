@@ -1,0 +1,53 @@
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+import java.util.Collections;
+
+public class ProcessCommonJSModulesTest {
+
+    @Test
+    public void testModuleExportsFailure() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setPrettyPrint(true);
+        options.setErrorPassConfig(
+                new com.google.javascript.jscomp.PassConfig.PassConfigDelegate(
+                        new com.google.javascript.jscomp.DefaultPassConfig(options)) {
+                    @Override
+                    protected void optimizeNonAmbientCode(com.google.javascript.jscomp.PassFactory[] passFactories) {
+                        // Bypass some passes that might interfere with this specific test scenario
+                    }
+                });
+        options.setCheckTypes(true);
+        options.setTransformAMDModules(true);
+        options.setProcessCommonJSModules(true);
+        options.setCommonJSEntryModule("echo-main.js");
+
+        SourceFile echoJs = SourceFile.fromCode("echo.js",
+                "define(function() { return { echo: function(val) { window.console.log(val); } }});");
+        SourceFile echoMainJs = SourceFile.fromCode("echo-main.js",
+                "var echo = require('echo'); echo.echo('hello world');");
+
+        compiler.compile(Collections.emptyList(), java.util.Arrays.asList(echoJs, echoMainJs), options);
+
+        // Assert that there are no errors related to 'module$exports'
+        // The original bug report indicates an ERROR, so we expect no errors to be reported for this specific issue.
+        // If the compiler reports errors, we check if the specific error is present.
+        // In a real test scenario, you might want to check for specific error codes or messages.
+        // For this reproduction, we are asserting that the compilation does not fail with the described error.
+        // If the compiler *does* fail with an error, this test would fail if we didn't check for it.
+        // The absence of the specific error is the success criteria here.
+        boolean foundError = false;
+        for (com.google.javascript.jscomp.JSError error : compiler.getErrors()) {
+            if (error.getDescription().contains("module$exports never defined on module$echo_main")) {
+                foundError = true;
+                break;
+            }
+        }
+        // Assert that the specific error was NOT found.
+        assertEquals("The error 'module$exports never defined on module$echo_main' was found.", false, foundError);
+    }
+}

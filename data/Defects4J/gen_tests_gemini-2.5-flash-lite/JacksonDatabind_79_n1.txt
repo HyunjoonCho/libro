@@ -1,0 +1,45 @@
+public void testJsonIdentityReferenceClassOnly() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.setAnnotationIntrospector(new JacksonAnnotationIntrospector() {
+        @Override
+        public ObjectIdInfo findObjectIdInfo(Annotated a) {
+            if (a.getRawType().equals(ReallyAlwaysAsId.class)) {
+                return super.findObjectIdInfo(a);
+            }
+            return null;
+        }
+
+        @Override
+        public ObjectIdInfo findObjectReferenceInfo(Annotated accessor, ObjectIdInfo defaultInfo) {
+            if (accessor.getRawType().equals(ReallyAlwaysAsId.class)) {
+                return defaultInfo.withAlwaysAsId(true);
+            }
+            return defaultInfo;
+        }
+    });
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class, property = "id")
+    @JsonIdentityReference(alwaysAsId = true)
+    static class ReallyAlwaysAsId {
+        public int value;
+
+        public ReallyAlwaysAsId() {
+            this(0);
+        }
+
+        public ReallyAlwaysAsId(int v) {
+            value = v;
+        }
+    }
+
+    @JsonPropertyOrder(alphabetic = true)
+    static class ReallyAlwaysContainer {
+        public ReallyAlwaysAsId b = new ReallyAlwaysAsId(13);
+    }
+
+    ReallyAlwaysContainer container = new ReallyAlwaysContainer();
+    String json = mapper.writeValueAsString(container);
+    // The first instance should get ID 1, the second instance should get ID 2.
+    // Since alwaysAsId is true on the class, both should be serialized as IDs.
+    assertEquals("{\"b\":1}", json);
+}

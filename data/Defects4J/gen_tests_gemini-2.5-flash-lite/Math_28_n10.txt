@@ -1,0 +1,266 @@
+import org.junit.Test;
+import org.junit.Before;
+import static org.junit.Assert.*;
+
+import java.util.ArrayList;
+import java.util.Collection;
+
+import org.apache.commons.math3.optim.linear.*;
+import org.apache.commons.math3.optim.PointValuePair;
+import org.apache.commons.math3.optim.nonlinear.scalar.GoalType;
+
+public class SimplexSolverTest {
+
+    private SimplexSolver solver;
+    private Collection<LinearConstraint> constraints;
+    private LinearObjectiveFunction f;
+
+    @Before
+    public void setUp() {
+        solver = new SimplexSolver();
+        constraints = new ArrayList<>();
+        // Objective function: min(1*t + 0*L)
+        // For simplicity, let's assume R=1, so L has only one element l(1)
+        // Objective: min(t)
+        f = new LinearObjectiveFunction(new double[]{1.0}, 0); // Coefficients for t and L
+    }
+
+    @Test(expected = UnboundedSolutionException.class)
+    public void testUnboundedSolutionExceptionForOneVariable() {
+        // R = 1
+        // Constraints:
+        // -q(1) + Q*L >= 0  => -q(1) + Q*l(1) >= 0
+        // x(1)*t - X*L >= 0  => x(1)*t - X*l(1) >= 0
+        // L >= 0             => l(1) >= 0
+
+        // Let's choose some values that should lead to an unbounded solution for minimization
+        // Example:
+        // q(1) = 1, Q = 1  => -1 + l(1) >= 0  => l(1) >= 1
+        // x(1) = 1, X = 1  => t - l(1) >= 0  => t >= l(1)
+        // l(1) >= 0
+
+        // From l(1) >= 1 and t >= l(1), we get t >= 1.
+        // The objective is to minimize t.
+        // If we can make l(1) arbitrarily large, then t can also be arbitrarily large.
+        // However, the problem description implies an unbounded exception for MINIMIZATION.
+        // This suggests that the feasible region is unbounded in a direction that decreases the objective function.
+
+        // Let's re-evaluate the constraints for minimization.
+        // min(t)
+        // s.t.
+        // -1 + 1*l(1) >= 0  => l(1) >= 1
+        // 1*t - 1*l(1) >= 0  => t >= l(1)
+        // l(1) >= 0
+
+        // With these constraints, the minimum value of t occurs when l(1) is at its minimum, which is 1.
+        // So, t >= 1. The minimum t is 1. This doesn't seem unbounded.
+
+        // Let's consider the description again: "min(1*t + 0*L)"
+        // If we have a constraint that allows t to be infinitely negative, that would be unbounded for minimization.
+        // The constraints given are:
+        // -q(r) + Q*L >= 0
+        // x(r)*t - X*L >= 0
+        // L >= 0
+
+        // Let's assume R=1, L is just l1.
+        // min(t)
+        // s.t.
+        // -q1 + Q1*l1 >= 0
+        // x1*t - X1*l1 >= 0
+        // l1 >= 0
+
+        // If Q1 is negative, then -q1 + Q1*l1 >= 0 implies Q1*l1 >= q1. If q1 is positive, this is impossible for l1 >= 0.
+        // If X1 is negative, then x1*t - X1*l1 >= 0 implies x1*t >= X1*l1. If X1 is negative, and x1 is positive, this means t >= (X1/x1)*l1.
+        // If X1 is negative, then (X1/x1) is negative. So t >= (negative number) * l1.
+        // If l1 can be arbitrarily large, and the coefficient is negative, t can be arbitrarily negative.
+
+        // Let's try values that fit this:
+        // q1 = 1, Q1 = -1 => -1 - l1 >= 0 => -l1 >= 1 => l1 <= -1. But we also have l1 >= 0. This is infeasible.
+
+        // Let's try again with the structure of the problem:
+        // min(t)
+        // Constraints:
+        // 1. -q + Ql >= 0
+        // 2. xt - Xl >= 0
+        // 3. l >= 0
+
+        // For unboundedness in minimization, we need a direction in the feasible region that makes the objective function arbitrarily small (infinitely negative).
+        // This means we need to be able to decrease 't' indefinitely.
+
+        // Consider constraint 2: xt - Xl >= 0. Rearranging for t:
+        // If x > 0: t >= (X/x) * l
+        // If x < 0: t <= (X/x) * l
+
+        // If we want to minimize t, and we have t <= (X/x) * l where (X/x) is positive (i.e., X and x have the same sign),
+        // and 'l' can be arbitrarily large (from constraint 3 and potentially constraint 1), then t can be arbitrarily large. This is not unbounded for minimization.
+
+        // Let's assume x > 0. Then t >= (X/x) * l.
+        // To make t arbitrarily small (infinitely negative), we'd need (X/x) to be negative AND l to be arbitrarily large.
+        // This means X must be negative (since x > 0).
+        // So if x > 0 and X < 0, then t >= (negative/positive) * l => t >= (negative) * l.
+        // If 'l' can be arbitrarily large and positive, then 't' can be arbitrarily small (infinitely negative).
+
+        // Now, let's check if 'l' can be arbitrarily large and positive.
+        // Constraint 1: -q + Ql >= 0 => Ql >= q.
+        // If Q > 0, then l >= q/Q. If q can be negative, then l can be arbitrarily large.
+        // If Q < 0, then l <= q/Q. If q can be positive, then l can be arbitrarily large (if q/Q is positive).
+
+        // Let's try to construct a case:
+        // R=1, so L is just l1.
+        // Objective: min(t)
+        // Constraint 1: -q1 + Q1*l1 >= 0
+        // Constraint 2: x1*t - X1*l1 >= 0
+        // Constraint 3: l1 >= 0
+
+        // We want t to be able to go to -infinity.
+        // Let x1 = 1 (positive).
+        // Let X1 = -1 (negative).
+        // Constraint 2 becomes: 1*t - (-1)*l1 >= 0 => t + l1 >= 0 => t >= -l1.
+        // If l1 can be arbitrarily large and positive, then -l1 can be arbitrarily small (infinitely negative).
+
+        // Now, can l1 be arbitrarily large and positive?
+        // Constraint 3: l1 >= 0. This is satisfied.
+        // Constraint 1: -q1 + Q1*l1 >= 0.
+        // Let q1 = 0.
+        // Let Q1 = 1 (positive).
+        // Constraint 1 becomes: -0 + 1*l1 >= 0 => l1 >= 0.
+
+        // So, with:
+        // Objective: min(t)
+        // Constraints:
+        // -0 + 1*l1 >= 0  => l1 >= 0
+        // 1*t - (-1)*l1 >= 0 => t + l1 >= 0 => t >= -l1
+        // l1 >= 0
+
+        // We have t >= -l1. If l1 can be any positive number, then t can be any negative number.
+        // The minimum value of t would be -infinity. Thus, it's unbounded.
+
+        double[] coefficients = new double[]{1.0, 0.0}; // Coefficients for t and l1
+        f = new LinearObjectiveFunction(coefficients, 0);
+
+        // Constraint 1: -q1 + Q1*l1 >= 0
+        // With q1=0, Q1=1: 0*t + 1*l1 >= 0
+        constraints.add(new LinearConstraint(new double[]{0.0, 1.0}, Relationship.GEQ, 0.0));
+
+        // Constraint 2: x1*t - X1*l1 >= 0
+        // With x1=1, X1=-1: 1*t - (-1)*l1 >= 0 => 1*t + 1*l1 >= 0
+        constraints.add(new LinearConstraint(new double[]{1.0, 1.0}, Relationship.GEQ, 0.0));
+
+        // Constraint 3: l1 >= 0 (already implicitly handled by NonNegativeConstraint in SimplexSolver,
+        // but can be added explicitly if needed or if we were using a different solver)
+        // Let's add it for clarity, though SimplexSolver assumes non-negativity by default.
+        // If we were to add it explicitly and the solver didn't handle it, it would be:
+        // constraints.add(new LinearConstraint(new double[]{0.0, 1.0}, Relationship.GEQ, 0.0));
+        // However, the problem description implies the solver should handle this.
+        // The SimplexSolver in commons-math3 *does* assume non-negativity by default.
+
+        // We need to provide the number of variables. Here, t and l1, so 2 variables.
+        // The objective function coefficients array has size 2.
+        // The constraint coefficient arrays must also have size 2.
+
+        solver.optimize(f, new LinearConstraintSet(constraints), GoalType.MINIMIZE, new NonNegativeConstraint(true));
+    }
+
+    // This test is to demonstrate the issue with multiple variables causing unbounded exceptions.
+    // The original bug report mentions that the number of exceptions depends on the number of variables.
+    // This implies that for a specific setup, increasing the number of variables might lead to unboundedness.
+    // The previous test case sets up a scenario that *should* be unbounded for minimization.
+    // This test will try to replicate the scenario described in the bug report where increasing ENTITIES_COUNT
+    // (which I'm interpreting as the number of variables, R) leads to more exceptions.
+    // The bug report states "The number of exception thrown depends on the number of variables."
+    // This implies that for a specific problem structure, increasing the number of variables
+    // might lead to an unbounded solution.
+
+    // The original bug report's description is a bit vague about *why* it becomes unbounded with more variables.
+    // It's possible that the specific random data generation or the structure of the constraints
+    // leads to a situation where for a larger number of variables, the feasible region expands in a way
+    // that allows the objective function to decrease indefinitely.
+
+    // Let's try to create a problem with R variables (so L is a vector of R elements).
+    // The objective is min(t).
+    // Constraints:
+    // -q_r + Q_r * L >= 0   (for r = 1 to R)
+    // x_r * t - X_r * L >= 0  (for r = 1 to R)
+    // L >= 0 (element-wise)
+
+    // Here, L is a column vector of R elements. Q is MxR, X is NxR.
+    // The problem formulation in the bug report is slightly ambiguous about the dimensions of Q and X.
+    // "Q - coefficients matrix MxR", "X - coefficients matrix NxR".
+    // If R is the number of variables in L, and we are minimizing 't', then 't' is a single variable.
+    // So, the total number of variables in the LP is 1 (for t) + R (for L).
+    // The number of exceptions depends on the number of variables. This likely refers to the total number of decision variables.
+
+    // Let's assume the problem is simplified such that M=1 and N=1, and we have R constraints of each type.
+    // This means L is a vector of R elements.
+    // Objective: min(t)
+    // Constraints:
+    // For r = 1 to R:
+    //   -q_r + Q_r*l_r >= 0   (Here, Q_r is a scalar, representing the r-th column of Q if M=1)
+    //   x_r*t - X_r*l_r >= 0  (Here, X_r is a scalar, representing the r-th column of X if N=1)
+    //   l_r >= 0
+
+    // In this simplified case, the constraints for different 'r' are independent regarding 'l_r' and 't'.
+    // If we want to minimize t, and for any 'r', we have x_r*t >= X_r*l_r.
+    // If x_r > 0 and X_r < 0, then t >= (X_r/x_r)*l_r. If l_r can be arbitrarily large, t can be arbitrarily small.
+    // For l_r to be arbitrarily large, we need -q_r + Q_r*l_r >= 0 and l_r >= 0.
+    // If Q_r > 0, then l_r >= q_r/Q_r. If q_r can be negative, l_r can be arbitrarily large.
+
+    // Let's try to set up a problem with R=2 variables in L. Total variables = 1 (t) + 2 (l1, l2) = 3.
+    // Objective: min(t)
+    // Constraints:
+    // r=1:
+    //   -0 + 1*l1 >= 0  => l1 >= 0
+    //   1*t - (-1)*l1 >= 0 => t + l1 >= 0 => t >= -l1
+    // r=2:
+    //   -0 + 1*l2 >= 0  => l2 >= 0
+    //   1*t - (-1)*l2 >= 0 => t + l2 >= 0 => t >= -l2
+    // l1 >= 0, l2 >= 0
+
+    // In this case, t must be >= -l1 AND t >= -l2.
+    // If l1 and l2 can be arbitrarily large, then t can be arbitrarily small.
+    // The minimum value of t is -infinity.
+
+    @Test(expected = UnboundedSolutionException.class)
+    public void testUnboundedSolutionWithMultipleLVariables() {
+        int R = 15; // Number of variables in L, as per bug report description
+        // Total variables = 1 (t) + R (l_1, ..., l_R)
+
+        // Objective function: min(t)
+        // Coefficients: [1.0 (for t), 0.0 (for l1), ..., 0.0 (for lR)]
+        double[] objectiveCoeffs = new double[1 + R];
+        objectiveCoeffs[0] = 1.0;
+        f = new LinearObjectiveFunction(objectiveCoeffs, 0);
+
+        Collection<LinearConstraint> multiConstraints = new ArrayList<>();
+
+        // For each r from 1 to R:
+        // Constraint 1: -q_r + Q_r*l_r >= 0
+        // Constraint 2: x_r*t - X_r*l_r >= 0
+        // Constraint 3: l_r >= 0 (handled by NonNegativeConstraint)
+
+        // Let's use the same logic as the single variable case to ensure unboundedness:
+        // x_r = 1, X_r = -1  => t + l_r >= 0 => t >= -l_r
+        // q_r = 0, Q_r = 1  => l_r >= 0
+
+        for (int r = 0; r < R; r++) {
+            // Constraint 1: l_r >= 0
+            // Coefficients for t, l1, ..., lR. We need a 0 for t and 1 for l_r.
+            double[] constraint1Coeffs = new double[1 + R];
+            constraint1Coeffs[0] = 0.0; // Coefficient for t
+            constraint1Coeffs[r + 1] = 1.0; // Coefficient for l_r
+            multiConstraints.add(new LinearConstraint(constraint1Coeffs, Relationship.GEQ, 0.0));
+
+            // Constraint 2: t + l_r >= 0
+            // Coefficients for t, l1, ..., lR. We need a 1 for t and 1 for l_r.
+            double[] constraint2Coeffs = new double[1 + R];
+            constraint2Coeffs[0] = 1.0; // Coefficient for t
+            constraint2Coeffs[r + 1] = 1.0; // Coefficient for l_r
+            multiConstraints.add(new LinearConstraint(constraint2Coeffs, Relationship.GEQ, 0.0));
+        }
+
+        // The SimplexSolver assumes non-negativity for all variables by default.
+        // So, l_r >= 0 is handled.
+
+        solver.optimize(f, new LinearConstraintSet(multiConstraints), GoalType.MINIMIZE, new NonNegativeConstraint(true));
+    }
+}

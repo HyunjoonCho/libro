@@ -1,0 +1,116 @@
+public void testUmlautInDirectoryName() throws Exception {
+    // Create a zip file with a directory containing an umlaut using WinZip
+    // This requires manual creation or a specific test setup not easily reproducible here.
+    // The test below simulates the expected incorrect behavior based on the description.
+
+    // Assume 'zipFileWithUmlautDir.zip' is a zip file created by WinZip
+    // with unicode flag enabled, containing a directory named " umlaut_dir ".
+    // For example: umlaut_dir/file.txt
+
+    ArchiveInputStream ais = null;
+    try {
+        // Create a dummy zip file for testing purposes.
+        // In a real scenario, you'd have a pre-created zip file.
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ZipArchiveOutputStream zaos = new ZipArchiveOutputStream(baos);
+
+        // Create a directory entry with an umlaut character.
+        // WinZip with unicode flag enabled might represent this differently internally.
+        // The description suggests it might not be recognized as a directory and
+        // the name might be mangled.
+        ZipArchiveEntry dirEntry = new ZipArchiveEntry("umlaut_dir/");
+        // The bug implies that even if it's a directory, it might not be marked as such
+        // or the name is corrupted. Let's simulate the described name corruption.
+        // The description mentions backslashes instead of slashes.
+        // Let's assume WinZip mangled it to something like "umlaut\\dir\\" for non-unicode handling.
+        // Or, more likely, the entry itself is not recognized as a directory.
+        // For this test, we'll focus on the name corruption aspect and the directory flag.
+
+        // Simulate the entry as described: not marked as directory, name with backslashes
+        // This part is tricky to perfectly simulate without knowing WinZip's exact output.
+        // The core issue is that ArchiveInputStream doesn't correctly interpret
+        // the entry when it has umlauts and was created with WinZip's unicode flag.
+
+        // Let's create a scenario where an entry *looks* like a file but should be a directory
+        // and its name is corrupted.
+        ZipArchiveEntry corruptedDirEntry = new ZipArchiveEntry("umlaut\\dir"); // Simulate name corruption
+        // The bug report states "the ArchiveEntry for a directory ... is not marked as a directory"
+        // So, we assume the entry is created, but its properties are wrong.
+
+        zaos.putArchiveEntry(corruptedDirEntry);
+        zaos.closeArchiveEntry();
+
+        // Add a file inside this supposed directory
+        ZipArchiveEntry fileEntry = new ZipArchiveEntry("umlaut_dir/file.txt"); // Expected name
+        // If the directory name is corrupted, the file name might also be.
+        // Let's simulate the file entry name also being corrupted, based on the description:
+        // "completely different to all other files in directories with no umlaut in their path"
+        // This could mean the whole path is affected.
+        ZipArchiveEntry corruptedFileEntry = new ZipArchiveEntry("umlaut\\dir\\file.txt"); // Simulate name corruption
+
+        zaos.putArchiveEntry(corruptedFileEntry);
+        zaos.write("content".getBytes());
+        zaos.closeArchiveEntry();
+
+
+        zaos.finish();
+        baos.flush();
+
+        // Now, read this zip file using ArchiveInputStream
+        ais = new ArchiveStreamFactory().createArchiveInputStream(new ByteArrayInputStream(baos.toByteArray()));
+
+        ArchiveEntry entry = ais.getNextEntry();
+        assertNotNull("Should have at least one entry", entry);
+
+        // The bug description states: "the ArchiveEntry for a directory containing an umlaut is not marked as a directory"
+        // and "the file names for the directory and all files contained in that directory contain backslashes instead of slashes"
+
+        // Let's test the first entry, which is supposed to be the directory.
+        // We expect it NOT to be recognized as a directory and its name to be corrupted.
+        assertFalse("Directory entry should not be marked as a directory", entry.isDirectory());
+        // The name should contain backslashes instead of slashes, and the umlaut might be handled.
+        // The exact representation of umlaut_dir with backslashes is hard to guess without the actual WinZip output.
+        // The description says "completely different". Let's assume it's something like "umlaut\\dir".
+        // If WinZip mangled it to "umlaut\\dir", and the unicode flag was active,
+        // then ArchiveInputStream failed to decode it correctly.
+        // The test here will assert the *symptoms* of the bug.
+        // If the name was "umlaut_dir/", it might become "umlaut\\dir".
+        // Let's check for the presence of backslashes and the absence of the expected structure.
+        assertTrue("Directory entry name should contain backslashes or be corrupted", entry.getName().contains("\\"));
+        // The actual name might be something like "umlaut\dir" or even more garbled.
+        // The key is it's not "umlaut_dir/" and not recognized as a directory.
+        // Let's check that it's not the original intended name structure.
+        assertFalse("Directory entry name should not be the expected directory structure", entry.getName().endsWith("/"));
+        assertTrue("Directory entry name should not be empty", !entry.getName().isEmpty());
+
+
+        // Now get the next entry, which is supposed to be the file inside the directory.
+        entry = ais.getNextEntry();
+        assertNotNull("Should have a second entry (the file)", entry);
+
+        // The file entry's name should also be affected.
+        // If the directory was "umlaut_dir", a file inside would be "umlaut_dir/file.txt".
+        // With corruption, it might become "umlaut\\dir\\file.txt".
+        assertTrue("File entry name should contain backslashes or be corrupted", entry.getName().contains("\\"));
+        // And it should not be marked as a directory.
+        assertFalse("File entry should not be marked as a directory", entry.isDirectory());
+
+        // Read the file content to ensure it's not a zero-byte entry issue
+        byte[] buffer = new byte[1024];
+        int len = ais.read(buffer, 0, buffer.length);
+        assertEquals("File content should match", "content", new String(buffer, 0, len));
+
+        // Check for the end of the stream
+        assertNull("Should be no more entries", ais.getNextEntry());
+
+    } catch (ArchiveException e) {
+        // If the test setup itself fails due to an ArchiveException that is
+        // not related to the specific bug, we should rethrow it or fail the test.
+        // However, the goal is to reproduce the described behavior *within* ArchiveInputStream.
+        fail("ArchiveException occurred during test setup or execution: " + e.getMessage());
+    } finally {
+        if (ais != null) {
+            ais.close();
+        }
+    }
+}

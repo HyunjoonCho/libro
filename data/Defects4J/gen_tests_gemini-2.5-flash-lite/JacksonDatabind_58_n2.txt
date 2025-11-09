@@ -1,0 +1,44 @@
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.io.IOException;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+public class JsonIgnorePropertiesBugTest {
+
+    @JsonIgnoreProperties("cause")
+    public static class MyException extends RuntimeException {
+        public MyException() {
+            super();
+        }
+
+        public MyException(String message) {
+            super(message);
+        }
+
+        // No-arg constructor is needed for deserialization
+        public MyException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    @Test
+    public void testJsonIgnorePropertiesOnCause() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        MyException originalException = new MyException("Test message", new Exception("Inner cause"));
+
+        String json = mapper.writeValueAsString(originalException);
+
+        // The deserialization should not fail due to ignoring the "cause" property
+        MyException deserializedException = mapper.readValue(json, MyException.class);
+
+        assertNotNull(deserializedException);
+        assertEquals("Test message", deserializedException.getMessage());
+        // The "cause" should be null because it was ignored during deserialization
+        // This is the behavior we are testing to reproduce the bug's context
+        assertEquals(null, deserializedException.getCause());
+    }
+}

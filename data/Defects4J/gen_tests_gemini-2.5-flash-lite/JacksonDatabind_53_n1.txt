@@ -1,0 +1,91 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import org.junit.jupiter.api.Test;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class JsonDeserializeBugTest {
+
+    public static class MyCustomIdInterface {
+        private UUID id;
+
+        public UUID getId() {
+            return id;
+        }
+
+        public void setId(UUID id) {
+            this.id = id;
+        }
+    }
+
+    public static class Foo extends MyCustomIdInterface {
+        private String property;
+
+        public String getProperty() {
+            return property;
+        }
+
+        public void setProperty(String property) {
+            this.property = property;
+        }
+    }
+
+    public static class MyHashMap<K, V> extends HashMap<K, V> {
+        // Custom logic to handle deserialization
+    }
+
+    public static class MyPojo {
+        private Map<UUID, Foo> something;
+
+        @JsonDeserialize(as = MyHashMap.class)
+        public void setSomething(Map<UUID, Foo> incomingValue) {
+            this.something = incomingValue;
+        }
+
+        public Map<UUID, Foo> getSomething() {
+            return something;
+        }
+    }
+
+    @Test
+    public void testTypeSpecializationForMaps() throws Exception {
+        String json = "{\n" +
+                "  \"something\": [\n" +
+                "        {\n" +
+                "           \"id\": \"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11\",\n" +
+                "           \"property\": \"value\"\n" +
+                "         }\n" +
+                "  ]\n" +
+                "}";
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        MyPojo pojo = objectMapper.readValue(json, MyPojo.class);
+
+        // The assertion here depends on the expected behavior based on the bug report.
+        // If the bug is that it fails to deserialize, the test should assert the failure.
+        // If the bug is that it deserializes incorrectly, the test should assert the incorrect state.
+        // Based on the description, the failure is a `Can not construct instance...` exception.
+        // To reproduce the failure, we expect an exception. If the test passes without exception,
+        // it means the bug is not reproduced in this test setup.
+        // For demonstration, let's assume the intended behavior is to successfully deserialize.
+        // If the test fails with the described exception, it means the bug is reproduced.
+
+        // If the test *should* fail with an exception, you'd wrap this in assertThrows.
+        // For now, let's assert the expected outcome if it *were* to work correctly,
+        // which will likely fail and demonstrate the bug.
+        Map<UUID, Foo> expectedMap = new HashMap<>();
+        UUID expectedUuid = UUID.fromString("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11");
+        Foo expectedFoo = new Foo();
+        expectedFoo.setId(expectedUuid);
+        expectedFoo.setProperty("value");
+        expectedMap.put(expectedUuid, expectedFoo);
+
+        // This assertion will likely fail if the bug is present,
+        // as the deserialization will throw an exception before reaching here.
+        assertEquals(expectedMap, pojo.getSomething());
+    }
+}

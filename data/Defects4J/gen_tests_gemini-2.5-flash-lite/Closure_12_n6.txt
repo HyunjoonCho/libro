@@ -1,0 +1,155 @@
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class ClosureCompilerBugTest {
+
+    // Mock function to simulate somefunction()
+    // In a real scenario, this would be part of the script being compiled.
+    // For this test, we'll assume it returns 'undefined' when called in the compiled code.
+    private static final String MOCK_SOMEFUNCTION = "function somefunction() { return undefined; }";
+
+    @Test
+    public void testTryCatchIncorporatesCode() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        // Basic options for compilation
+        options.setPrettyPrint(true);
+        options.setLanguageIn(com.google.javascript.jscomp.LanguageMode.ECMASCRIPT5);
+        options.setLanguageOut(com.google.javascript.jscomp.LanguageMode.ECMASCRIPT5);
+
+        String sourceCode = "function a() { " +
+                            " var x = '1'; " +
+                            " try { " +
+                            " x += somefunction(); " +
+                            " } catch(e) { " +
+                            " } " +
+                            " x += \"2\"; " +
+                            " try { " +
+                            " x += somefunction(); " +
+                            " } catch(d) { " +
+                            " } " +
+                            " document.write(x); " +
+                            "} " +
+                            MOCK_SOMEFUNCTION + " " +
+                            "a(); " +
+                            "a();";
+
+        SourceFile sourceFile = SourceFile.fromCode("test.js", sourceCode);
+        compiler.compile(sourceFile, sourceFile, options);
+
+        // The compiled code will execute the 'document.write' calls.
+        // We need to simulate or capture this output.
+        // For the purpose of reproducing the bug, we'll assert the *expected* compiled output structure
+        // that leads to the incorrect behavior.
+
+        // The bug report states that the compiled code looks like this:
+        // function b() {
+        //  var a;
+        //  try {
+        //  a = "1" + somefunction() // Incorrectly includes "1" inside try
+        //  }catch(c) {
+        //  }
+        //  try {
+        //  a = a + "2" + somefunction() // Incorrectly includes "2" inside try
+        //  }catch(d) {
+        //  }
+        //  document.write(a)
+        // }
+        // b();
+        // b();
+
+        // The key is that "1" and "2" are inside the try blocks.
+        // We will check if the generated code reflects this structure.
+        // This is a bit fragile as compiler output can change, but it targets the specific bug.
+
+        String compiledCode = compiler.toSource();
+
+        // We are looking for the pattern where "1" and "2" are concatenated *inside* the try blocks.
+        // The original code had:
+        // x = '1';
+        // try { x += somefunction(); }
+        // x += "2";
+        // try { x += somefunction(); }
+        // This should result in:
+        // x = '1';
+        // try { x += somefunction(); } catch(e) {}
+        // x += "2";
+        // try { x += somefunction(); } catch(d) {}
+        //
+        // The buggy compilation results in:
+        // a = "1" + somefunction(); // "1" is inside the first try
+        // a = a + "2" + somefunction(); // "2" is inside the second try
+
+        // Let's try to assert the structure of the compiled code.
+        // This is difficult to do precisely without knowing exact compiler output.
+        // A more robust approach might involve running the compiled JS in a Rhino or Node.js context
+        // and checking the output.
+
+        // For this specific bug, the described issue is the movement of constants into try blocks.
+        // Let's check for the presence of "1" and "2" within try block assignments in the compiled output.
+
+        // This assertion is a simplified representation of the problem.
+        // The actual compiled code might differ in variable names or formatting.
+        // The core issue is the structure.
+        assertTrue("Compiled code should move constants into try blocks.",
+                   compiledCode.contains("try { a = \"1\" + somefunction()") ||
+                   compiledCode.contains("try { a = a + \"2\" + somefunction()"));
+
+        // To truly reproduce the *output* difference, we'd need an execution environment.
+        // The bug report states the *uncompiled* output is "1212" and *compiled* is "undefinedundefined".
+        // This implies `somefunction()` returns `undefined` in the compiled context,
+        // and the constants being moved into the try block cause them to be evaluated differently
+        // or lost.
+
+        // Let's use Rhino to execute the compiled code and verify the output.
+        // This requires adding a dependency on rhino.
+        // For now, we'll stick to checking the compiled code structure as a proxy for reproduction.
+
+        // If we were to run it:
+        /*
+        Context cx = Context.enter();
+        try {
+            Scriptable globalScope = cx.initStandardObjects();
+            // Define the mock somefunction in the scriptable scope
+            cx.evaluateString(globalScope, MOCK_SOMEFUNCTION, "mock.js", 1, null);
+            // Evaluate the compiled code
+            Object result = cx.evaluateString(globalScope, compiledCode, "compiled.js", 1, null);
+            // document.write in Rhino typically returns undefined or the last expression's value.
+            // The actual effect is in the console output if we were to capture it.
+            // For this test, we'll assume the compiled code correctly prints to a simulated console.
+            // The bug report states the output *should* be "1212" but is "undefinedundefined".
+            // This implies that the `document.write` calls in the compiled code don't produce the expected string.
+
+            // A more direct assertion on the *behavior* of the compiled code is needed.
+            // This is hard to do with just `compiler.toSource()`.
+            // The bug is in the *compiler's transformation*, not necessarily the *runtime execution*
+            // of correctly transformed code.
+
+            // The provided code snippet focuses on the *compiler's output structure*.
+            // The assertion above checks for that structure.
+            // If the compiler correctly moved code out of try blocks, "1" would be outside the first try,
+            // and "2" would be outside the second try.
+            // The bug is that it moves them *in*.
+        } finally {
+            Context.exit();
+        }
+        */
+    }
+
+    // Helper method to assert that a string contains another string.
+    // This is a basic assertion that can be replaced by org.junit.Assert.assertTrue
+    private void assertTrue(String message, boolean condition) {
+        if (!condition) {
+            org.junit.Assert.fail(message);
+        }
+    }
+
+    // Helper method to assert equality.
+    // This is a basic assertion that can be replaced by org.junit.Assert.assertEquals
+    private void assertEquals(Object expected, Object actual) {
+        org.junit.Assert.assertEquals(expected, actual);
+    }
+}

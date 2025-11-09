@@ -1,0 +1,26 @@
+public void testCustomEnumKeyDeserializerWithModuleFailsWhenTypeInfoMissing() throws IOException {
+    String json = "{\"someMap\": {\"FOO\": \"bar\"}}";
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule simpleModule = new SimpleModule();
+    simpleModule.addDeserializer(SuperTypeEnum.class, new JsonDeserializer<SuperTypeEnum>() {
+        @Override
+        public SuperTypeEnum deserialize(JsonParser jsonParser, DeserializationContext deserializationContext)
+                throws IOException {
+            // This deserializer is only called for the value, not the key.
+            // The bug is in the key deserialization.
+            // To reproduce the failure, we need to trigger the buggy path.
+            // The original bug report indicates the failure happens when the type info field is missing.
+            // The provided test case already does this.
+            // The issue is that the JsonParser passed to the module's deserializer is not the same
+            // as the one used internally by MapDeserializer when the type info is missing.
+            // This test case, as provided in the bug report, should fail.
+            // We are asserting success here, assuming the fix would make it pass.
+            // If the original code were run, this assertion would fail.
+            return SuperTypeEnum.valueOf(jsonParser.getText());
+        }
+    });
+    mapper.registerModule(simpleModule);
+
+    SuperType superType = mapper.readValue(json, SuperType.class);
+    assertEquals("Deserialized someMap.FOO should equal bar", "bar", superType.getSomeMap().get(SuperTypeEnum.FOO));
+}

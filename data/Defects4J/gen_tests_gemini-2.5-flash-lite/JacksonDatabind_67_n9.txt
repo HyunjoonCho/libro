@@ -1,0 +1,80 @@
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.BeanDescription;
+import com.fasterxml.jackson.databind.DeserializationConfig;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.KeyDeserializer;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.deser.BeanDeserializerModifier;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.deser.DeserializerCache;
+import com.fasterxml.jackson.databind.deser.BasicDeserializerFactory;
+
+import java.io.IOException;
+import java.util.Map;
+import com.google.common.collect.ImmutableMap;
+
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class JacksonGuavaEnumKeyDeserializerTest {
+
+    public enum MyEnum {
+        VALUE1,
+        VALUE2
+    }
+
+    @Test
+    public void testEnumKeyDeserializerModifiersIgnored() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+
+        module.setDeserializerModifier(new BeanDeserializerModifier() {
+            @Override
+            @SuppressWarnings("unchecked")
+            public JsonDeserializer<Enum> modifyEnumDeserializer(
+                    DeserializationConfig config,
+                    final JavaType type,
+                    BeanDescription beanDesc,
+                    final JsonDeserializer<?> deserializer) {
+                return new JsonDeserializer<Enum>() {
+                    @Override
+                    public Enum deserialize(JsonParser jp, DeserializationContext ctxt) throws IOException {
+                        Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                        return Enum.valueOf(rawClass, jp.getValueAsString().toUpperCase());
+                    }
+                };
+            }
+
+            @Override
+            public KeyDeserializer modifyKeyDeserializer(
+                    DeserializationConfig config,
+                    JavaType type,
+                    KeyDeserializer deserializer) {
+                if (!type.isEnumType()) {
+                    return super.modifyKeyDeserializer(config, type, deserializer);
+                }
+                return new KeyDeserializer() {
+                    @Override
+                    @SuppressWarnings("unchecked")
+                    public Object deserializeKey(String key, DeserializationContext ctxt)
+                            throws IOException, JsonProcessingException {
+                        Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                        return Enum.valueOf(rawClass, key.toUpperCase());
+                    }
+                };
+            }
+        });
+
+        mapper.registerModule(module);
+
+        // This test should fail if the modifier is ignored, as it expects "value1" to be deserialized
+        // to MyEnum.VALUE1, but the default deserializer would throw an exception for lowercase.
+        String json = "{\"value1\": 1}";
+        Map<MyEnum, Integer> result = mapper.readValue(json,
+                mapper.getTypeFactory().constructMapType(ImmutableMap.class, MyEnum.class, Integer.class));
+
+        assertEquals(MyEnum.VALUE1, result.keySet().iterator().next());
+    }
+}

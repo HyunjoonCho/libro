@@ -1,0 +1,165 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.util.StdConverter;
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class JsonAnyGetterBugTest {
+
+    // Dummy Serializer and Converter for testing
+    public static class MySerializer extends StdSerializer<String> {
+        public MySerializer() {
+            super(String.class);
+        }
+
+        @Override
+        public void serialize(String value, JsonGenerator gen, org.fasterxml.jackson.databind.SerializerProvider provider) throws IOException {
+            gen.writeString("serialized_" + value);
+        }
+    }
+
+    public static class MyConverter extends StdConverter<Map<String, String>, Map<String, JsonNode>> {
+        @Override
+        public Map<String, JsonNode> convert(Map<String, String> value) {
+            Map<String, JsonNode> result = new HashMap<>();
+            for (Map.Entry<String, String> entry : value.entrySet()) {
+                // In a real scenario, this would convert String to JsonNode
+                // For this test, we'll just put a placeholder JsonNode
+                result.put(entry.getKey(), new com.fasterxml.jackson.databind.node.TextNode("converted_" + entry.getValue()));
+            }
+            return result;
+        }
+    }
+
+    // Class with the problematic annotations
+    public static class BeanWithAnyGetterAndSerialize {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public BeanWithAnyGetterAndSerialize() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(converter = MyConverter.class)
+        @JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+    @Test
+    public void testJsonAnyGetterWithJsonSerializeConverter() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        BeanWithAnyGetterAndSerialize bean = new BeanWithAnyGetterAndSerialize();
+
+        // This serialization is expected to fail because JsonAnyGetter is ignored
+        // and the converter is not applied to the Map's values.
+        // The actual output will not have "converted_" prefix.
+        String json = mapper.writeValueAsString(bean);
+
+        // Assert that the serializer is NOT applied as expected by the bug report
+        // and the converter is also not applied to the map values.
+        // The bug is that JsonAnyGetter takes precedence and the JsonSerialize annotation is ignored.
+        // Therefore, we expect the raw values, not converted ones.
+        // If the bug were fixed, we would expect something like:
+        // {"key1":"converted_value1","key2":"converted_value2"}
+        // But due to the bug, we expect the raw values to be serialized directly.
+        // However, the bug report states that JsonAnyGetter *ignores* JsonSerialize.
+        // This means the Map itself is serialized, but the *values* within the map
+        // are not processed by the converter.
+        // So, we expect the raw values from the map to be present.
+        // The bug description implies the converter is completely ignored.
+        // Let's assert based on the description: "Jackson ignores JsonSerialize annotation"
+        // This means the converter should not be applied at all.
+        // The output should be the raw key-value pairs.
+        // The original bug report doesn't specify the exact output when it fails,
+        // but implies the converter is not used.
+        // A more accurate test would be to check if the converter *wasn't* applied.
+
+        // The bug report states JsonAnyGetter ignores JsonSerialize.
+        // This means the Map itself is exposed as properties, but the values
+        // within that Map are NOT processed by the @JsonSerialize(converter=...).
+        // So we expect the original string values, not the converted JsonNode values.
+        // This is what the current implementation does when the bug is present.
+        assertEquals("{\"key1\":\"value1\",\"key2\":\"value2\"}", json);
+
+        // If the bug were fixed, the converter would be applied,
+        // and the values would be represented as JsonNodes (likely as strings here).
+        // The expected output with a fix would be something like:
+        // assertEquals("{\"key1\":\"converted_value1\",\"key2\":\"converted_value2\"}", json);
+    }
+
+    // Class with the working annotation combination
+    public static class BeanWithAnyGetterAndKeyUsing {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public BeanWithAnyGetterAndKeyUsing() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        // This combination is stated to work in the bug report
+        @JsonSerialize(keyUsing = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class) // Dummy keyUsing for demonstration
+        @JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+    @Test
+    public void testJsonAnyGetterWithJsonSerializeKeyUsing() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        BeanWithAnyGetterAndKeyUsing bean = new BeanWithAnyGetterAndKeyUsing();
+
+        // This serialization is expected to work.
+        String json = mapper.writeValueAsString(bean);
+
+        // Assert that the serialization works as expected.
+        // The keyUsing annotation affects how keys are serialized,
+        // but the main point of the bug is that *value* serialization (converter/using) is ignored.
+        // Since the bug report only tested keyUsing and said it worked,
+        // we assume the base serialization of the map's values is as expected without any special value processing.
+        assertEquals("{\"key1\":\"value1\",\"key2\":\"value2\"}", json);
+    }
+
+    // Class demonstrating the workaround suggested
+    public static class BeanWithAnyGetterAndWorkaround {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public BeanWithAnyGetterAndWorkaround() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        // Workaround: Apply converter directly in the getter
+        @JsonAnyGetter
+        public Map<String, JsonNode> getParameters() {
+            Map<String, JsonNode> convertedMap = new HashMap<>();
+            MyConverter converter = new MyConverter();
+            for (Map.Entry<String, String> entry : parameters.entrySet()) {
+                convertedMap.put(entry.getKey(), converter.convert(entry.getValue()));
+            }
+            return convertedMap;
+        }
+    }
+
+    @Test
+    public void testJsonAnyGetterWithWorkaround() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        BeanWithAnyGetterAndWorkaround bean = new BeanWithAnyGetterAndWorkaround();
+
+        String json = mapper.writeValueAsString(bean);
+
+        // Assert that the workaround produces the expected output with converted values.
+        assertEquals("{\"key1\":\"converted_value1\",\"key2\":\"converted_value2\"}", json);
+    }
+}

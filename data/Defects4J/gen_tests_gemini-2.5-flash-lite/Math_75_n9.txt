@@ -1,0 +1,139 @@
+public void testGetPctObjectUsesCumPct() {
+    Frequency frequency = new Frequency();
+    frequency.addValue("test");
+    // Expecting a non-zero value for getPct(Object) if "test" was added
+    // The bug causes it to return a value from getCumPct, which might be different
+    // depending on the data. For a single value, getPct and getCumPct should be the same.
+    // If getCumPct returns 0.0 for a value that exists, this test will fail.
+    // This test assumes that if a value is added, getPct(Object) should not return 0.0
+    // unless the total count is zero.
+    // A more robust test would involve adding multiple values and checking specific percentages.
+    // However, to reproduce the *specific* issue described (using getCumPct instead of getPct),
+    // we can check if the behavior deviates from what getPct(Comparable) would do.
+    // If getCumPct(v) returns 0.0 when v is present, it indicates the bug.
+    // If getCumPct(v) returns the correct cumulative percentage, and getPct(Comparable)
+    // returns the correct individual percentage, and they differ, that also indicates
+    // the bug.
+    // For this example, we'll assume getCumPct for a single added item should be 1.0
+    // and if it returns 0.0, the bug is evident.
+    // A simpler way to demonstrate the problem is to show that getPct(Object)
+    // *is* calling getCumPct. If getCumPct returns 0.0 for an existing value,
+    // then getPct(Object) will incorrectly return 0.0.
+    
+    // Let's add a value and check if getPct(Object) returns 0.0, which it shouldn't
+    // if it were correctly calling getPct(Comparable) and returning the percentage
+    // of that specific value.
+    frequency.addValue("apple");
+    
+    // If getPct(Object) were correctly implemented (calling getPct(Comparable)),
+    // and "apple" was added, the percentage should be 1.0 (or close to it due to double precision).
+    // The bug report implies that getPct(Object) uses getCumPct. If getCumPct
+    // returns 0.0 for a value that is present, this test will fail.
+    // Let's assert that it's NOT 0.0, implying the incorrect call to getCumPct is problematic.
+    // A more precise test would require knowledge of the expected output of getCumPct
+    // versus getPct for a specific scenario.
+    // Given the description, the core issue is the *call* to getCumPct.
+    // If we add "apple" and getPct(Object) returns 0.0, it's highly likely
+    // because getCumPct is being called incorrectly.
+    
+    // This test is designed to fail if getPct(Object) returns 0.0 when a value has been added,
+    // which would be the case if getCumPct is called and it incorrectly returns 0.0 for that value.
+    // If getCumPct actually returns 1.0 for the single added value, then this test would pass,
+    // but the underlying issue of calling the wrong method would still exist.
+    // The most direct way to test the *call* is to mock or observe the method calls,
+    // but within a simple JUnit test, we rely on the observable behavior.
+    
+    // Let's refine the assertion. The bug implies getPct(Object) returns a cumulative percentage.
+    // If only one item is added, getPct(Comparable) should be 1.0 and getCumPct(Comparable) should also be 1.0.
+    // The issue arises when multiple items are added.
+    // Let's simulate a scenario where getPct and getCumPct would differ.
+    
+    Frequency freq = new Frequency();
+    freq.addValue("A");
+    freq.addValue("B");
+    freq.addValue("A"); // Total: A:2, B:1. Count: 3
+    
+    // Expected behavior of getPct(Comparable):
+    // getPct("A") should be 2.0 / 3.0
+    // getPct("B") should be 1.0 / 3.0
+    
+    // Expected behavior of getCumPct(Comparable):
+    // getCumPct("A") should be 2.0 / 3.0
+    // getCumPct("B") should be 3.0 / 3.0 = 1.0
+    
+    // The bug states getPct(Object) uses getCumPct.
+    // So, getPct(Object).getPct("A") should return getCumPct("A") which is 2.0/3.0. This is correct.
+    // BUT, getPct(Object).getPct("B") should return getCumPct("B") which is 1.0. This is also correct for cumulative.
+    // The description is slightly misleading if it implies getPct(Object) ALWAYS returns a CUMULATIVE percentage.
+    // The actual problem might be that the *deprecated* getPct(Object) method is calling getCumPct(Comparable),
+    // and the *non-deprecated* getPct(Comparable) method is also present.
+    // The test should verify that calling getPct(Object) with a value that would have a different
+    // individual percentage than its cumulative percentage demonstrates the issue.
+    
+    // Let's re-read: "getPct(Object) uses getCumPct(Comparable) instead of getPct(Comparable)"
+    // This means when you call frequency.getPct(someObject), it internally calls frequency.getCumPct(someComparable).
+    // This is wrong because getPct(Comparable) is the one that should return the individual percentage.
+    
+    // Let's test this directly:
+    Frequency freq2 = new Frequency();
+    freq2.addValue("X");
+    freq2.addValue("Y");
+    freq2.addValue("X"); // Total: X:2, Y:1. Count: 3.
+    
+    // Call the deprecated method that is supposed to be buggy
+    double pctX_deprecated = freq2.getPct("X"); // This should internally call getCumPct("X")
+    double pctY_deprecated = freq2.getPct("Y"); // This should internally call getCumPct("Y")
+    
+    // Call the non-deprecated method that should be correct
+    double pctX_current = freq2.getPct((Comparable<?>) "X"); // This calls the correct getPct(Comparable)
+    double pctY_current = freq2.getPct((Comparable<?>) "Y"); // This calls the correct getPct(Comparable)
+    
+    // Assert that the deprecated method's result is NOT what the current method returns for at least one case.
+    // If getPct(Object) calls getCumPct, and getCumPct("Y") is 1.0, while getPct("Y") is 1.0/3.0, then they differ.
+    
+    // The bug is that the deprecated method `getPct(Object)` is calling `getCumPct` internally.
+    // We need to show that this leads to incorrect results *if* the cumulative percentage
+    // differs from the individual percentage.
+    
+    // Let's assume the implementation of `getCumPct` is correct.
+    // The problem is that `getPct(Object)` is misconfigured.
+    
+    // Scenario: Add "A", "B", "A". Count = 3.
+    // getPct(Comparable).getPct("A") should be 2/3.
+    // getPct(Comparable).getPct("B") should be 1/3.
+    // getCumPct("A") should be 2/3.
+    // getCumPct("B") should be 3/3 = 1.0.
+    
+    // The bug: getPct(Object).getPct("A") calls getCumPct("A") which is 2/3. (Correct for this case)
+    // The bug: getPct(Object).getPct("B") calls getCumPct("B") which is 1.0. (Incorrect, should be 1/3)
+    
+    Frequency freq3 = new Frequency();
+    freq3.addValue("A");
+    freq3.addValue("B");
+    freq3.addValue("A");
+    
+    // Test the deprecated method
+    double deprecatedPctA = freq3.getPct("A");
+    double deprecatedPctB = freq3.getPct("B");
+    
+    // Test the current method
+    double currentPctA = freq3.getPct((Comparable<?>) "A");
+    double currentPctB = freq3.getPct((Comparable<?>) "B");
+    
+    // Assert that the deprecated method's result for "B" is different from the current method's result for "B".
+    // This difference arises because deprecatedPctB is using getCumPct("B") (which is 1.0),
+    // while currentPctB is using getPct("B") (which is 1/3).
+    
+    // Use a tolerance for double comparisons
+    double tolerance = 1e-9;
+    
+    // This assertion specifically targets the case where the cumulative percentage differs
+    // from the individual percentage for an element.
+    assertNotEquals(currentPctB, deprecatedPctB, tolerance);
+    
+    // Optionally, assert the expected values for clarity, though the core bug is the difference.
+    // assertEquals(2.0/3.0, currentPctA, tolerance);
+    // assertEquals(1.0/3.0, currentPctB, tolerance);
+    // assertEquals(2.0/3.0, deprecatedPctA, tolerance); // This would be correct by chance
+    // assertEquals(1.0, deprecatedPctB, tolerance);     // This is the incorrect cumulative value
+}

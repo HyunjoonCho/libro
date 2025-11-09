@@ -1,0 +1,85 @@
+public void testIssue124() {
+    DateTime britishDate = new DateTime(2011, 10, 30, 1, 59, 0, 0, DateTimeZone.forID("Europe/London"));
+    DateTime norwDate = new DateTime(2011, 10, 30, 2, 59, 0, 0, DateTimeZone.forID("Europe/Oslo"));
+    DateTime finnishDate = new DateTime(2011, 10, 30, 3, 59, 0, 0, DateTimeZone.forID("Europe/Helsinki"));
+
+    // In Europe/London, the clocks go back from 02:00 to 01:00 on Oct 30, 2011.
+    // This means 01:59 exists twice. The previous behavior was to pick the earlier
+    // instant (which was BST, UTC+1). The new behavior in 2.0 picks the later
+    // instant (which is GMT, UTC+0). The bug report states the output for
+    // britishDate should be 2011-10-30T01:59:00.000+01:00, indicating it expects
+    // the earlier instant (BST).
+    // The issue states "it always returns the earlier instant (summer time) during an overlap."
+    // However, the example output for britishDate in the bug report is "2011-10-30T01:59:00.000Z"
+    // which is UTC. This is inconsistent with the description of the expected output.
+    // Let's assert against the described expected output for British time, which is +01:00.
+    // The other timezones should be consistent with the description of picking the earlier instant.
+
+    // Assert for Europe/London, expecting the earlier instant (BST, UTC+1) as per the bug report's desired output.
+    // If the bug is indeed that it picks the *later* instant, this test will fail and demonstrate the issue.
+    // The bug report's example output for britishDate is "2011-10-30T01:59:00.000Z", which is UTC.
+    // However, the text states "Correct output should have been 2011-10-30T01:59:00.000+01:00".
+    // We will test against the textual description of the correct output.
+    assertEquals("Europe/London incorrect date interpretation", DateTimeZone.forID("Europe/London"), britishDate.getZone());
+    assertEquals("Europe/London incorrect instant", 1319881140000L, britishDate.getMillis()); // Corresponds to 2011-10-30T01:59:00.000+01:00
+
+    // For Oslo and Helsinki, which are east of London, the DST transition happens later.
+    // The bug description implies that the interpretation of the *ambiguous* hour in London
+    // affects how other timezones are interpreted, or that the general rule for DST
+    // transitions has changed in a way that is incorrect for Europe/London.
+    // Let's check the other timezones based on the release notes: "it always returns the earlier instant (summer time) during an overlap."
+    // For Oslo and Helsinki, the clocks also go back.
+    // 2011-10-30 02:00 CET (UTC+2) -> 01:00 CEST (UTC+1) in Oslo
+    // 2011-10-30 03:00 EET (UTC+3) -> 02:00 EEST (UTC+2) in Helsinki
+    // The provided times (2:59 in Oslo, 3:59 in Helsinki) are *before* the clock change in those zones.
+    // The issue is about the *ambiguous* hour in London.
+    // The times given for Oslo and Helsinki are likely meant to be compared to London's ambiguous hour.
+    // The bug report states the output for norwDate is "2011-10-30T02:59:00.000+02:00" and finnishDate is "2011-10-30T03:59:00.000+03:00" in jodatime 1.6.2.
+    // In 2.0, it's "+02:00" and "+03:00" respectively. This seems to be the correct offset for those times.
+    // The problem is specifically with Europe/London's interpretation of the ambiguous hour.
+    // The new behavior for Europe/London is to pick the *later* instant (UTC+0).
+    // The old behavior picked the *earlier* instant (UTC+1).
+    // The bug report wants the *earlier* instant (UTC+1).
+
+    // Let's verify the Oslo and Helsinki times are consistent with London's time.
+    // If britishDate represents 01:59 BST (UTC+1), then:
+    // Oslo (UTC+1 during summer, UTC+0 during winter) should be 01:59 CEST initially, then 00:59 CET.
+    // Helsinki (UTC+2 during summer, UTC+1 during winter) should be 01:59 EEST initially, then 00:59 EET.
+    // This interpretation is getting complicated. The core of the bug is the handling of the ambiguous hour *in London*.
+
+    // The bug states: "Using jodatime 2.0 however, the output is:
+    // 2011-10-30T01:59:00.000Z
+    // 2011-10-30T02:59:00.000+02:00
+    // 2011-10-30T03:59:00.000+03:00"
+    // The bug also states: "Correct output should have been
+    // 2011-10-30T01:59:00.000+01:00"
+
+    // The failure is that britishDate is interpreted as UTC+0 instead of UTC+1.
+    // The test should assert that britishDate.getMillis() corresponds to the UTC+1 interpretation.
+    // The original code creates DateTime objects with specific local times and zones.
+    // The problem is how joda-time interprets these local times when they fall into an ambiguous hour.
+    // The fix states: "it always returns the earlier instant (summer time) during an overlap."
+    // The bug report states the output for britishDate should be 2011-10-30T01:59:00.000+01:00.
+    // This means the 01:59 hour in London on that day should be interpreted as the *earlier* occurrence, which was during BST (UTC+1).
+    // In joda-time 2.0, it seems to be interpreting it as the *later* occurrence, which was during GMT (UTC+0).
+
+    // Asserting against the millisecond value that corresponds to 2011-10-30T01:59:00.000+01:00
+    // This millisecond value is 1319881140000L
+    assertEquals("Europe/London should interpret ambiguous hour as earlier instant (BST)",
+                 1319881140000L, britishDate.getMillis());
+
+    // The problem description focuses on the Europe/London timezone. The behavior for Oslo and Helsinki
+    // might be correct in 2.0, or their description in the bug report might be misleading.
+    // The core issue is the interpretation of the ambiguous hour in Europe/London.
+    // Let's add assertions for Oslo and Helsinki based on the output from joda-time 2.0,
+    // as the bug report implies the problem is *only* with London.
+    // The 2.0 output for Oslo is 2011-10-30T02:59:00.000+02:00.
+    // The 2.0 output for Helsinki is 2011-10-30T03:59:00.000+03:00.
+    // These offsets seem correct for the given local times *before* the DST transition in those zones.
+    // The problem is that the transition in London creates an overlap, and 2.0's handling of that overlap is what's being questioned.
+    // The bug is that the `britishDate` is being interpreted as UTC+0 instead of UTC+1.
+    // The test should fail if `britishDate` is UTC+0.
+    // The millisecond value for 2011-10-30T01:59:00.000Z (UTC+0) is 1319877540000L.
+    // The millisecond value for 2011-10-30T01:59:00.000+01:00 (UTC+1) is 1319881140000L.
+    // The test is designed to fail if the `britishDate` is interpreted as UTC+0.
+}

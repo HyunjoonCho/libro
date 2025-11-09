@@ -1,0 +1,174 @@
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Date;
+
+import static org.junit.Assert.assertTrue;
+
+public class DateTimeSerializerTest {
+
+    @Test
+    public void testSerializerIgnoresConfiguredFormat() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Ensure default format is not used by default
+
+        SimpleBean bean = new SimpleBean();
+        String json = mapper.writeValueAsString(bean);
+
+        // This assertion checks if the output uses the ISO8601 format,
+        // which is the default for StdDateFormat when no pattern is specified.
+        // If the serializer were correctly using the configured format (or lack thereof leading to a specific default),
+        // this test might fail or pass depending on the exact default behavior.
+        // However, the bug description implies it *always* falls back to ISO8601
+        // even when a custom format *could* have been inferred or applied.
+        // For this test to specifically reproduce the bug, we need to check for the *incorrect* format.
+        // Since the bug description states it falls back to DATE_FORMAT_STR_ISO8601,
+        // we will assert that the output is NOT a timestamp.
+        // A more precise test would require a bean with a @JsonFormat annotation.
+
+        // Let's refine the test to use @JsonFormat as described in the bug.
+        ObjectMapper mapperWithFormat = new ObjectMapper();
+        String jsonWithFormat = mapperWithFormat.writeValueAsString(new SimpleBeanWithFormat());
+
+        // The bug states that @JsonFormat is ignored and it falls back to ISO8601.
+        // If @JsonFormat was respected, and no pattern was given, it might use a different default or the configured one.
+        // However, the bug is specifically about `createContextual` ignoring the *actual* format.
+        // Let's assume the intent is that it should *not* be ISO8601 if a custom format was intended.
+        // The simplest reproduction is to show that even with a custom pattern, it reverts.
+
+        ObjectMapper mapperWithCustomFormat = new ObjectMapper();
+        mapperWithCustomFormat.enable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Ensure we are not dealing with timestamps
+
+        String jsonCustomFormat = mapperWithCustomFormat.writeValueAsString(new SimpleBeanWithCustomFormat());
+
+        // The bug states it falls back to StdDateFormat.DATE_FORMAT_STR_ISO8601.
+        // So, the output should NOT contain the custom pattern "yyyy-MM-dd'T'HH:mm:ss.SSSZ".
+        // Instead, it should be in ISO8601 format.
+        // The problem description implies that even if you provide a custom format, it gets reset.
+        // Let's check for the absence of the custom format and presence of ISO8601.
+
+        // The bug is that createContextual uses StdDateFormat.DATE_FORMAT_STR_ISO8601
+        // instead of format.getPattern() or the configured format.
+        // So, if we provide a custom format via @JsonFormat, it should be used.
+        // The bug says it's *not* used and reverts to ISO8601.
+
+        // Let's construct a test that *expects* the ISO8601 format due to the bug.
+        // This means the custom format specified in @JsonFormat is ignored.
+
+        ObjectMapper mapperBug = new ObjectMapper();
+        // We don't need to enable/disable WRITE_DATES_AS_TIMESTAMPS for this specific bug,
+        // as it's about the format string itself.
+
+        String resultJson = mapperBug.writeValueAsString(new BeanWithIgnoredFormat());
+
+        // According to the bug, the format should be StdDateFormat.DATE_FORMAT_STR_ISO8601
+        // even though we specified "yyyy-MM-dd".
+        // So, the output should NOT be "yyyy-MM-dd". It should be ISO8601.
+        // A simple check is to see if it contains hyphens and colons typical of ISO8601.
+        // A more robust check would parse it back, but for reproducing the failure,
+        // checking the string representation is sufficient.
+
+        // Let's assume the default ISO8601 format is something like "2023-10-27T10:00:00.000+0000"
+        // The bug implies that "2023-10-27" will NOT be the output.
+
+        // The bug description implies that the `pattern` variable inside `createContextual`
+        // will be `StdDateFormat.DATE_FORMAT_STR_ISO8601` even if `format.hasPattern()` is true
+        // and `format.getPattern()` would return something else.
+        // This means the serializer will *always* use ISO8601 if no specific format is provided in @JsonFormat,
+        // or if the provided format is empty.
+        // The bug is more subtle: it ignores the *configured* date format.
+
+        // Let's create a scenario where a custom format is configured on the ObjectMapper itself,
+        // and then use @JsonFormat on a field. The bug suggests the @JsonFormat format is ignored,
+        // and the serializer falls back to ISO8601.
+
+        ObjectMapper mapperWithConfiguredFormat = new ObjectMapper();
+        // Configure a specific date format on the mapper
+        java.text.SimpleDateFormat configuredSdf = new java.text.SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+        mapperWithConfiguredFormat.setDateFormat(configuredSdf);
+
+        // Now, serialize a bean with @JsonFormat that *doesn't* specify a pattern,
+        // but should inherit the configured format. The bug suggests it will ignore
+        // the configured format and use ISO8601.
+        String jsonFromConfiguredMapper = mapperWithConfiguredFormat.writeValueAsString(new SimpleBeanWithFormat());
+
+        // The bug states that createContextual creates a new serializer with StdDateFormat.DATE_FORMAT_STR_ISO8601.
+        // This means the output should be in ISO8601 format, *not* the configured "yyyy/MM/dd HH:mm:ss" format.
+        // We expect the output to contain 'T' and ':' for time, typical of ISO8601.
+        // We expect the output to *not* contain '/'.
+
+        // Example of expected ISO8601 output: "2023-10-27T10:30:00.123+0000"
+        // Example of undesired output (if bug was fixed): "2023/10/27 10:30:00"
+
+        // The most direct reproduction is to show that @JsonFormat, even without a pattern,
+        // causes a fallback to ISO8601 when it shouldn't.
+
+        ObjectMapper mapperReproducingBug = new ObjectMapper();
+        String output = mapperReproducingBug.writeValueAsString(new BeanWithJsonFormat());
+
+        // The bug description says: "creates a new serializer with StdDateFormat.DATE_FORMAT_STR_ISO8601 format"
+        // This implies that if @JsonFormat is present, even if it doesn't specify a pattern,
+        // it will default to ISO8601 instead of using the ObjectMapper's configured format or a sensible default.
+        // Let's check if the output is indeed in ISO8601 format.
+        // A simple check is to look for the presence of 'T' and ':' which are characteristic of ISO8601.
+        // The absence of '/' (from the configured format) would also be indicative.
+
+        // We need to ensure the ObjectMapper itself doesn't default to WRITE_DATES_AS_TIMESTAMPS
+        // because that would produce a long integer, not a formatted string.
+        mapperReproducingBug.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+        String outputString = mapperReproducingBug.writeValueAsString(new BeanWithJsonFormat());
+
+        // The bug says it falls back to StdDateFormat.DATE_FORMAT_STR_ISO8601.
+        // This format is like "yyyy-MM-dd'T'HH:mm:ss.SSSZ".
+        // So we expect the output to contain 'T', ':', and '.' for milliseconds.
+        // We also expect it *not* to contain '/' which would be in the configured format.
+        assertTrue("Output should be in ISO8601 format due to the bug, not using configured format.",
+                   outputString.contains("T") && outputString.contains(":") && outputString.contains("."));
+
+        // Let's also create a bean with a custom pattern in @JsonFormat to see if that's also ignored.
+        ObjectMapper mapperCustomPatternBug = new ObjectMapper();
+        mapperCustomPatternBug.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        String outputCustomPattern = mapperCustomPatternBug.writeValueAsString(new BeanWithCustomJsonFormatPattern());
+
+        // The bug states that `createContextual` creates a new serializer with `StdDateFormat.DATE_FORMAT_STR_ISO8601`.
+        // This implies that even if we specify a custom pattern in @JsonFormat, it will be overridden by ISO8601.
+        // So, the output should NOT match the custom pattern "yyyy-MM-dd".
+        // It should be in ISO8601 format.
+        assertTrue("Output should be in ISO8601 format due to the bug, ignoring custom @JsonFormat pattern.",
+                   outputCustomPattern.contains("T") && outputCustomPattern.contains(":") && outputCustomPattern.contains("."));
+    }
+
+    // Helper classes for testing
+    public static class SimpleBean {
+        public Date date = new Date(1698395400000L); // Example date
+    }
+
+    public static class SimpleBeanWithFormat {
+        @JsonFormat
+        public Date date = new Date(1698395400000L); // Example date, @JsonFormat without pattern
+    }
+
+    public static class SimpleBeanWithCustomFormat {
+        @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSZ")
+        public Date date = new Date(1698395400000L); // Example date
+    }
+
+    public static class BeanWithIgnoredFormat {
+        @JsonFormat
+        public Date date = new Date(1698395400000L); // Example date
+    }
+
+    public static class BeanWithJsonFormat {
+        @JsonFormat // No pattern specified, should inherit from ObjectMapper or use default
+        public Date date = new Date(1698395400000L); // Example date
+    }
+
+    public static class BeanWithCustomJsonFormatPattern {
+        @JsonFormat(pattern = "yyyy-MM-dd") // Custom pattern
+        public Date date = new Date(1698395400000L); // Example date
+    }
+}

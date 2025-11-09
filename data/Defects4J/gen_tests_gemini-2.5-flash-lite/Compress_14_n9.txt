@@ -1,0 +1,268 @@
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.junit.jupiter.api.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+public class TarArchiveInputStreamAixSymlinkTest {
+
+    @Test
+    public void testAixSymlinkTarFile() throws IOException {
+        // This is a simplified representation of a tar header for a symlink
+        // created on AIX. The actual header might be more complex and contain
+        // specific AIX extensions. The key issue is that the mode field might
+        // not be purely octal or might have unexpected values causing parse errors.
+        // For the purpose of reproducing the error, we craft a minimal header
+        // that is likely to trigger the "Invalid byte 0 at offset 0" error
+        // in TarUtils.parseOctal if not handled correctly.
+        // The error message "Invalid byte 0 at offset 0 in '{NUL}1722000726 ' len=12"
+        // suggests that the mode field is being misinterpreted.
+        // A common cause is that AIX tar might store lengths or modes in a way
+        // that is not strictly standard POSIX tar, leading to issues with
+        // octal parsing.
+
+        // Constructing a byte array that mimics a tar entry with a symlink.
+        // This is a highly simplified and likely incomplete representation,
+        // as the exact AIX tar header format can be complex and version-dependent.
+        // The goal is to create a stream that will cause TarArchiveInputStream
+        // to attempt to parse a problematic header field, specifically the mode field.
+        // The original error message "Invalid byte 0 at offset 0 in '{NUL}1722000726 ' len=12"
+        // indicates an issue with parsing an octal number (mode) where the first
+        // byte is NUL, which is invalid.
+
+        // A more robust test would involve creating a real AIX tar file with symlinks
+        // and then reading it. However, for a self-contained unit test, we simulate
+        // a problematic header. The following byte array is a placeholder to demonstrate
+        // the concept of the issue. A real fix would involve better handling of
+        // non-standard header fields or specific AIX extensions.
+
+        // Placeholder byte array - a real AIX tar with symlink is needed for accurate reproduction.
+        // This example aims to trigger the parsing error by providing data that
+        // might be misinterpreted as an octal field.
+        byte[] tarHeader = new byte[512]; // Standard tar header size
+
+        // Simulate a file name
+        String fileName = "symlink_to_file";
+        System.arraycopy(fileName.getBytes(), 0, tarHeader, 0, Math.min(fileName.length(), 100));
+
+        // Simulate mode (this is where the problem likely lies on AIX)
+        // Setting a value that might cause issues with standard octal parsing.
+        // The original error suggests a NUL byte at the beginning of an octal field.
+        // We'll try to simulate a problematic mode field.
+        // This is a guess, as the exact AIX format is not provided.
+        // Let's assume the mode field is being read incorrectly.
+        long mode = 0100644L; // Example mode for a regular file, symlinks have different modes
+        // TarUtils.parseOctal expects a string representation of the octal number.
+        // If AIX tar writes something else here, it could fail.
+        // Let's manually write a "problematic" octal string representation for mode.
+        // The error "Invalid byte 0 at offset 0" implies the first byte is NUL.
+        // Let's try to construct a header that might lead to this.
+        // A typical tar header contains fields like name, mode, uid, gid, size, mtime, etc.
+        // The error originates from TarUtils.parseOctal, which is used for mode, uid, gid, size, mtime.
+        // The error message "Invalid byte 0 at offset 0 in '{NUL}1722000726 ' len=12"
+        // suggests the mode field is being parsed, and it starts with a NUL byte.
+        // This is not a valid start for an octal number.
+
+        // Constructing a minimal tar header that might trigger the error.
+        // This is a highly speculative attempt to reproduce the described error
+        // without an actual AIX tar file.
+        // The fields need to be in the correct order and format for a tar header.
+
+        // A more direct way to reproduce the error would be to find a sample AIX tar file
+        // with a symlink and use that. Since we cannot create one easily in a unit test,
+        // we'll try to simulate the problematic header bytes.
+
+        // Let's assume the issue is with the mode field being parsed.
+        // TarUtils.parseOctal is called on a String. The error suggests that
+        // when reading the header, a NUL byte is encountered where an octal digit is expected.
+
+        // This test case is a placeholder. A real reproduction would require
+        // an actual tar file created by AIX tar with symlinks.
+        // The goal here is to show that if such a file *were* processed,
+        // and it contained a header that leads to the described exception,
+        // the test should catch it.
+
+        // Since we cannot reliably create the problematic AIX tar file within a unit test,
+        // we'll create a mock InputStream that *simulates* the problematic header bytes.
+        // This requires knowledge of the tar header structure.
+
+        // A standard tar header block is 512 bytes.
+        // Fields: name (100), mode (8), uid (8), gid (8), size (12), mtime (12), chksum (8), typeflag (1), linkname (100), ...
+
+        byte[] problematicHeader = new byte[512];
+
+        // Name (up to 100 bytes)
+        String name = "my_symlink";
+        System.arraycopy(name.getBytes(), 0, problematicHeader, 0, name.length());
+
+        // Mode (8 bytes, octal) - This is the likely source of the error.
+        // The error message indicates a NUL byte at the start of the mode field.
+        // Let's simulate this by placing a NUL byte and then some digits.
+        // The error message mentions "{NUL}1722000726 ". This is 12 chars.
+        // The mode field is 8 bytes. This suggests the error might be in how
+        // the field is read or interpreted *before* TarUtils.parseOctal is called,
+        // or that the error message is slightly misleading about the exact offset.
+        // However, the core issue is the "Invalid byte 0".
+        // Let's try to put a NUL byte followed by some octal digits in the mode field.
+        problematicHeader[100] = 0; // NUL byte
+        String problematicModeStr = "1722000"; // 7 digits, total 8 bytes with trailing space/NUL
+        System.arraycopy(problematicModeStr.getBytes(), 0, problematicHeader, 101, problematicModeStr.length());
+
+        // Other fields would follow, but we focus on the mode.
+        // Let's ensure the rest of the header is zero-filled as typical.
+        // The checksum field (bytes 148-155) is critical. It's calculated over the header.
+        // If we modify the header, the checksum will be invalid, which TarArchiveInputStream checks.
+        // The error "Error detected parsing the header" might come from the checksum check *after*
+        // the invalid mode parsing attempt, or the invalid mode parsing itself.
+
+        // Let's try to provide a valid checksum for the *modified* header.
+        // This is complex to calculate manually. For simplicity, let's zero out the checksum
+        // and see if the error persists. The error seems to be *during* parsing, not after.
+
+        // Typeflag (byte 156) - '2' for symlink
+        problematicHeader[156] = (byte) '2';
+
+        // Link name (up to 100 bytes) - the target of the symlink
+        String linkName = "target_file";
+        System.arraycopy(linkName.getBytes(), 0, problematicHeader, 257, linkName.length());
+
+        // Padding the rest of the header block with zeros.
+        // Note: The actual tar format requires null padding.
+
+        // We need to provide at least one entry, so the stream needs to contain
+        // at least one full 512-byte block representing the header, followed by
+        // the data block (if any) and the next header block.
+        // For a symlink, the size field (bytes 124-135) should be the length of the link name.
+
+        // Let's recalculate the size field based on the linkName length.
+        long linkNameLength = linkName.length();
+        String sizeStr = String.format("%11s", Long.toOctalString(linkNameLength)).replace(' ', '0');
+        System.arraycopy(sizeStr.getBytes(), 0, problematicHeader, 124, sizeStr.length());
+
+        // Calculate and set the checksum. This is crucial.
+        long chksum = 0;
+        for (int i = 0; i < 512; i++) {
+            chksum += problematicHeader[i];
+        }
+        String chksumStr = String.format("%6s", Long.toOctalString(chksum)).replace(' ', '0');
+        System.arraycopy(chksumStr.getBytes(), 0, problematicHeader, 148, chksumStr.length());
+        problematicHeader[156] = (byte) '0'; // Null terminator for checksum field
+
+
+        // Now, let's re-apply the mode field issue, knowing the checksum calculation context.
+        // If we modify the mode field *after* checksum calculation, the checksum becomes invalid.
+        // The goal is to reproduce the *original* error: "Invalid byte 0 at offset 0".
+        // This error comes from TarUtils.parseOctal.
+
+        // Let's try to force the problematic mode bytes directly.
+        byte[] headerWithProblematicMode = new byte[512];
+        // Copy a valid header structure, but inject the problematic mode.
+        // This is very difficult without a reference implementation or detailed spec.
+
+        // A simpler approach is to create a byte stream that *starts* with the problematic header bytes
+        // as described in the error message, assuming the error happens early in parsing.
+        // The error message: "Invalid byte 0 at offset 0 in '{NUL}1722000726 ' len=12"
+        // This implies the parser tried to read an octal string starting at offset 0,
+        // and found a NUL byte, which is invalid. This offset 0 is relative to the field being parsed.
+        // If it's the mode field, then the mode field starts with NUL.
+
+        // Let's construct a minimal tar entry header block that includes this problematic mode.
+        // We'll assume the name field is empty or short, and the mode field is the second field.
+        // Tar header structure:
+        // Offset | Field     | Size | Data Type
+        // -------|-----------|------|----------
+        // 0      | name      | 100  | String
+        // 100    | mode      | 8    | Octal String
+        // 108    | uid       | 8    | Octal String
+        // 116    | gid       | 8    | Octal String
+        // 124    | size      | 12   | Octal String
+        // 136    | mtime     | 12   | Octal String
+        // 148    | chksum    | 8    | Octal String (space padded)
+        // 156    | typeflag  | 1    | Char
+        // 157    | linkname  | 100  | String
+        // ...
+
+        // If the error is "Invalid byte 0 at offset 0", and it's parsing the mode field,
+        // it means `problematicHeader[100]` is 0.
+        byte[] testBytes = new byte[1024]; // Need at least one block + some padding
+        // Fill with zeros
+        for (int i = 0; i < testBytes.length; i++) {
+            testBytes[i] = 0;
+        }
+
+        // Set the name field (e.g., an empty name might cause issues, or a short one)
+        String testName = "testfile";
+        System.arraycopy(testName.getBytes(), 0, testBytes, 0, testName.length());
+
+        // Set the problematic mode field: starts with NUL
+        testBytes[100] = 0; // NUL byte
+        // The error message shows "{NUL}1722000726 ". This implies the parser is trying to read
+        // up to 12 characters, but the mode field is only 8. This suggests the parser might be reading
+        // beyond the intended field boundary or misinterpreting field lengths.
+        // Let's put the problematic string right after the NUL.
+        String problematicModeDigits = "1722000"; // 7 digits
+        System.arraycopy(problematicModeDigits.getBytes(), 0, testBytes, 101, problematicModeDigits.length());
+
+        // Set typeflag to indicate a symlink ('2')
+        testBytes[156] = (byte) '2';
+
+        // Set the size of the link name (which follows the header)
+        String linkTarget = "link_target";
+        long linkTargetSize = linkTarget.length();
+        String sizeOctal = String.format("%11s", Long.toOctalString(linkTargetSize)).replace(' ', '0');
+        System.arraycopy(sizeOctal.getBytes(), 0, testBytes, 124, sizeOctal.length());
+
+        // Set the link name itself
+        System.arraycopy(linkTarget.getBytes(), 0, testBytes, 257, linkTarget.length());
+
+
+        // Recalculate checksum for the modified header block (bytes 0-511)
+        long calculatedChecksum = 0;
+        for (int i = 0; i < 512; i++) {
+            calculatedChecksum += testBytes[i];
+        }
+        String checksumOctal = String.format("%6s", Long.toOctalString(calculatedChecksum)).replace(' ', '0');
+        System.arraycopy(checksumOctal.getBytes(), 0, testBytes, 148, checksumOctal.length());
+        // Null terminate the checksum field
+        testBytes[156] = (byte) ' '; // This should be a space after the 6 digits of checksum
+
+        // Reset typeflag to '2' for symlink, after checksum field
+        testBytes[156] = (byte) '2'; // Overwrite the space from checksum null termination
+
+        // Ensure the header block ends correctly (null padding)
+        // The rest of the 512 bytes should be zero.
+
+        // The actual data for the symlink (the link target string) follows the header.
+        // For a symlink, the size field indicates the length of the link target string.
+        // The link target string itself is not part of the header block, but follows it.
+        // So, the stream should contain:
+        // [512-byte header block] [link target string bytes] [next 512-byte header block] ...
+
+        // Let's create an InputStream with just this problematic header block.
+        // TarArchiveInputStream reads headers in 512-byte chunks.
+        InputStream inputStream = new ByteArrayInputStream(testBytes);
+
+        TarArchiveInputStream tarInputStream = null;
+        try {
+            tarInputStream = new TarArchiveInputStream(inputStream);
+            ArchiveEntry entry = tarInputStream.getNextTarEntry();
+            fail("Expected IOException due to invalid tar header");
+        } catch (IOException e) {
+            // Check if the exception message contains the expected error details.
+            // The original error was: "java.lang.IllegalArgumentException: Invalid byte 0 at offset 0 in '{NUL}1722000726 ' len=12"
+            // This exception is wrapped by TarArchiveInputStream's getNextTarEntry.
+            assertTrue(e.getMessage().contains("Error detected parsing the header"), "Expected error message about parsing header");
+            assertTrue(e.getCause() instanceof IllegalArgumentException, "Expected cause to be IllegalArgumentException");
+            assertEquals("Invalid byte 0 at offset 0", e.getCause().getMessage().substring(0, 26), "Expected specific invalid byte message");
+        } finally {
+            if (tarInputStream != null) {
+                tarInputStream.close();
+            }
+            inputStream.close();
+        }
+    }
+}

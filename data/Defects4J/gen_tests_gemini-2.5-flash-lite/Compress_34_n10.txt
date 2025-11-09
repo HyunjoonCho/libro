@@ -1,0 +1,209 @@
+public void testX7875_NewUnix_ParseZeroSizedUxLocalEntry() throws Exception {
+    // This test reproduces the ArrayIndexOutOfBoundsException in X7875_NewUnix.parseFromLocalFileData
+    // when encountering a 0-sized "ux" local entry.
+    // The byte array below simulates the 'data' buffer and parameters observed in the bug report.
+    byte[] data = {85, 84, 5, 0, 7, -112, -108, 51, 85, 117, 120, 0, 0}; // 'UT' (9 bytes) + 'ux' (4 bytes, 0-sized data)
+    int offset = 13;
+    int length = 0;
+
+    // We need to instantiate X7875_NewUnix and call its parseFromLocalFileData method.
+    // Since parseFromLocalFileData is not public, we'll use reflection.
+    // We also need to create a dummy ZipArchiveEntry to pass to the method.
+    // The X7875_NewUnix object itself doesn't need any specific state for this test.
+
+    java.lang.reflect.Method parseMethod = org.apache.commons.compress.archivers.zip.X7875_NewUnix.class.getDeclaredMethod("parseFromLocalFileData", byte[].class, int.class, int.class);
+    parseMethod.setAccessible(true);
+
+    org.apache.commons.compress.archivers.zip.ZipArchiveEntry entry = new org.apache.commons.compress.archivers.zip.ZipArchiveEntry("dummyEntry.txt");
+    org.apache.commons.compress.archivers.zip.ZipExtraField[] extraFields = new org.apache.commons.compress.archivers.zip.ZipExtraField[1];
+    extraFields[0] = new org.apache.commons.compress.archivers.zip.X7875_NewUnix(); // The extra field type we are testing
+
+    // Mocking the ZipArchiveEntry to have the extra field set, so that the parsing logic is triggered.
+    // This is a bit of a workaround as the actual parsing happens when setting extra fields.
+    // The original bug is in the parsing logic within X7875_NewUnix itself.
+    // We'll focus on calling the problematic method directly.
+
+    // Direct call to the non-public method to isolate the issue.
+    // We are asserting that this call *should not* throw an ArrayIndexOutOfBoundsException.
+    // The fix would involve checking the length before accessing array elements.
+    try {
+        parseMethod.invoke(new org.apache.commons.compress.archivers.zip.X7875_NewUnix(), data, offset, length);
+        // If no exception is thrown, the bug is fixed in the tested code.
+        // For a test that *reproduces* the failure, we would expect an exception here.
+        // However, the goal is to have a test that *would fail* if the bug were present.
+        // The assertion here is implicitly that no exception is thrown after the fix.
+        // If we were testing the *buggy* version, we would wrap this in assertThrows.
+        // Since we are writing a test *for* the bug, the test should be written such that
+        // it passes if the bug is fixed, and fails if the bug is present.
+        // Therefore, we don't assert for an exception here, but rather expect the code
+        // to execute without error. The *absence* of an exception is the success condition.
+
+        // To explicitly show what the *original* failure was, we can do this:
+        // Note: This part is for demonstration of the original failure. In a real test suite,
+        // you would write a test that *passes* with the fix.
+        try {
+            // We need to simulate the state where the exception occurs.
+            // The exception happens because the code tries to read more data than available.
+            // The 'offset' in the bug report is 13, and 'length' is 0.
+            // The code inside parseFromLocalFileData reads based on the 'length' and potentially headers.
+            // For the 'ux' field, it expects 4 bytes for UID/GID. If length is 0, it should handle it.
+            // The bug is likely in how it handles length 0 or small lengths.
+
+            // Let's craft a scenario that triggers the specific line:
+            // data = {byte[13]@2103}
+            // 0 = 85 ('U')
+            // 1 = 84 ('T')
+            // 2 = 5 (UT size)
+            // 3 = 0
+            // 4 = 7 (UX ID)
+            // 5 = -112
+            // 6 = -108
+            // 7 = 51
+            // 8 = 85 ('U')
+            // 9 = 117 ('x')
+            // 10 = 120 ('x')
+            // 11 = 0 (UX size)
+            // 12 = 0 (UX size)
+            // offset = 13
+            // length = 0
+
+            // The method tries to read length (4 bytes for UID/GID) starting from offset.
+            // If length is 0, it should not attempt to read.
+            // The ArrayIndexOutOfBoundsException at line 199 suggests it's trying to access data[offset + i]
+            // where offset + i is out of bounds.
+
+            // Let's simulate the call that would have thrown the exception.
+            // The parseFromLocalFileData method is called with the extra field data.
+            // The 'ux' extra field has an ID of 0x7578 (UX) and a size of 0.
+            // The 'UT' extra field has an ID of 0x5455 (UT) and a size of 5.
+            // The 'data' buffer contains the extra field data concatenated.
+            // The structure is: [UT_ID][UT_SIZE][UT_DATA][UX_ID][UX_SIZE][UX_DATA]
+            // UT_ID: 0x5455 (84, 85)
+            // UT_SIZE: 5
+            // UT_DATA: 7, -112, -108, 51, 85 (5 bytes)
+            // UX_ID: 0x7875 (117, 120, 0, 0) - Wait, the bug report says 'ux' is bytes 9-12, which is 117, 120, 0, 0. This is 'ux' followed by size 0.
+            // The provided data seems to have 'UT' followed by some data, then 'ux' followed by size 0.
+            // The bug report states: "The zip file does contain two .jpg images ... The data comes from the local zip entry for the first file".
+            // It seems the 'UT' part is for the timestamp.
+
+            // Let's reconstruct the call that *would* fail.
+            // The `parseFromLocalFileData` method is called for *each* extra field.
+            // The `data` buffer passed to it is the *entire* extra data for the entry.
+            // The `offset` and `length` indicate the start and size of the *current* extra field being parsed.
+
+            // In the bug report:
+            // data = {byte[13]@2103}
+            // offset = 13
+            // length = 0
+            // This implies that the `parseFromLocalFileData` method is being called to parse an extra field
+            // that starts at index 13 and has a length of 0.
+            // However, the `X7875_NewUnix` class itself represents *one* type of extra field.
+            // The `ExtraFieldUtils.parse` method is responsible for iterating through all extra fields.
+
+            // The `parseFromLocalFileData` method is called with the `data` buffer containing the raw extra field bytes,
+            // and `offset` and `length` pointing to the specific extra field being processed.
+            // The `X7875_NewUnix` object is instantiated, and its `parse` method (which calls `parseFromLocalFileData`) is invoked.
+
+            // Let's assume the `X7875_NewUnix` object has been created and `parse` is called.
+            // The `parse` method usually takes `byte[] data` and `int offset`, `int length`.
+            // It then tries to parse the header and then calls `parseFromLocalFileData`.
+            // The bug report's `data` array {85, 84, 5, 0, 7, -112, -108, 51, 85, 117, 120, 0, 0}
+            // likely represents the *entire* extra field data for an entry.
+            // Let's break it down:
+            // Bytes 0-1: Header ID (0x5455 - UT)
+            // Bytes 2-3: Data size (5)
+            // Bytes 4-8: UT data (5 bytes)
+            // Bytes 9-10: Header ID (0x7875 - ux)
+            // Bytes 11-12: Data size (0)
+
+            // The `ExtraFieldUtils.parse` method would iterate.
+            // It would first find the UT field (ID 0x5455, size 5).
+            // Then it would find the UX field (ID 0x7875, size 0).
+            // The exception occurs when parsing the UX field.
+            // The `parseFromLocalFileData` is called with `data` = the entire buffer, `offset` = start of UX field, `length` = size of UX field.
+            // So, for the UX field:
+            // `data` = {85, 84, 5, 0, 7, -112, -108, 51, 85, 117, 120, 0, 0}
+            // `offset` = 9 (start of UX ID)
+            // `length` = 0 (size of UX data)
+
+            // Let's try to call `parse` method of `X7875_NewUnix` directly.
+            // The `parse` method expects `data` and `offset` and `length` referring to the *specific* extra field.
+            // It first reads the header (ID and Size).
+            // Then it calls `parseFromLocalFileData` with the actual data part.
+
+            // Let's set up the data for the UX field specifically.
+            byte[] uxData = {117, 120, 0, 0}; // UX ID + Size 0
+            int uxOffset = 0; // Offset within this uxData buffer
+            int uxLength = 0; // Size of the data payload
+
+            // We need to instantiate X7875_NewUnix and call its parse method.
+            // The parse method is public.
+            org.apache.commons.compress.archivers.zip.X7875_NewUnix uxExtraField = new org.apache.commons.compress.archivers.zip.X7875_NewUnix();
+
+            // The original exception was in `parseFromLocalFileData`. Let's try to call that directly.
+            // It takes `byte[] data`, `int offset`, `int length`.
+            // The `data` here is the *full* extra field data.
+            // The `offset` is the start of the *current* extra field.
+            // The `length` is the *total length* of the extra field data.
+
+            // Re-interpreting the bug report:
+            // "data = {byte[13]@2103} ... offset = 13, length = 0"
+            // This refers to the *arguments* passed to `parseFromLocalFileData`.
+            // This implies that `parseFromLocalFileData` is called to parse an extra field of length 0,
+            // starting at index 13 within some larger buffer.
+            // However, `X7875_NewUnix` is a specific extra field type.
+            // The `parse` method of `X7875_NewUnix` is supposed to parse *itself* from a buffer.
+            // It reads the header (ID and Size) and then calls `parseFromLocalFileData`.
+
+            // Let's simulate the call to `parse` that would lead to the exception.
+            // The `parse` method:
+            // `headerId = ZipExtraFieldUtils.shortFromBytes(data, offset);`
+            // `size = ZipExtraFieldUtils.shortFromBytes(data, offset + 2);`
+            // `parseFromLocalFileData(data, offset + 4, size);`
+
+            // For the UX field:
+            // `data` buffer (full extra data): {85, 84, 5, 0, 7, -112, -108, 51, 85, 117, 120, 0, 0}
+            // `offset` for UX field: 9
+            // `headerId` = short from data[9], data[10] => 0x7875 (117, 120)
+            // `size` = short from data[11], data[12] => 0x0000 (0, 0)
+            // `parseFromLocalFileData(data, 9 + 4, 0)` => `parseFromLocalFileData(data, 13, 0)`
+            // This matches the bug report's parameters!
+
+            // So, the test needs to call `parse` with these parameters.
+            byte[] fullExtraData = {85, 84, 5, 0, 7, -112, -108, 51, 85, 117, 120, 0, 0};
+            int uxFieldOffset = 9; // Start of UX field in the fullExtraData
+
+            // We need to ensure that calling `parse` with data representing the UX field
+            // causes `parseFromLocalFileData` to be called with `offset = 13` and `length = 0`.
+            // And that this call throws `ArrayIndexOutOfBoundsException`.
+
+            // To reproduce the failure, we wrap the call in `assertThrows`.
+            org.junit.jupiter.api.Assertions.assertThrows(
+                java.lang.ArrayIndexOutOfBoundsException.class,
+                () -> {
+                    org.apache.commons.compress.archivers.zip.X7875_NewUnix field = new org.apache.commons.compress.archivers.zip.X7875_NewUnix();
+                    // Call the parse method which internally calls parseFromLocalFileData
+                    field.parse(fullExtraData, uxFieldOffset, fullExtraData.length - uxFieldOffset);
+                },
+                "Should throw ArrayIndexOutOfBoundsException for 0-sized UX local entry"
+            );
+
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            // Unwrap the actual exception if needed
+            throw (ArrayIndexOutOfBoundsException) e.getCause();
+        }
+    } catch (Exception e) {
+        // If the test is run against a fixed version, and no exception is thrown,
+        // this catch block would be reached. This is the success path for a fixed version.
+        // For a test that *reproduces* the failure, we expect the assertThrows to catch it.
+        // If we reach here, it means the exception wasn't thrown, implying a fix.
+        // This test method is designed to *fail* if the bug is present.
+        // So, if we reach here, it means the test environment *doesn't* have the bug,
+        // or the test setup is incorrect.
+        // For the purpose of *reproducing the failure*, the `assertThrows` is the key.
+        // If the `assertThrows` passes, it means the exception was caught as expected.
+        // If the `assertThrows` fails (i.e., no exception was thrown), then the test fails,
+        // indicating the bug is not present or the test is wrong.
+        throw new AssertionError("Unexpected exception during test setup or execution.", e);
+    }
+}

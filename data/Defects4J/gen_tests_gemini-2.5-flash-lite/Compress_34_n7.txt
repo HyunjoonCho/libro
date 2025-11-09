@@ -1,0 +1,106 @@
+public void testZipWithZeroSizedUxField() throws Exception {
+    // This test creates a zip file with a specific structure that triggers the bug.
+    // The structure includes a zero-sized "ux" extra field in the local file data,
+    // which causes ArrayIndexOutOfBoundsException in Commons Compress.
+
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    try (ZipArchiveOutputStream zaos = new ZipArchiveOutputStream(baos)) {
+        // Create a zip entry
+        ZipArchiveEntry entry = new ZipArchiveEntry("test.txt");
+        zaos.putArchiveEntry(entry);
+
+        // Add the "ux" extra field with zero size
+        // The format is: EF_ID (2 bytes) + Data Size (2 bytes) + Data
+        // EF_ID for Unix (0x7875)
+        // Data Size = 0
+        byte[] uxExtraField = new byte[] {0x78, 0x75, 0x00, 0x00};
+        zaos.addExtraField(new ZipExtraField() {
+            @Override
+            public byte[] getLocalFileDataData() {
+                return new byte[0]; // Zero-sized data
+            }
+
+            @Override
+            public ZipShort getHeaderId() {
+                return new ZipShort(0x7875); // Unix extra field ID
+            }
+
+            @Override
+            public byte[] getCentralDirectoryData() {
+                return getLocalFileDataData(); // For this bug, we focus on local file data
+            }
+
+            @Override
+            public void parseFromLocalFileData(byte[] buffer, int offset, int length) throws ZipException {
+                // This is the method that will be called and should handle zero length gracefully.
+                // The bug occurs when it tries to read past the available data.
+                if (length != 0) {
+                    throw new ZipException("Expected zero length for ux extra field data");
+                }
+                // No-op, gracefully handle zero length
+            }
+
+            @Override
+            public void parseFromCentralDirectoryData(byte[] buffer, int offset, int length) throws ZipException {
+                // Not directly relevant to the bug described, but required by interface
+            }
+        });
+
+        zaos.write("This is a test file.".getBytes());
+        zaos.closeArchiveEntry();
+    }
+
+    byte[] zipContent = baos.toByteArray();
+
+    // Now, attempt to parse this zip file. This should not throw an exception.
+    // We use a Tika detector as described in the bug, but we can also directly
+    // test the Commons Compress part if Tika is not available or for a more focused test.
+    // For the purpose of reproducing the bug, we'll simulate the call that leads to it.
+
+    // Simulate the call to ZipFile which internally uses ExtraFieldUtils.parse
+    // and then X7875_NewUnix.parseFromLocalFileData
+    try (ByteArrayInputStream bais = new ByteArrayInputStream(zipContent);
+         ArchiveInputStream ais = new ArchiveStreamFactory().createArchiveInputStream("zip", bais)) {
+
+        ArchiveEntry entry;
+        while ((entry = ais.getNextEntry()) != null) {
+            if (entry.getName().equals("test.txt")) {
+                // The parsing of extra fields happens implicitly when getNextEntry() is called
+                // or when reading the entry's data. The bug is in the extra field parsing logic.
+                // We don't need to read the content itself to trigger the bug.
+                assertTrue("Entry should be a ZipArchiveEntry", entry instanceof ZipArchiveEntry);
+                ZipArchiveEntry zipEntry = (ZipArchiveEntry) entry;
+
+                // Retrieve the extra fields to ensure they were processed.
+                // If the bug is fixed, this access should not throw an exception.
+                ZipShort.valueOf(0x7875); // Check if the Unix extra field ID is present
+                assertNotNull("Unix extra field should be present", zipEntry.getExtraField(ZipShort.valueOf(0x7875)));
+                // The actual parsing of the data happens within getExtraField or implicitly
+                // during getNextEntry(). The test relies on the fact that if the parsing
+                // fails, an exception will be thrown *before* this point.
+                // We can explicitly try to get the data, but the exception usually happens earlier.
+                // zipEntry.getExtraField(ZipShort.valueOf(0x7875)).getLocalFileDataData(); // This might also trigger it
+
+                // If we reach here, the parsing of the zero-sized ux field did not cause an exception.
+                // The original bug report indicated an ArrayIndexOutOfBoundsException.
+                // If this test passes without exception, it means the bug is fixed.
+                // To assert the fix, we could assert that no exception was thrown.
+                // For reproducing the failure, we would expect an exception here.
+                // Since we are writing a *passing* test for a *fixed* bug,
+                // we assert that the expected data is present and correctly parsed (or at least not errored).
+
+                // Assert that the extra field was parsed and has zero data length.
+                ZipExtraField uxField = zipEntry.getExtraField(ZipShort.valueOf(0x7875));
+                assertNotNull(uxField);
+                assertEquals(0, uxField.getLocalFileDataData().length);
+
+                // Consume the entry data to ensure all processing is done.
+                byte[] buffer = new byte[1024];
+                int len;
+                while ((len = ais.read(buffer)) > 0) {
+                    // do nothing
+                }
+            }
+        }
+    }
+}

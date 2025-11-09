@@ -1,0 +1,81 @@
+public void testBitInputStreamOverflow() throws IOException {
+    byte[] data = {(byte) 0x57, (byte) 0x2D, (byte) 0x42, (byte) 0x0F, (byte) 0x5A, (byte) 0x1D, (byte) 0x58, (byte) 0x3D, (byte) 0x21, (byte) 0x4A};
+    ByteArrayInputStream in = new ByteArrayInputStream(data);
+    BitInputStream bin = new BitInputStream(in, ByteOrder.LITTLE_ENDIAN);
+    bin.readBits(5); // Read 5 bits
+    long result63 = bin.readBits(63); // This is where the overflow occurs
+    // The bug report indicates that the overflow in readBits(63) causes subsequent reads to be incorrect.
+    // We'll check if readBits(12) produces an incorrect result after the problematic readBits(63).
+    // The expected value for readBits(12) after reading 5 bits and then 63 bits from the given data
+    // needs to be determined based on the correct implementation.
+    // For the purpose of reproducing the failure, we'll assert against a value that would be incorrect
+    // due to the overflow, or simply check that an exception is not thrown if the overflow leads to
+    // unexpected behavior rather than a crash.
+    // Let's assume the intended behavior after the overflow is a specific incorrect value.
+    // Based on manual calculation with the provided data and LITTLE_ENDIAN:
+    // After 5 bits (01011), bitsCached = 0b01011, bitsCachedSize = 5
+    // Reading 63 bits:
+    // Byte 1 (0x57): 01010111. bitsCached |= (0x57 << 5) = 0b01011 | (01010111 << 5) = 0b01011 | 0b0101011100000. bitsCachedSize = 5 + 8 = 13
+    // Byte 2 (0x2D): 00101101. bitsCached |= (0x2D << 13) = ... bitsCachedSize = 13 + 8 = 21
+    // ... this continues until 63 bits are read.
+    // The critical part is the bit shifting and ORing.
+    // The bug report states "result in wrong result from 'bin.readBits(12)'".
+    // This implies that the `readBits(63)` call itself might not throw an exception but corrupt the internal state.
+    // Let's try to determine the expected value for readBits(12) *if* the overflow did not happen.
+    // After reading 5 bits (01011), the next bits are from 0x57 (01010111).
+    // The stream effectively starts with 0101101010111...
+    // If we read 63 bits, it's a lot.
+    // The problem is likely in `bitsCached |= (nextByte << bitsCachedSize);` when `bitsCachedSize` is large.
+    // If `bitsCached` is a `long` (64 bits), shifting `nextByte` (an int) by `bitsCachedSize` (up to 63)
+    // can result in a value that, when OR-ed, exceeds the intended range or behaves unexpectedly.
+    // The test case implies that `readBits(63)` does not necessarily throw an exception but corrupts the state.
+    // The assertion should be on the result of `readBits(12)` *after* the problematic `readBits(63)`.
+    // The original code expects `readBits(63)` to return some value, and then `readBits(12)` to return a value.
+    // Let's simulate the correct behavior for `readBits(12)` after the first 5 bits and assuming `readBits(63)`
+    // *correctly* consumed 63 bits from the stream.
+    // The stream starts: 01011 (from 5 bits)
+    // Next byte: 0x57 (01010111)
+    // Next byte: 0x2D (00101101)
+    // Next byte: 0x42 (01000010)
+    // Next byte: 0x0F (00001111)
+    // Next byte: 0x5A (01011010)
+    // Next byte: 0x1D (00011101)
+    // Next byte: 0x58 (01011000)
+    // Next byte: 0x3D (00111101)
+    // Next byte: 0x21 (00100001)
+    // Next byte: 0x4A (01001010)
+    // Total bytes available: 10. Total bits: 80.
+    // After reading 5 bits (01011), we have 75 bits remaining.
+    // Reading 63 bits: This will consume almost all remaining bits.
+    // The bits consumed by readBits(63) will start after the initial 5 bits.
+    // The stream is: 01011 01010111 00101101 01000010 00001111 01011010 00011101 01011000 00111101 00100001 01001010
+    // The 6th bit of the stream is the first bit of 0x57.
+    // The 63rd bit after the initial 5 bits is the 68th bit overall.
+    // Let's count:
+    // 5 bits: 01011
+    // 8 bits: 01010111 (0x57)
+    // 8 bits: 00101101 (0x2D)
+    // 8 bits: 01000010 (0x42)
+    // 8 bits: 00001111 (0x0F)
+    // 8 bits: 01011010 (0x5A)
+    // 8 bits: 00011101 (0x1D)
+    // 8 bits: 01011000 (0x58)
+    // Total bits read so far for 63 bits: 5 + 8*7 = 61 bits.
+    // We need 2 more bits for 63. These come from 0x3D (00111101). The first two bits are '00'.
+    // So, the 63 bits read are: 0101011100101101010000100000111101011010000111010101100000
+    // After this, we have 80 - 5 - 63 = 12 bits remaining.
+    // The remaining bits are the last 6 bits of 0x3D (111101) and all of 0x21 (00100001) and 0x4A (01001010).
+    // Remaining bits: 111101 00100001 01001010
+    // The bug is that after `readBits(63)`, the internal state `bitsCached` and `bitsCachedSize` are corrupted.
+    // This corruption affects the next read, `readBits(12)`.
+    // The assertion should verify that the result of `readBits(12)` is incorrect.
+    // Let's determine the *correct* expected value for `readBits(12)` after the first 5 bits and if `readBits(63)` worked properly.
+    // The remaining bits are: 1111010010000101001010
+    // The first 12 bits of this sequence are: 111101001000
+    // This binary sequence is 0xF48 in hexadecimal.
+    // So, the correct expected value for `readBits(12)` is 0xF48L.
+    // The bug causes an incorrect value to be returned. We will assert against the *correct* value,
+    // and if the test fails, it indicates the bug is reproduced.
+    long ret12 = bin.readBits(12);
+    assertEquals(0xF48L, ret12); // Asserting the correct value. If the bug is present, this will fail.
+}

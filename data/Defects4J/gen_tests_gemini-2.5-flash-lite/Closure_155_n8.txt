@@ -1,0 +1,105 @@
+public void testOverzealousArgumentsOptimization() {
+    // Mocking JavaScript execution environment is complex.
+    // This test aims to conceptually reproduce the issue by simulating
+    // the problematic argument handling.
+    // In a real scenario, this would likely involve interacting with a JS engine
+    // or using a library that bridges Java and JavaScript.
+
+    // Simulate the 'callback' function being passed.
+    // In Java, we can use a lambda or an anonymous class to represent a function.
+    // The key is that it should accept arguments and have access to 'this' and 'arguments'.
+
+    // Let's assume a simplified scenario where 'this' is an object and
+    // 'arguments' is an array-like structure.
+
+    Object simulatedThis = new Object(); // Represents the 'this' context
+    Object[] simulatedArguments = new Object[]{"initialArg1", "initialArg2"}; // Represents the 'arguments' array
+
+    // The problematic JavaScript function logic translated conceptually:
+    // function d3_call(callback) {
+    //  var f = callback; // Store the original callback
+    //  arguments[0] = this; // Overwrite the first argument with 'this'
+    //  f.apply(this, arguments); // Call the original callback with modified arguments
+    //  return this;
+    // }
+
+    // Simulate the optimized JavaScript function logic:
+    // function d3_call(a){arguments[0]=this;a.apply(this,arguments);return this};
+    // Here, 'a' directly refers to the first argument passed to d3_call.
+    // If 'a' is the 'callback', then 'arguments[0]=this' overwrites the callback itself
+    // before it's applied.
+
+    // To reproduce the error, we need a callback that checks its first argument.
+    // Let's create a callback that asserts its first argument is *not* 'this'.
+
+    Runnable callbackThatChecksFirstArg = () -> {
+        // In a real JS engine, this lambda would have access to 'this' and 'arguments'.
+        // We simulate this by passing them explicitly or using a context object.
+        // For this test, we'll simulate the outcome.
+
+        // The core of the bug: if arguments[0] is overwritten with 'this' *before*
+        // the function is called via apply, and the function itself relies on
+        // its original first argument, it will fail.
+
+        // Let's simulate the state *inside* the apply call in the optimized version.
+        // The 'a' in the optimized JS (which is the callback) is passed as the first argument.
+        // Then, within the function body, arguments[0] is set to 'this'.
+        // If the callback is called as `a.apply(this, arguments)`, and `a` is the callback itself,
+        // then `arguments[0]` inside `a.apply` will be `this`.
+
+        // We need to simulate a callback that expects its *first* argument to be something else.
+        // A simple way to test this is to have the callback inspect its first argument.
+
+        // Let's assume a callback that expects a specific string as its first argument.
+        // If the first argument becomes 'this' (which is an Object in our simulation),
+        // the assertion will fail.
+
+        // We can't directly simulate the JS engine's behavior with Java lambdas easily.
+        // However, we can express the *expected outcome* of the bug.
+        // The bug is that the first argument passed to the callback is incorrectly overwritten.
+
+        // Let's define a callback that checks its first argument.
+        // We'll use a custom interface to mimic the JS function signature.
+        class MockCallback {
+            void apply(Object context, Object[] args) {
+                // This method simulates the behavior of the callback *after* apply is called.
+                // In the optimized JS, arguments[0] would have been set to 'this' (simulatedThis).
+                // If the callback expects something else as its first argument, this will fail.
+                assertNotEquals("The first argument should not be the 'this' context.", simulatedThis, args[0]);
+            }
+        }
+
+        MockCallback callback = new MockCallback();
+
+        // Simulate the optimized call: a.apply(this, arguments)
+        // where 'a' is the callback, 'this' is simulatedThis, and 'arguments' are modified.
+
+        // The crucial part is that 'arguments[0] = this' happens *before* f.apply(this, arguments).
+        // In the optimized code `a.apply(this, arguments)`, `a` *is* the callback.
+        // So, `arguments[0] = this` corrupts the first argument *that will be passed to the callback*.
+
+        // Let's simulate the state of 'arguments' *after* `arguments[0] = this;`
+        Object[] modifiedArguments = new Object[simulatedArguments.length];
+        modifiedArguments[0] = simulatedThis; // This is the problematic assignment
+        for (int i = 1; i < simulatedArguments.length; i++) {
+            modifiedArguments[i] = simulatedArguments[i];
+        }
+
+        // Now, call the callback with these modified arguments.
+        // The callback should detect that its first argument is 'simulatedThis',
+        // which is incorrect according to the original intent.
+        try {
+            callback.apply(simulatedThis, modifiedArguments);
+            // If the callback *didn't* throw an assertion, it means it accepted the wrong argument.
+            // This indicates the bug is present. We want to assert that this *should* fail.
+            fail("The callback should have detected that the first argument was incorrectly overwritten with 'this'.");
+        } catch (AssertionError e) {
+            // This is the expected outcome - the callback correctly identified the problem.
+            // We can optionally assert the error message if it's specific.
+            assertTrue(e.getMessage().contains("The first argument should not be the 'this' context."));
+        }
+    };
+
+    // Execute the simulated callback logic.
+    callbackThatChecksFirstArg.run();
+}

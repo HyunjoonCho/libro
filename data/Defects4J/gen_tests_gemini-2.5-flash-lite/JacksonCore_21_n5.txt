@@ -1,0 +1,71 @@
+public void testFilteringParserDelegateMissingEndObject() throws Exception {
+    String json = "{\"a\":123,\"array\":[1,2],\"ob\": {\"value0\":2,\"value\":3,\"value2\":4},\"b\":true}";
+    JsonFactory jf = new JsonFactory();
+    JsonParser p0 = jf.createParser(json);
+    FilteringParserDelegate p = new FilteringParserDelegate(p0, new NameMatchFilter("value"), true, false);
+
+    // Consume tokens until the end, expecting the last END_OBJECT for "ob"
+    // and then the final END_OBJECT for the root object.
+    // The bug is that the END_OBJECT for "ob" is missed.
+    int count = 0;
+    while (p.nextToken() != null) {
+        if (p.getCurrentToken() == JsonToken.END_OBJECT) {
+            // If we are inside the "ob" object and expect it to close
+            if (p.getCurrentLocation().getByteOffset() > 0 && 
+                p.getText().equals("ob") && 
+                p.getCurrentLocation().getByteOffset() < json.length()) {
+                
+                // This is where the bug manifests: the END_OBJECT for "ob" is skipped.
+                // We can't directly assert its absence here without parsing the whole thing.
+                // Instead, we'll check if the final END_OBJECT is present.
+            }
+        }
+        count++;
+        // Break early to avoid infinite loop if the parser doesn't advance correctly
+        if (count > 100) { 
+            fail("Parser seems stuck or not advancing");
+        }
+    }
+
+    // The crucial part is that after processing "ob":{"value":3}, 
+    // the next token *should* be END_OBJECT for "ob", followed by END_OBJECT for the root.
+    // If the END_OBJECT for "ob" is missed, the parser will likely try to parse "b":true
+    // as if it were inside "ob", leading to a different error or an incomplete parse.
+    // A robust test would involve checking the parsed structure, but based on the description,
+    // the absence of the END_OBJECT is the key. We can infer this by checking if the parser
+    // *completes* the root object correctly. If it fails to find the END_OBJECT for "ob",
+    // it won't correctly reach the END_OBJECT for the root.
+
+    // To reproduce the described failure, we expect that the parser does NOT yield
+    // a complete, valid JSON object. The provided snippet suggests the output was
+    // {"ob":{"value":3}, which is incomplete.
+    // A simple way to check for the failure is to see if the parser *can* reach the end
+    // and produce a valid root END_OBJECT. If the END_OBJECT for 'ob' is missing,
+    // the parser will not correctly terminate the root object.
+
+    // Let's try to parse the whole thing and see if it completes.
+    // If the bug is present, it might throw an exception or not yield the final END_OBJECT.
+    
+    // Re-create parser for a clean test
+    p0 = jf.createParser(json);
+    p = new FilteringParserDelegate(p0, new NameMatchFilter("value"), true, false);
+
+    JsonToken token;
+    boolean foundRootEndObject = false;
+    int tokensConsumed = 0;
+    while ((token = p.nextToken()) != null) {
+        tokensConsumed++;
+        if (token == JsonToken.END_OBJECT && p.getCurrentValue() == null) { // Assuming root is an object
+            foundRootEndObject = true;
+            break;
+        }
+        // Safety break
+        if (tokensConsumed > 100) {
+            fail("Parser did not finish within expected token limit.");
+        }
+    }
+
+    // If the END_OBJECT for "ob" is missing, the parser won't correctly reach the final END_OBJECT.
+    // The test should fail if this final END_OBJECT is NOT found.
+    assertTrue("The final END_OBJECT for the root JSON object was not found, indicating a parsing failure.", foundRootEndObject);
+}

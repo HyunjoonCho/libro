@@ -1,0 +1,251 @@
+public void testExternExportWithTypedef() {
+    // Mocking the necessary components to simulate the scenario
+    // This test assumes a specific internal structure of the compiler
+    // and may need adjustments based on the actual implementation.
+
+    // Create a mock JSDocInfo object representing the @typedef
+    JSDocInfo typedefInfo = new JSDocInfo(false);
+    typedefInfo.addTypedef("MyTypedef", "string"); // Simple string type for demonstration
+
+    // Create a mock JSType representing the @typedef
+    JSType typedefType = new JSType(null) { // Simplified JSType
+        @Override
+        public String toString() {
+            return "string";
+        }
+        @Override
+        public String toAnnotationString() {
+            return "string";
+        }
+    };
+
+    // Create mock compiler and type registry
+    Compiler compiler = new Compiler();
+    JSTypeRegistry registry = new JSTypeRegistry(compiler.getErrorManager());
+
+    // Create mock AST nodes for function parameters
+    // Node for a required parameter
+    Node requiredParamNode = new Node(Token.PARAM, new Node(Token.NAME, "requiredParam"));
+    requiredParamNode.setJSType(new JSType(null) { // Simplified JSType
+        @Override
+        public String toString() {
+            return "number";
+        }
+        @Override
+        public String toAnnotationString() {
+            return "number";
+        }
+    });
+
+    // Node for an optional parameter using the @typedef
+    Node optionalParamNode = new Node(Token.PARAM, new Node(Token.NAME, "optionalParam"));
+    // Simulate the type annotation for an optional parameter referencing the typedef
+    // In a real scenario, this would involve more complex type resolution.
+    // For this test, we'll directly associate the typedef's annotation.
+    optionalParamNode.setJSType(new JSType(null) { // Simplified JSType
+        @Override
+        public String toString() {
+            // This is the part that is expected to be truncated or incorrectly handled
+            return "MyTypedef|null";
+        }
+        @Override
+        public String toAnnotationString() {
+            return "MyTypedef|null";
+        }
+    });
+
+
+    // Mock the function definition node
+    Node functionNode = new Node(Token.FUNCTION);
+    Node parametersNode = new Node(Token.EPSILON); // Placeholder for parameters
+    parametersNode.addChildToBack(requiredParamNode);
+    parametersNode.addChildToBack(optionalParamNode);
+    functionNode.addChildToBack(parametersNode);
+
+    // Simulate the process of generating externs.
+    // This is a highly simplified representation of how externs might be generated.
+    // The actual logic in Closure Compiler is much more complex.
+
+    StringBuilder externs = new StringBuilder();
+
+    // Simulate processing of a function with parameters
+    // The logic here aims to mimic the buggy behavior described.
+
+    // Process required parameter
+    externs.append("var requiredParam: ").append(requiredParamNode.getJSType().toAnnotationString()).append(";\n");
+
+    // Process optional parameter - this is where the bug is expected
+    String optionalParamAnnotation = optionalParamNode.getJSType().toAnnotationString();
+    // The bug description suggests truncation or incorrect embedding of the type.
+    // We simulate this by potentially truncating or embedding poorly if it's "long" or has specific characters.
+    // For the sake of this test, we'll assume a simple direct embedding that might be flawed.
+    externs.append("var optionalParam: ").append(optionalParamAnnotation).append(";\n");
+
+
+    // Assert that the generated externs contain the problematic representation.
+    // The exact assertion depends on the specific incorrect output.
+    // Based on the description, the type for optionalParam might be truncated or malformed.
+    // For example, if "MyTypedef|null" was supposed to be represented as "@param {MyTypedef|null}",
+    // and the compiler incorrectly embeds it, it might lead to errors.
+
+    // A possible incorrect output based on the description:
+    // The type itself might be embedded directly without proper JSDoc syntax, or truncated.
+    // Let's assume the bug leads to an invalid annotation string being used.
+    assertTrue(externs.toString().contains("optionalParam: MyTypedef|null")); // This might be the literal string if not handled.
+    // Or, if truncation happens:
+    // assertFalse(externs.toString().contains("optionalParam: string|null")); // If MyTypedef was longer and truncated.
+
+    // The key is that the generated externs cause a compilation error.
+    // This test focuses on *reproducing* the generation of potentially invalid externs.
+    // A more robust test would involve actually compiling against these generated externs.
+
+    // For this specific bug, the issue is that `optionalParam: MyTypedef|null` is generated.
+    // The expected behavior for an optional parameter might be `@optionalParam: MyTypedef|null`
+    // or similar, depending on the externs generation strategy.
+    // The bug implies that the simple `Type|null` annotation for an optional param
+    // is not handled correctly when it refers to a @typedef.
+
+    // If the issue is specifically about @typedefs being embedded incorrectly,
+    // and the example implies "MyTypedef" itself might be an issue when long.
+    // Let's assume "MyTypedef" is a placeholder for a potentially long type name.
+    // If the compiler tries to embed the *body* of the typedef (which is "string" here)
+    // and it's truncated, that's a different issue.
+
+    // Re-interpreting the description: "tries embedding the body of the @typedef and ends up truncating it if the length is too long".
+    // This suggests that if @typedef was like "@typedef {SomeVeryLongTypeName}",
+    // and an optional parameter used it, the generated extern might embed "SomeVeryLongTypeName"
+    // and truncate it.
+
+    // Let's adjust the mock to reflect this interpretation.
+    JSDocInfo typedefInfoLong = new JSDocInfo(false);
+    String longTypeName = "ThisIsAVeryLongTypeNameToTestTruncation";
+    typedefInfoLong.addTypedef("MyLongTypedef", longTypeName);
+
+    JSType typedefTypeLong = new JSType(null) {
+        @Override
+        public String toString() {
+            return longTypeName;
+        }
+        @Override
+        public String toAnnotationString() {
+            return longTypeName;
+        }
+    };
+
+    Node optionalParamNodeLong = new Node(Token.PARAM, new Node(Token.NAME, "optionalParamLong"));
+    optionalParamNodeLong.setJSType(new JSType(null) {
+        @Override
+        public String toString() {
+            return longTypeName + "|null";
+        }
+        @Override
+        public String toAnnotationString() {
+            return longTypeName + "|null";
+        }
+    });
+
+    functionNode.addChildToBack(parametersNode); // Re-add for clarity, though not strictly necessary if parametersNode is reused.
+    parametersNode.addChildToBack(optionalParamNodeLong); // Add the new optional param
+
+    // Simulate extern generation again with the long type name
+    StringBuilder externsLong = new StringBuilder();
+    externsLong.append("var optionalParamLong: ").append(optionalParamNodeLong.getJSType().toAnnotationString()).append(";\n");
+
+    // The bug description implies truncation might occur.
+    // The actual truncation logic in the compiler would determine the exact output.
+    // We'll assert that the generated string *could* lead to an error due to how it's formed.
+    // If the compiler incorrectly embeds the type name directly and truncates:
+    String generatedExternsContent = externsLong.toString();
+
+    // If the issue is specifically about the `...` truncation:
+    // This test cannot easily replicate the exact truncation logic without deep knowledge of the compiler internals.
+    // However, we can assert that the generated externs are not valid if the bug is present.
+    // A common way this might manifest is by not using proper JSDoc syntax for optional parameters or typedefs.
+
+    // Let's assume the bug is that the type annotation for an optional parameter
+    // referencing a @typedef is generated in a way that is not parsable or causes type errors.
+    // The description "tries embedding the body of the @typedef and ends up truncating it"
+    // is key. If the "body" of MyTypedef is "string", and it's truncated, it might become "str...".
+    // This seems less likely for a simple string typedef.
+
+    // Let's focus on the "optional" aspect and @typedef interaction.
+    // The most direct interpretation: the generated extern for `optionalParam: MyTypedef|null`
+    // is problematic.
+
+    // A plausible incorrect output that would cause errors:
+    // If `optionalParam: MyTypedef|null` is generated, and `MyTypedef` is supposed to be
+    // resolved to its definition, but instead, the raw name is used and not handled correctly
+    // as an optional type.
+
+    // The core issue seems to be how `createNumber` and `createLong` handle hex strings.
+    // The bug report for NumberUtils is about hex numbers.
+    // This bug report is about extern generation with @typedef.
+
+    // Let's simulate the extern generation for the provided example code structure.
+    // Assume a function like:
+    // function foo(requiredArg, optionalArg) { ... }
+    // @typedef {string} MyTypedef
+    // function bar(optionalTypedefArg) { ... }
+
+    // Mocking the compiler context and types more realistically.
+    // This test is more of a conceptual reproduction of the described behavior
+    // due to the complexity of mocking the Closure Compiler's AST and type system.
+
+    // A simplified assertion based on the description:
+    // The generated externs will contain a malformed or truncated type definition
+    // for the optional parameter referencing the @typedef.
+    // We can assert that the string representation of the type is directly embedded
+    // in a way that Closure Compiler's extern parser might find invalid.
+
+    assertTrue(generatedExternsContent.contains(longTypeName + "|null"));
+    // The failure would occur if this line `var optionalParamLong: ThisIsAVeryLongTypeNameToTestTruncation|null;`
+    // is considered invalid by the compiler when it's supposed to be a @typedef reference.
+    // The bug implies that the compiler *should* have done something else, like using
+    // the @typedef name directly in a JSDoc comment, or resolving it differently.
+
+    // Final attempt at a focused reproduction:
+    // The bug states "tries embedding the body of the @typedef and ends up truncating it".
+    // If @typedef {string} MyTypedef; and then an optional param uses it.
+    // The extern might incorrectly try to embed "string" (the body) and truncate it.
+    // This seems unlikely. More likely, the *name* "MyTypedef" is used, and the optionality `|null`
+    // combined with the @typedef reference causes issues.
+
+    // Let's assume the problematic extern generation is:
+    // `var optionalArg: MyTypedef|null;`
+    // And the compiler expects something like:
+    // `/** @optional @type {MyTypedef} */ optionalArg`
+    // Or perhaps, if the @typedef itself was long:
+    // `/** @typedef {SomeVeryLongTypeName} */`
+    // `/** @optional @type {SomeVeryLongTypeName} */ optionalArg`
+
+    // The test below attempts to capture the generation of `var optionalParam: MyTypedef|null;`
+    // as a potentially incorrect output.
+
+    JSDocInfo typedefInfoTest = new JSDocInfo(false);
+    typedefInfoTest.addTypedef("MyTypedef", "string"); // Simple type
+
+    Node optionalParamNodeTest = new Node(Token.PARAM, new Node(Token.NAME, "optionalParam"));
+    // Simulate the type annotation for an optional parameter referencing the typedef
+    optionalParamNodeTest.setJSType(new JSType(null) { // Simplified JSType
+        @Override
+        public String toString() {
+            return "MyTypedef|null"; // This is the crucial part
+        }
+        @Override
+        public String toAnnotationString() {
+            return "MyTypedef|null";
+        }
+    });
+
+    StringBuilder externsTest = new StringBuilder();
+    // Simulate the extern generation for this optional parameter
+    // The bug suggests that this direct embedding `var name: Type|null;` is problematic for @typedefs.
+    externsTest.append("var optionalParam: ").append(optionalParamNodeTest.getJSType().toAnnotationString()).append(";\n");
+
+    // Assert that the generated string contains the potentially malformed extern.
+    // The actual failure is a compile error when using these externs.
+    // This test verifies that the problematic extern string is generated.
+    assertTrue(externsTest.toString().contains("var optionalParam: MyTypedef|null;"));
+    // The failure would be that this line causes a compilation error in Closure Compiler,
+    // indicating that "MyTypedef" is not recognized or the optional syntax is wrong in this context.
+}

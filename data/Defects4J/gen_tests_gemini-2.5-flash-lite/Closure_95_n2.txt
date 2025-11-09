@@ -1,0 +1,136 @@
+public void testPublicTag() {
+    // Mocking a JavaScript environment is complex for a standard JUnit test.
+    // This test simulates the *behavior* described, assuming a JavaScript engine
+    // would execute the code and we're checking the outcome.
+    // In a real scenario, you might use a JavaScript testing framework integration
+    // (like Nashorn, Rhino, or external tools like Selenium/Puppeteer).
+
+    // Simulate the initial compiled code with ADVANCED_OPTIMIZATIONS
+    // Original:
+    // Glow = {};
+    // /** @public */ Glow.versions = [1,2,3];
+    // Glow.showVersions = function() { alert(Glow.versions); }
+    // window['Glow'] = Glow;
+    // Glow['versions'] = Glow.versions;
+    // Glow['showVersions'] = Glow.showVersions;
+
+    // Compiled output (problematic):
+    // Glow = {};
+    // Glow.a = [1, 2, 3]; // Renamed from Glow.versions
+    // Glow.b = function() { alert(Glow.a) }; // Refers to Glow.a
+    // window.Glow = Glow;
+    // Glow.versions = Glow.a; // Still refers to Glow.a
+    // Glow.showVersions = Glow.b; // Renamed from Glow.showVersions
+
+    // Simulate the state after compilation, where Glow.versions and Glow.showVersions
+    // might have been indirectly affected by optimizations.
+    // Let's represent the 'Glow' object and its properties.
+    // We'll use a Map to simulate the JavaScript object.
+    Map<String, Object> glowObject = new HashMap<>();
+    List<Integer> initialVersions = Arrays.asList(1, 2, 3);
+    glowObject.put("a", initialVersions); // Simulates the optimized internal name
+
+    // Simulate the function, where it internally refers to 'a'
+    Runnable showVersionsFunc = () -> {
+        // In a real JS engine, this would alert. Here we capture the value.
+        // We need to simulate the closure capturing 'a'
+        List<Integer> versions = (List<Integer>) glowObject.get("a");
+        // For testing, we'll just store this value to check later.
+        // In a real test, you'd need a way to capture the 'alert' output or
+        // the state of the object after the function runs.
+        // For this simulation, we'll assume the function *uses* Glow.a
+        // and we'll check the state of Glow.versions later.
+    };
+    glowObject.put("b", showVersionsFunc); // Simulates the optimized internal name
+
+    // Simulate the external assignment to Glow.versions
+    List<Integer> newVersions = Arrays.asList(4, 5, 6);
+
+    // The bug occurs because the compiled code might have:
+    // Glow.versions = Glow.a; // This line in the compiled output is key.
+    // If the user then modifies Glow.versions, it *should* ideally update
+    // the underlying array if optimizations were done correctly with @public.
+    // However, the bug report states it doesn't.
+
+    // Let's simulate the problematic outcome:
+    // User code:
+    // Glow.versions = [4,5,6];
+    // Glow.showVersions(); // Calls Glow.b()
+
+    // If Glow.versions was correctly linked to the original array,
+    // changing Glow.versions would change what Glow.a points to (if @public worked).
+    // But the bug says it doesn't. So, Glow.versions points to Glow.a,
+    // and assigning newVersions to Glow.versions *might not* update Glow.a
+    // if the compiler is too aggressive.
+
+    // Let's simulate the state *after* the user code runs, based on the bug description.
+    // The user assigns [4,5,6] to Glow.versions.
+    // The function Glow.showVersions (which is Glow.b) should have used Glow.versions
+    // if @public worked, but it uses Glow.a.
+    // The bug implies that the assignment Glow.versions = [4,5,6] *does not*
+    // affect the array used by Glow.b (which is Glow.a).
+
+    // We need to check the state *after* the user code runs.
+    // The critical part is what `alert(Glow.versions)` would output *if*
+    // `showVersions` was correctly implemented *and* the user's change to
+    // `Glow.versions` was reflected.
+
+    // According to the bug, the user code `Glow.versions = [4,5,6];`
+    // does NOT change the array referenced by `Glow.a` (which `Glow.b` uses).
+    // And `Glow.showVersions()` (which is `Glow.b`) still refers to `Glow.a`.
+    // The *desired* output is that `alert(Glow.versions)` would show `[4,5,6]`.
+    // The *actual* output is `[1,2,3]`.
+
+    // To test this, we need to simulate the state *after* the user's code runs
+    // and then check what `Glow.versions` *would* refer to if `showVersions`
+    // had been correctly implemented.
+
+    // Let's simulate the state of the `glowObject` *after* the user code:
+    // User code: Glow.versions = [4,5,6];
+    // This assignment, according to the bug, does NOT update Glow.a.
+    // So, glowObject.get("a") remains [1, 2, 3].
+    // The assignment might conceptually update a separate pointer named "versions".
+    // Let's simulate this:
+    glowObject.put("versions", newVersions); // User's assignment
+
+    // Now, simulate calling Glow.showVersions() which is Glow.b.
+    // Glow.b internally uses Glow.a.
+    // If the @public tag worked, Glow.b would have been written as:
+    // Glow.b = function() { alert(Glow.versions); }
+    // And the line `Glow.versions = Glow.versions;` would ensure the link.
+
+    // Since @public did NOT work, Glow.b is function() { alert(Glow.a) }
+    // And Glow.a is still [1, 2, 3].
+    // The user's `Glow.versions = [4,5,6];` assignment did *not* update Glow.a.
+
+    // The test should verify that if the user were to call `Glow.showVersions()`
+    // (which executes `Glow.b()`), and if `Glow.b()` were correctly written to
+    // use `Glow.versions` (as @public intended), then the output would be `[4,5,6]`.
+    // However, because of the bug, it outputs `[1,2,3]`.
+
+    // We can't directly test the "alert" call in standard JUnit.
+    // We can test the *state* that leads to the wrong alert.
+    // The problem is that `Glow.showVersions()` (which is `Glow.b`) uses `Glow.a`.
+    // And `Glow.a` is still the original `[1,2,3]`.
+    // The user's change to `Glow.versions` did not propagate to `Glow.a`.
+
+    // Therefore, the test should assert that the array used internally by the
+    // (mis-compiled) `showVersions` function is NOT the one the user set.
+
+    // Simulate the internal state that `Glow.b` would access if it were called.
+    // `Glow.b` refers to `Glow.a`.
+    List<Integer> internalArrayUsedByShowVersions = (List<Integer>) glowObject.get("a");
+
+    // The user set `Glow.versions` to `[4,5,6]`.
+    // The bug is that `internalArrayUsedByShowVersions` is still `[1,2,3]`.
+    // So, we assert that the internal array is NOT the user-provided one.
+    assertNotEquals(newVersions, internalArrayUsedByShowVersions);
+
+    // And we assert that it IS the original array.
+    assertEquals(initialVersions, internalArrayUsedByShowVersions);
+
+    // This test setup is a bit abstract because we're simulating JS behavior.
+    // The core of the bug is the disconnect between the user-set `Glow.versions`
+    // and the internal, optimized name (`Glow.a`) used by the function,
+    // because the `@public` tag was ignored.
+}

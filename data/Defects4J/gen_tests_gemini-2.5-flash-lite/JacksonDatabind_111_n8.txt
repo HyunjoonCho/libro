@@ -1,0 +1,78 @@
+public void testDeserializeNestedAtomicReferenceWithNull() throws IOException {
+    ObjectMapper objectMapper = new ObjectMapper();
+    objectMapper.registerModule(new SimpleModule() {
+        @Override
+        public void setupModule(SetupContext context) {
+            context.addDeserializers(new Deserializers.Base() {
+                @Override
+                public JsonDeserializer<?> findTreeNodeDeserializer(JavaType type, DeserializationConfig config, BeanDescription beanDesc) {
+                    if (type.getRawClass().equals(AtomicReference.class)) {
+                        JavaType containedType = type.containedType(0);
+                        if (containedType != null && containedType.getRawClass().equals(AtomicReference.class)) {
+                            JavaType innerContainedType = containedType.containedType(0);
+                            if (innerContainedType != null && innerContainedType.getRawClass().equals(Integer.class)) {
+                                return new AtomicReferenceDeserializer<>(innerContainedType);
+                            }
+                        }
+                    }
+                    return null;
+                }
+            });
+        }
+    });
+
+    ObjectReader objectReader = objectMapper.readerFor(MyBean.class);
+
+    MyBean nullRef = objectReader.readValue(" {\"refRef\": null } ");
+    assertNotNull(nullRef.getRefRef());
+    assertNotNull(nullRef.getRefRef().get());
+    assertNull(nullRef.getRefRef().get().get());
+}
+
+// Helper classes from the original bug report (simplified for test context)
+static class MyBean {
+    private AtomicReference<AtomicReference<Integer>> refRef;
+
+    public AtomicReference<AtomicReference<Integer>> getRefRef() {
+        return refRef;
+    }
+
+    public void setRefRef(AtomicReference<AtomicReference<Integer>> refRef) {
+        this.refRef = refRef;
+    }
+}
+
+static class AtomicReferenceDeserializer<T> extends StdDeserializer<AtomicReference<T>> {
+    private static final long serialVersionUID = 1L;
+    private final JavaType _valueType;
+    private JsonDeserializer<T> _valueDeserializer;
+
+    protected AtomicReferenceDeserializer(JavaType valueType) {
+        super(AtomicReference.class);
+        _valueType = valueType;
+    }
+
+    @Override
+    public void resolve(DeserializationContext ctxt) throws JsonMappingException {
+        super.resolve(ctxt);
+        _valueDeserializer = ctxt.findContextualValueDeserializer(_valueType, null);
+    }
+
+    @Override
+    public AtomicReference<T> getNullValue(DeserializationContext ctxt) throws JsonMappingException {
+        // This is the crucial part to fix the bug: return a properly nested null
+        return new AtomicReference<>(null);
+    }
+
+    @Override
+    public AtomicReference<T> deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+        if (_valueDeserializer == null) {
+            resolve(ctxt);
+        }
+        if (p.getCurrentToken() == JsonToken.VALUE_NULL) {
+            return getNullValue(ctxt);
+        }
+        T value = _valueDeserializer.deserialize(p, ctxt);
+        return new AtomicReference<>(value);
+    }
+}

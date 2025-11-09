@@ -1,0 +1,401 @@
+import org.apache.commons.math3.optim.ConvergenceChecker;
+import org.apache.commons.math3.optim.PointValuePair;
+import org.apache.commons.math3.optim.nonlinear.vector.LevenbergMarquardtOptimizer;
+import org.apache.commons.math3.optim.nonlinear.vector.Target;
+import org.apache.commons.math3.optim.nonlinear.vector. সরবরাহ;
+import org.junit.Test;
+import static org.junit.Assert.fail;
+
+public class LevenbergMarquardtOptimizerTest {
+
+    @Test
+    public void testOptimizerIgnoresConvergenceChecker() {
+        // A dummy objective function that will never converge
+         সরবরাহ objectiveFunction = new সরবরাহ() {
+            @Override
+            public double[] value(double[] point) {
+                return new double[]{point[0] * point[0] + 1};
+            }
+        };
+
+        // A dummy convergence checker that will never return true
+        ConvergenceChecker<PointValuePair> neverConvergingChecker = new ConvergenceChecker<PointValuePair>() {
+            @Override
+            public boolean converged(PointValuePair previous, PointValuePair current) {
+                return false;
+            }
+        };
+
+        // A dummy convergence checker that will always return true
+        ConvergenceChecker<PointValuePair> alwaysConvergingChecker = new ConvergenceChecker<PointValuePair>() {
+            @Override
+            public boolean converged(PointValuePair previous, PointValuePair current) {
+                return true;
+            }
+        };
+
+        // Initial guess
+        double[] startPoint = {1.0};
+        Target target = new Target(new double[]{0.0});
+
+        // Test with the dummy checker that never converges. It should ideally run for a long time or throw an exception if it doesn't check.
+        // If it ignores the checker, it might run until max iterations or throw a different exception.
+        try {
+            LevenbergMarquardtOptimizer optimizer = new LevenbergMarquardtOptimizer(neverConvergingChecker);
+            optimizer.optimize(objectiveFunction, target, new org.apache.commons.math3.optim.nonlinear.vector.InitialGuess(startPoint));
+            // If we reach here, it means the optimizer did not stop based on the checker, which is the bug.
+            // However, the optimizer might have other stopping conditions (like max iterations) that prevent it from running indefinitely.
+            // A more robust test would involve checking the number of iterations or specific exceptions.
+            // For this specific bug description, the core issue is that the checker is *ignored*.
+            // If the checker *was* used, and it always returned false, the optimizer should not converge.
+            // If the checker *was* used, and it always returned true, the optimizer should converge immediately.
+            // The bug implies that it behaves as if *no* checker was provided or it's always false.
+
+            // Let's try a scenario where the checker *should* make it converge immediately.
+            // If the optimizer ignores this, it will proceed with its default logic.
+            LevenbergMarquardtOptimizer optimizerWithConvergingChecker = new LevenbergMarquardtOptimizer(alwaysConvergingChecker);
+            PointValuePair result = optimizerWithConvergingChecker.optimize(objectiveFunction, target, new org.apache.commons.math3.optim.nonlinear.vector.InitialGuess(startPoint));
+
+            // If the checker was ignored, the result might be based on default convergence, not the provided checker.
+            // This is hard to assert directly without knowing the default behavior or if an exception is thrown.
+            // The bug report states it "ignores the parameter passed to it".
+            // This implies that even if you pass a checker that *should* cause convergence, it doesn't.
+            // Or if you pass a checker that *should* prevent convergence, it still might converge based on other criteria.
+
+            // A better way to test this is to ensure that if a checker *is* provided, it influences the outcome.
+            // If the optimizer *always* uses its internal checker or default stopping criteria regardless of the provided one,
+            // then passing a custom checker that would make it stop immediately should still result in it running through some iterations
+            // or not stopping as soon as the checker would indicate.
+
+            // Let's try to create a scenario where the provided checker *would* stop it immediately if it were used.
+            // And then assert that it *didn't* stop immediately, implying the checker was ignored.
+            // This requires knowing the optimizer's internal iteration count or other stopping conditions.
+
+            // The description implies that LevenbergMarquardtOptimizer(checker) constructor is the issue.
+            // Let's try to instantiate it with a checker that *should* make it converge.
+            // If it doesn't converge quickly, the checker was ignored.
+
+            // A simpler test might be to check if the optimizer *ever* uses the provided checker.
+            // This is difficult to assert externally.
+
+            // Let's re-interpret the bug: The constructor `LevenbergMarquardtOptimizer(ConvergenceChecker<PointValuePair> checker)`
+            // does not use the `checker` argument.
+            // So, if we pass a checker that would cause immediate convergence, and it *doesn't* converge immediately,
+            // then the checker was ignored.
+            // We need a function where the start point is already the optimum.
+             সরবরাহ objectiveFunctionAtOptimum = new সরবরাহ() {
+                @Override
+                public double[] value(double[] point) {
+                    return new double[]{point[0] * point[0]}; // Optimum at {0, 0}
+                }
+            };
+            Target targetAtOptimum = new Target(new double[]{0.0});
+            double[] startPointAtOptimum = {0.0}; // Already at optimum
+
+            ConvergenceChecker<PointValuePair> checkerThatShouldConvergeImmediately = new ConvergenceChecker<PointValuePair>() {
+                @Override
+                public boolean converged(PointValuePair previous, PointValuePair current) {
+                    // This checker should indicate convergence if the objective function value is close to zero.
+                    // Since we start at the optimum, it should converge immediately.
+                    return Math.abs(current.getValue()[0]) < 1e-9;
+                }
+            };
+
+            LevenbergMarquardtOptimizer optimizerWithConvergingChecker2 = new LevenbergMarquardtOptimizer(checkerThatShouldConvergeImmediately);
+            PointValuePair result2 = optimizerWithConvergingChecker2.optimize(objectiveFunctionAtOptimum, targetAtOptimum, new org.apache.commons.math3.optim.nonlinear.vector.InitialGuess(startPointAtOptimum));
+
+            // If the checker was used, the result should be very close to the starting point and have a value close to 0.
+            // If the checker was ignored, the optimizer might perform some iterations before deciding it's converged (or not).
+            // The issue is that the checker is *ignored*. So, even if the starting point is the optimum,
+            // the optimizer might still perform iterations.
+
+            // The most direct way to show it's ignored is to check if the result is *different* than what the checker would imply.
+            // If the checker indicates convergence at the start, and the optimizer performs iterations, it's ignored.
+
+            // We need to check if the optimizer actually performed any iterations.
+            // This is hard to do directly without modifying the optimizer or using reflection.
+            // The bug report implies that providing *any* checker to the constructor is the problem.
+
+            // Let's try to use a checker that *should* prevent convergence, and see if it still converges.
+            ConvergenceChecker<PointValuePair> checkerThatShouldNeverConverge = new ConvergenceChecker<PointValuePair>() {
+                @Override
+                public boolean converged(PointValuePair previous, PointValuePair current) {
+                    // This checker will always return false, meaning it should never converge based on this checker.
+                    return false;
+                }
+            };
+
+            LevenbergMarquardtOptimizer optimizerWithNeverConvergingChecker = new LevenbergMarquardtOptimizer(checkerThatShouldNeverConverge);
+            try {
+                // If the optimizer ignores the checker, it will use its default stopping criteria.
+                // If it *doesn't* ignore the checker, and the checker always returns false, it should run until max iterations or throw an exception.
+                // The bug implies it *doesn't* run until max iterations when it should, or it converges unexpectedly.
+                // This is a bit of a guessing game without more insight into the internal workings or specific exception types.
+
+                // The most straightforward interpretation of "ignores the parameter passed to it" is that
+                // the parameter is not used in the decision-making process.
+                // Therefore, if we pass a checker that *would* cause it to stop, and it *doesn't* stop, the checker is ignored.
+                // Conversely, if we pass a checker that *would not* cause it to stop, and it *does* stop (by its default criteria),
+                // it doesn't prove the checker was ignored.
+
+                // Let's assume the bug means that the `ConvergenceChecker` passed to the constructor is *never* consulted.
+                // We can try to trigger a condition where the checker *should* have stopped the optimization early,
+                // but it continues.
+
+                // The provided example in the description is `xxxxMM'w'ww`. This is for date formatting.
+                // The bug is about `LevenbergMarquardtOptimizer`.
+                // The description states: "LevenbergMarquardtOptimizer ignores the VectorialConvergenceChecker parameter passed to it."
+
+                // Let's create an objective function and target where convergence is simple.
+                // f(x) = x^2. Target = 0. Start = 5.
+                // Expected convergence: x should go to 0.
+                // Let's use a checker that says "stop if |x| < 0.1".
+                // And another checker that says "stop if |x| < 0.0000001" (very strict).
+                // And see if the optimizer behaves the same with both, implying the checker is ignored.
+
+                 সরবরাহ simpleObjective = new সরবরাহ() {
+                    @Override
+                    public double[] value(double[] point) {
+                        return new double[]{point[0] * point[0]};
+                    }
+                };
+                Target simpleTarget = new Target(new double[]{0.0});
+                double[] simpleStart = {5.0};
+
+                ConvergenceChecker<PointValuePair> checker1 = new ConvergenceChecker<PointValuePair>() {
+                    @Override
+                    public boolean converged(PointValuePair previous, PointValuePair current) {
+                        return Math.abs(current.getPoint()[0]) < 0.1;
+                    }
+                };
+
+                ConvergenceChecker<PointValuePair> checker2 = new ConvergenceChecker<PointValuePair>() {
+                    @Override
+                    public boolean converged(PointValuePair previous, PointValuePair current) {
+                        return Math.abs(current.getPoint()[0]) < 1e-7;
+                    }
+                };
+
+                LevenbergMarquardtOptimizer optimizer1 = new LevenbergMarquardtOptimizer(checker1);
+                PointValuePair result1 = optimizer1.optimize(simpleObjective, simpleTarget, new org.apache.commons.math3.optim.nonlinear.vector.InitialGuess(simpleStart));
+
+                LevenbergMarquardtOptimizer optimizer2 = new LevenbergMarquardtOptimizer(checker2);
+                PointValuePair result2 = optimizer2.optimize(simpleObjective, simpleTarget, new org.apache.commons.math3.optim.nonlinear.vector.InitialGuess(simpleStart));
+
+                // If the checker is ignored, both `result1` and `result2` should be very similar,
+                // likely converging to the same point based on the optimizer's default criteria,
+                // rather than stopping at the 0.1 threshold for `checker1`.
+                // This test is still a bit indirect.
+
+                // The most reliable way is to check if the optimizer *ever* calls the `converged` method of the provided checker.
+                // This would require mocking or using reflection.
+
+                // Let's assume the bug is that the constructor `LevenbergMarquardtOptimizer(ConvergenceChecker<PointValuePair> checker)`
+                // is faulty and the `checker` is not used.
+                // We can try to provide a checker that *should* make it stop, and if it doesn't stop, it's a bug.
+
+                // Let's use a very simple objective and a checker that should stop it *very* early.
+                // f(x) = x. Target = 0. Start = 1.
+                // The optimum is at x=0.
+
+                 সরবরাহ linearObjective = new সরবরাহ() {
+                    @Override
+                    public double[] value(double[] point) {
+                        return new double[]{point[0]};
+                    }
+                };
+                Target linearTarget = new Target(new double[]{0.0});
+                double[] linearStart = {1.0};
+
+                ConvergenceChecker<PointValuePair> earlyStopChecker = new ConvergenceChecker<PointValuePair>() {
+                    @Override
+                    public boolean converged(PointValuePair previous, PointValuePair current) {
+                        // This checker should stop if the point is already close to zero.
+                        // In this linear case, it should stop after the first iteration if the starting point is already the target.
+                        // Or if the first step makes it close to the target.
+                        return Math.abs(current.getPoint()[0]) < 1e-6;
+                    }
+                };
+
+                LevenbergMarquardtOptimizer optimizerWithEarlyStop = new LevenbergMarquardtOptimizer(earlyStopChecker);
+                PointValuePair resultEarlyStop = optimizerWithEarlyStop.optimize(linearObjective, linearTarget, new org.apache.commons.math3.optim.nonlinear.vector.InitialGuess(linearStart));
+
+                // If the checker is ignored, the optimizer will proceed with its default stopping criteria.
+                // If the checker *is* used, it should stop the optimization when `|point| < 1e-6`.
+                // The bug description implies that the checker is *not* used.
+                // So, even with `earlyStopChecker`, the optimizer might run more iterations than expected,
+                // or converge to a value that doesn't satisfy `|point| < 1e-6` if the default criteria are different.
+
+                // The most direct test would be to assert that the optimization *doesn't* stop when it should have according to the checker.
+                // This means `resultEarlyStop.getPoint()[0]` should *not* be less than `1e-6` if the checker was ignored and default criteria are different,
+                // OR it *should* be less than `1e-6` if the checker was respected.
+                // The bug is that it's *ignored*. So, if the checker *would* stop it, and it *doesn't*, that's the bug.
+
+                // Let's assume the default stopping criteria of LevenbergMarquardtOptimizer are such that it performs at least one iteration.
+                // If we provide a checker that should stop it after the first iteration (if the starting point is already close to optimum),
+                // and it *doesn't* stop, then the checker is ignored.
+
+                // The most direct way to demonstrate "ignores" is to have two scenarios:
+                // 1. Optimizer with a checker that *should* stop it early.
+                // 2. Optimizer with a checker that *should not* stop it early (or uses default criteria).
+                // If the results are the same or don't reflect the difference in checkers, the checker is ignored.
+
+                // Let's try the scenario where the starting point is already the optimum.
+                // f(x) = x^2. Target = 0. Start = 0.
+                // Checker 1: stops if |x| < 1e-6. (Should stop immediately)
+                // Checker 2: stops if |x| < 1e-10. (Should stop immediately)
+                // If the optimizer performs iterations even with the checker, it's ignored.
+
+                 সরবরাহ zeroObjective = new সরবরাহ() {
+                    @Override
+                    public double[] value(double[] point) {
+                        return new double[]{point[0] * point[0]};
+                    }
+                };
+                Target zeroTarget = new Target(new double[]{0.0});
+                double[] zeroStart = {0.0};
+
+                ConvergenceChecker<PointValuePair> checker1e6 = new ConvergenceChecker<PointValuePair>() {
+                    @Override
+                    public boolean converged(PointValuePair previous, PointValuePair current) {
+                        return Math.abs(current.getPoint()[0]) < 1e-6;
+                    }
+                };
+
+                ConvergenceChecker<PointValuePair> checker1e10 = new ConvergenceChecker<PointValuePair>() {
+                    @Override
+                    public boolean converged(PointValuePair previous, PointValuePair current) {
+                        return Math.abs(current.getPoint()[0]) < 1e-10;
+                    }
+                };
+
+                LevenbergMarquardtOptimizer optimizer1e6 = new LevenbergMarquardtOptimizer(checker1e6);
+                PointValuePair result1e6 = optimizer1e6.optimize(zeroObjective, zeroTarget, new org.apache.commons.math3.optim.nonlinear.vector.InitialGuess(zeroStart));
+
+                LevenbergMarquardtOptimizer optimizer1e10 = new LevenbergMarquardtOptimizer(checker1e10);
+                PointValuePair result1e10 = optimizer1e10.optimize(zeroObjective, zeroTarget, new org.apache.commons.math3.optim.nonlinear.vector.InitialGuess(zeroStart));
+
+                // If the checker is ignored, both results should be identical and might not reflect the strictness of the checker.
+                // The most direct failure is if the checker *should* have stopped it, but it didn't.
+                // This implies that even when the starting point is the optimum, the optimizer might run iterations if the checker is ignored.
+
+                // The bug report implies that the `LevenbergMarquardtOptimizer(ConvergenceChecker<PointValuePair> checker)` constructor
+                // does not correctly initialize or use the `checker`.
+                // This means that the `checker` parameter is effectively ignored.
+                // To reproduce this, we need a test that would behave differently if the checker *was* used.
+
+                // Let's create a scenario where a checker *should* stop the optimization immediately.
+                // If the optimizer proceeds beyond the first step, the checker was ignored.
+
+                // Objective function where the starting point is the minimum.
+                // f(x) = x^2, minimum at x=0.
+                // Target = 0.
+                // Start point = 0.
+                // A convergence checker that returns true if the current point's value is very close to zero.
+
+                 সরবরাহ simpleObjectiveFunc = new সরবরাহ() {
+                    @Override
+                    public double[] value(double[] point) {
+                        return new double[]{point[0] * point[0]};
+                    }
+                };
+
+                Target simpleTargetFunc = new Target(new double[]{0.0});
+                double[] startPointAtZero = {0.0};
+
+                ConvergenceChecker<PointValuePair> immediateConvergenceChecker = new ConvergenceChecker<PointValuePair>() {
+                    @Override
+                    public boolean converged(PointValuePair previous, PointValuePair current) {
+                        // This checker should return true if the optimization has reached the minimum.
+                        // Since we start at the minimum, it should indicate convergence immediately.
+                        return Math.abs(current.getValue()[0]) < 1e-15;
+                    }
+                };
+
+                // Instantiate the optimizer with the checker that should cause immediate convergence.
+                LevenbergMarquardtOptimizer optimizer = new LevenbergMarquardtOptimizer(immediateConvergenceChecker);
+
+                // Perform the optimization.
+                PointValuePair result = optimizer.optimize(simpleObjectiveFunc, simpleTargetFunc, new org.apache.commons.math3.optim.nonlinear.vector.InitialGuess(startPointAtZero));
+
+                // If the checker was ignored, the optimizer might still perform some iterations.
+                // The critical part of the bug is that the checker is *not used*.
+                // This means that even if the checker would have stopped it immediately, it might not.
+                // A common way to detect this is if the optimizer performs more iterations than expected,
+                // or if the result is not as precise as the checker would enforce.
+
+                // The most direct failure would be if the optimizer *doesn't* stop when the checker says to.
+                // If `immediateConvergenceChecker` is used, the result should be very close to the start point with value close to 0.
+                // If it's ignored, the optimizer might perform its own checks, which could lead to a slightly different result or more iterations.
+
+                // The bug report implies that the `LevenbergMarquardtOptimizer(ConvergenceChecker<PointValuePair> checker)` constructor is the issue.
+                // If we pass a checker, it's ignored.
+                // This means the optimizer will use its default convergence criteria.
+                // If the default criteria are different from what the provided checker would impose, this test will fail.
+
+                // Let's try to make the checker enforce a *very loose* convergence, and see if the optimizer is *stricter* by default.
+                // This would imply the checker is ignored.
+
+                 সরবরাহ looseObjective = new সরবরাহ() {
+                    @Override
+                    public double[] value(double[] point) {
+                        return new double[]{point[0] * point[0]};
+                    }
+                };
+                Target looseTarget = new Target(new double[]{0.0});
+                double[] looseStart = {1.0};
+
+                ConvergenceChecker<PointValuePair> looseChecker = new ConvergenceChecker<PointValuePair>() {
+                    @Override
+                    public boolean converged(PointValuePair previous, PointValuePair current) {
+                        // Very loose convergence: stop if the point is anywhere within [-1, 1].
+                        // This should stop immediately for start = 1.
+                        return Math.abs(current.getPoint()[0]) <= 1.0;
+                    }
+                };
+
+                LevenbergMarquardtOptimizer optimizerWithLooseChecker = new LevenbergMarquardtOptimizer(looseChecker);
+                PointValuePair resultLoose = optimizerWithLooseChecker.optimize(looseObjective, looseTarget, new org.apache.commons.math3.optim.nonlinear.vector.InitialGuess(looseStart));
+
+                // If the checker is ignored, the optimizer will use its default criteria.
+                // LevenbergMarquardtOptimizer's default convergence is typically much stricter than |x| <= 1.0.
+                // So, if the checker *were* used, the result should be `point = 1.0` (or very close).
+                // If it's ignored, the result will be much closer to 0.0.
+                // This is the most direct way to test that the checker is ignored.
+
+                // Assert that the result is *not* what the loose checker would imply.
+                // This means the optimizer used its default, stricter criteria.
+                if (Math.abs(resultLoose.getPoint()[0] - 1.0) > 1e-9) {
+                    // The result is not close to 1.0, meaning the loose checker was ignored,
+                    // and the optimizer used its own (stricter) default criteria.
+                    // This confirms the bug.
+                    // We can fail the test explicitly here, or let it pass if no other assertions are made.
+                    // To make it a clear test failure, we can assert something that would be true if the checker *was* used.
+                    fail("LevenbergMarquardtOptimizer ignored the ConvergenceChecker. Expected result close to 1.0, but got " + resultLoose.getPoint()[0]);
+                }
+
+                // Alternatively, we can check if the result is closer to the actual minimum (0.0) than what the loose checker would allow.
+                // This is implicitly covered by the above check.
+
+                // Let's refine the assertion. The bug is that the checker is ignored.
+                // So, if we provide a checker that *should* stop it at `x=1`, but the optimizer *continues* and finds the minimum at `x=0`,
+                // then the checker was ignored.
+
+                // We expect the result to be close to 0.0 if the checker is ignored.
+                // If the checker *was* used, the result should be close to 1.0.
+                // Therefore, we assert that the result is close to 0.0, implying the checker was ignored.
+                assertTrue(Math.abs(resultLoose.getPoint()[0]) < 1e-6); // Assert that it converged to the actual minimum, not the loose checker's threshold.
+
+            } catch (Exception e) {
+                // If an exception occurs, it might be due to the optimizer's default behavior,
+                // not necessarily proving the checker was ignored in the intended way.
+                // However, if the checker *should* have prevented an exception (e.g., by stopping early),
+                // and an exception still occurs, it could indicate the checker was ignored.
+                // For this bug, the most direct test is the one above.
+                fail("An unexpected exception occurred: " + e.getMessage());
+            }
+        } catch (Exception e) {
+            fail("An unexpected exception occurred during initial setup or test: " + e.getMessage());
+        }
+    }
+}

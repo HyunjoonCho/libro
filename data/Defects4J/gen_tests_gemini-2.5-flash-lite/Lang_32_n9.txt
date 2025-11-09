@@ -1,0 +1,54 @@
+public void testToStringStyleMemoryLeak() throws Exception {
+    // This test is designed to simulate a scenario where ToStringStyle might be used,
+    // potentially leading to a memory leak if not handled properly, especially in
+    // container environments where classloaders might be reused.
+    // The actual reproduction of a memory leak is difficult in a unit test
+    // without specific JVM instrumentation and long-running scenarios.
+    // However, we can test the usage pattern that is suspected to cause the leak.
+
+    // Simulate a class that might use ToStringStyle
+    class LeakyObject {
+        private String field;
+
+        public LeakyObject(String field) {
+            this.field = field;
+        }
+
+        @Override
+        public String toString() {
+            // This is the part of ToStringStyle that might involve ThreadLocals
+            // if not used carefully. We are calling a method that is known to
+            // potentially use ThreadLocals internally.
+            ToStringStyle.setDefaultStyle(ToStringStyle.SHORT_PREFIX_STYLE);
+            return new ReflectionToStringBuilder(this).toString();
+        }
+    }
+
+    // Create an instance of the object
+    LeakyObject obj = new LeakyObject("test");
+
+    // Call the toString method which internally uses ToStringStyle
+    String result = obj.toString();
+
+    // Assert that the toString method returns a non-empty string (basic validation)
+    assertNotNull(result);
+    assertTrue(result.contains("LeakyObject"));
+    assertTrue(result.contains("field"));
+
+    // In a real leak scenario, the ThreadLocal reference would persist.
+    // A proper unit test for memory leaks would involve:
+    // 1. Running this code in a separate classloader.
+    // 2. Triggering the suspected code path.
+    // 3. Releasing the classloader.
+    // 4. Checking if the classes loaded by the previous classloader are garbage collected.
+    // This is beyond the scope of a simple JUnit test method.
+    // The fix in the library should ensure ThreadLocals are cleaned up or ThreadLocal
+    // usage is avoided in static contexts that persist.
+
+    // As per the bug report, the issue is that ThreadLocals are created but never removed.
+    // The fix likely involves ensuring that any ThreadLocal variables used within
+    // ToStringStyle's static methods are properly reset or that static ThreadLocal
+    // usage is re-evaluated.
+    // A specific test to *prove* the leak is hard, but this test ensures the code
+    // path is exercised.
+}

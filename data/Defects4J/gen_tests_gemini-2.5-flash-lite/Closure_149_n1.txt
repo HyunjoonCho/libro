@@ -1,0 +1,61 @@
+public void testStringEscaping() throws Exception {
+    String originalJs = "var ru = { patterns: [\"'\\u00e4'\", \"'\\u00f6'\", \"'\\u00fc'\", \"'\\u00c4'\", \"'\\u00d6'\", \"'\\u00dc'\", \"'\\u00df'\"], separators: [\"-\"], except: [] };";
+    CompilerOptions options = new CompilerOptions();
+    options.setPrettyPrint(true);
+    options.setLanguageIn(LanguageMode.ECMASCRIPT_2020);
+    options.setLanguageOut(LanguageMode.ECMASCRIPT_2020);
+    options.setManageClosureDependencies(false);
+    options.setClosurePass(false);
+    options.setSkipDefaultPasses(true);
+
+    // The original bug report implies that the default behavior *does* escape strings.
+    // We'll test this default behavior and then, if a fix were implemented,
+    // we would add another test case to verify that escaping can be turned off.
+    // For now, we are just reproducing the *problem* described: minification
+    // making the file larger due to escaping.
+
+    // We can't directly test the "making it bigger" part without a full minification
+    // run and size comparison. However, we can test that the escaping *occurs*
+    // by checking the output. If escaping is turned off, the output would be different.
+
+    // This test will focus on verifying that the compiler *does* escape characters
+    // by default when minifying, as this is the behavior leading to larger file sizes
+    // for files with non-ASCII characters.
+
+    // A simplified test: check if specific non-ASCII characters are escaped.
+    // If the bug is that it *always* escapes, even when it shouldn't for size,
+    // then checking for the escaped form confirms the mechanism is active.
+
+    // Let's try to compile a simple string with non-ASCII characters.
+    String inputJs = "var test = \"äöüÄÖÜß\";";
+    Compiler compiler = new Compiler();
+    SourceFile externs = SourceFile.fromCode("externs.js", "");
+    SourceFile.Builder inputFileBuilder = SourceFile.builder().setName("input.js").addCodeFromString(inputJs);
+    List<SourceFile> inputs = ImmutableList.of(inputFileBuilder.build());
+
+    CompilationResult result = compiler.compile(externs, inputs, options);
+
+    // If escaping is happening, the output will contain \uXXXX sequences.
+    // If escaping is turned off, it might contain the literal characters (depending on JS engine/context)
+    // or a different form of escaping. The core issue is that the default behavior
+    // leads to larger files for these specific characters.
+
+    // Let's assert that the output contains escaped characters, implying the mechanism is active.
+    String outputCode = compiler.toSource();
+
+    // We expect the non-ASCII characters to be escaped.
+    // The exact escaped form might vary slightly based on compiler version/settings,
+    // but the presence of \uXXXX is the key.
+    assertTrue(outputCode.contains("\\u00e4")); // ä
+    assertTrue(outputCode.contains("\\u00f6")); // ö
+    assertTrue(outputCode.contains("\\u00fc")); // ü
+    assertTrue(outputCode.contains("\\u00c4")); // Ä
+    assertTrue(outputCode.contains("\\u00d6")); // Ö
+    assertTrue(outputCode.contains("\\u00dc")); // Ü
+    assertTrue(outputCode.contains("\\u00df")); // ß
+
+    // This test verifies that the escaping mechanism is active by default.
+    // The bug report states that this default behavior leads to larger files
+    // for certain inputs. A complete reproduction would involve measuring file sizes,
+    // which is difficult in a unit test. This test confirms the *cause* of the size increase.
+}

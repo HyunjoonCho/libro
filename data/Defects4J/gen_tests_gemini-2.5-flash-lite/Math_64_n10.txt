@@ -1,0 +1,38 @@
+public void testLevenbergMarquardtInconsistentResult() throws Exception {
+    final double[][] points = {
+            { 0.0 }, { 1.0 }, { 2.0 }, { 3.0 }, { 4.0 }, { 5.0 }, { 6.0 }, { 7.0 }, { 8.0 }, { 9.0 }
+    };
+    final double[] values = {
+            1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1
+    };
+    final MultivariateMatrixFunction jacobian = new MultivariateMatrixFunction() {
+        @Override
+        public double[][] value(double[] point) {
+            return new double[][]{{ -1.0 }};
+        }
+    };
+    final MultivariateVectorFunction model = new MultivariateVectorFunction() {
+        @Override
+        public double[] value(double[] point) {
+            return new double[]{ -point[0] };
+        }
+    };
+
+    final LevenbergMarquardtOptimizer optimizer = new LevenbergMarquardtOptimizer();
+    final SimpleVectorialPointValuePair pointValuePair = optimizer.optimize(
+            new MaxEval(1000),
+            new MaxIter(1000),
+            new ObjectiveFunction(new MultivariateJacobianObjectiveFunction(model, jacobian)),
+            new InitialGuess(new double[]{ 10.0 }),
+            new Target(values),
+            new Weight(new double[]{ 1.0 })
+    );
+
+    final double[] optimum = pointValuePair.getPoint().toArray();
+    final double[] residuals = optimizer.computeResiduals(optimum, new double[]{ 1.0 }, new double[]{ 1.0 }, values);
+    final double cost = optimizer.computeCost(residuals);
+
+    // The bug is that the pointValuePair.getValue() might not correspond to the computed cost and residuals.
+    // We assert that the computed cost is indeed the value returned by the optimizer.
+    assertEquals(cost, pointValuePair.getValue(), 1e-10);
+}

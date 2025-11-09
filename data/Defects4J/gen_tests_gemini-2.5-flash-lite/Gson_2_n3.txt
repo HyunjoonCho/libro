@@ -1,0 +1,104 @@
+public void testTypeHierarchyAdapterRuntimeCheck() {
+    Gson gson = new Gson();
+    TypeAdapter<Vehicle> vehicleAdapter = new VehicleTypeAdapter();
+    TypeAdapter<Car> carAdapter = new CarTypeAdapter();
+    TypeAdapter<Truck> truckAdapter = new TruckTypeAdapter();
+
+    GsonBuilder builder = new GsonBuilder();
+    builder.registerTypeHierarchyAdapter(Vehicle.class, vehicleAdapter);
+    builder.registerTypeHierarchyAdapter(Car.class, carAdapter);
+    builder.registerTypeHierarchyAdapter(Truck.class, truckAdapter);
+    gson = builder.create();
+
+    String carJson = "{ \"make\": \"Toyota\", \"model\": \"Camry\" }";
+    String truckJson = "{ \"make\": \"Ford\", \"model\": \"F-150\", \"payload\": 1000 }";
+
+    // This should throw an exception because the Vehicle adapter is registered
+    // and it's not equipped to handle the Truck JSON.
+    try {
+        gson.fromJson(truckJson, Car.class);
+        fail("Expected JsonSyntaxException when decoding Truck JSON as Car");
+    } catch (JsonSyntaxException expected) {
+        // Expected exception
+    }
+
+    // This should work correctly
+    Car car = gson.fromJson(carJson, Car.class);
+    assertNotNull(car);
+    assertEquals("Toyota", car.make);
+    assertEquals("Camry", car.model);
+
+    // This should work correctly
+    Truck truck = gson.fromJson(truckJson, Truck.class);
+    assertNotNull(truck);
+    assertEquals("Ford", truck.make);
+    assertEquals("F-150", truck.model);
+    assertEquals(1000, truck.payload);
+}
+
+// Dummy classes for testing
+class Vehicle {
+    String make;
+    String model;
+}
+
+class Car extends Vehicle {
+}
+
+class Truck extends Vehicle {
+    int payload;
+}
+
+// Dummy TypeAdapters
+class VehicleTypeAdapter extends TypeAdapter<Vehicle> {
+    @Override
+    public void write(JsonWriter out, Vehicle value) throws IOException {
+        // Not relevant for this test
+    }
+
+    @Override
+    public Vehicle read(JsonReader in) throws IOException {
+        // This adapter is too generic to handle Truck specific fields
+        // and should not be used when a more specific adapter (TruckTypeAdapter) exists
+        // and the target type is Truck.
+        JsonObject jsonObject = JsonParser.parseReader(in).getAsJsonObject();
+        Vehicle vehicle = new Vehicle();
+        vehicle.make = jsonObject.get("make").getAsString();
+        vehicle.model = jsonObject.get("model").getAsString();
+        // If it had a payload, this adapter wouldn't know what to do.
+        return vehicle;
+    }
+}
+
+class CarTypeAdapter extends TypeAdapter<Car> {
+    @Override
+    public void write(JsonWriter out, Car value) throws IOException {
+        // Not relevant for this test
+    }
+
+    @Override
+    public Car read(JsonReader in) throws IOException {
+        JsonObject jsonObject = JsonParser.parseReader(in).getAsJsonObject();
+        Car car = new Car();
+        car.make = jsonObject.get("make").getAsString();
+        car.model = jsonObject.get("model").getAsString();
+        return car;
+    }
+}
+
+class TruckTypeAdapter extends TypeAdapter<Truck> {
+    @Override
+    public void write(JsonWriter out, Truck value) throws IOException {
+        // Not relevant for this test
+    }
+
+    @Override
+    public Truck read(JsonReader in) throws IOException {
+        JsonObject jsonObject = JsonParser.parseReader(in).getAsJsonObject();
+        Truck truck = new Truck();
+        truck.make = jsonObject.get("make").getAsString();
+        truck.model = jsonObject.get("model").getAsString();
+        truck.payload = jsonObject.get("payload").getAsInt();
+        return truck;
+    }
+}

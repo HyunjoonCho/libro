@@ -1,0 +1,45 @@
+public void testJsonValuePrecedence() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+
+    // Custom serializer for the annotated type
+    SimpleModule module = new SimpleModule();
+    module.addSerializer(AnnotatedType.class, new JsonSerializer<AnnotatedType>() {
+        @Override
+        public void serialize(AnnotatedType value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+            gen.writeString("CustomSerialized");
+        }
+    });
+    mapper.registerModule(module);
+
+    AnnotatedType annotatedObject = new AnnotatedType("SomeValue");
+    String json = mapper.writeValueAsString(annotatedObject);
+
+    // The test should assert that the output is "CustomSerialized"
+    // If the custom serializer is not used, it will serialize based on @JsonValue
+    // which in this case would likely be "AnnotatedType: SomeValue" or similar
+    // depending on the implementation of AnnotatedType's toString() or @JsonValue method.
+    // For the purpose of reproducing the failure, we assert the expected custom output.
+    assertEquals("\"CustomSerialized\"", json);
+}
+
+// Helper class to reproduce the scenario
+static class AnnotatedType {
+    private String value;
+
+    public AnnotatedType(String value) {
+        this.value = value;
+    }
+
+    @JsonValue
+    public String getValueForJson() {
+        return "AnnotatedType: " + value;
+    }
+
+    // toString might also be implicitly used if @JsonValue wasn't present
+    @Override
+    public String toString() {
+        return "AnnotatedType{" +
+               "value='" + value + '\'' +
+               '}';
+    }
+}

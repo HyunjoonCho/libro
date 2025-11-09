@@ -1,0 +1,105 @@
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.type.SimpleType;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+public class JacksonRegressionTest {
+
+    @Test
+    public void testSimpleTypeConstructWithClass() {
+        // This test aims to reproduce the issue where SimpleType.construct(Class)
+        // leads to problems with type resolution, particularly for collections.
+        // The original bug report indicates that introspection by POJO deserializer builder
+        // might not find fields or methods when using this method directly,
+        // especially when dealing with generic types.
+
+        // We'll try to construct a JavaType for a List of Integers using the problematic method.
+        // The expected behavior is that even if generic type resolution is imperfect,
+        // the basic structure of the type should be recognizable.
+
+        // Using the deprecated SimpleType.construct(Class) method
+        JavaType listType = SimpleType.construct(List.class);
+
+        // The bug report suggests that even if generic parameters aren't fully resolved,
+        // the basic type should be identifiable and introspection should yield some results.
+        // We'll assert that the constructed type is not null and is indeed a reference type.
+        assertNotNull(listType, "JavaType should not be null");
+        assertTrue(listType.isContainerType(), "Constructed type should be a container type");
+
+        // A more specific check related to the bug: trying to get the content type.
+        // In the buggy scenario, this might fail or return null unexpectedly.
+        // If the fix is applied, even if it's just a basic resolution, we might get
+        // a placeholder or a default type.
+        // For the purpose of reproducing the *failure*, we expect something problematic here.
+        // However, since we are writing a test that *should* pass after a fix,
+        // we'll assert the expected behavior *after* the fix.
+        // If we were trying to *demonstrate* the bug, we might assert a null content type
+        // or an exception.
+
+        // Let's use TypeFactory to get the expected type for comparison,
+        // as TypeFactory is the recommended way.
+        TypeFactory typeFactory = TypeFactory.defaultInstance();
+        JavaType expectedListType = typeFactory.constructParametricType(List.class, Integer.class);
+
+        // The bug was that SimpleType.construct(List.class) didn't properly resolve
+        // even the basic structure or allow for further parameterization easily.
+        // After the fix, it should at least be a valid JavaType representing List.
+
+        // We can't directly assert the *failure* here without knowing the exact
+        // assertion that would have failed in the buggy code.
+        // However, the description implies that introspection would fail.
+        // A test that *passes* after the fix would involve ensuring that
+        // the constructed type, when potentially parameterized, works as expected
+        // or at least doesn't throw unexpected errors.
+
+        // Let's simulate a scenario where the user might try to parameterize it later,
+        // and ensure it doesn't crash.
+        // The core issue was that SimpleType.construct(Class) was too basic and
+        // didn't delegate to TypeFactory, leading to incomplete type information.
+
+        // This test focuses on the *outcome* of the fix: that constructing
+        // a basic container type like List.class via SimpleType.construct()
+        // doesn't lead to immediate failures when introspection methods are called,
+        // even if full generic resolution isn't achieved without TypeFactory.
+
+        // If the bug was that `listType.getContentType()` returned null or threw an error,
+        // a test *demonstrating* the bug might look like:
+        // assertThrows(SomeException.class, () -> listType.getContentType());
+        // Or:
+        // assertNull(listType.getContentType());
+
+        // Since we are providing a test method that *would be inserted* into a suite
+        // to verify the fix, we'll assert a state that should be true *after* the fix.
+        // The fix makes `SimpleType.construct(Class)` more robust by ensuring basic
+        // introspection works, even if it's not fully generic-aware without TypeFactory.
+
+        // Let's check if the type has a raw class.
+        assertNotNull(listType.getRawClass(), "Raw class should be available");
+        assertTrue(listType.getRawClass().equals(List.class), "Raw class should be List.class");
+
+        // The description also mentions that "Its usage is likely to be wide-spread, despite existence of preferable methods (TypeFactory)".
+        // This implies that even if not ideal, the method should not break basic functionality.
+        // The failure mode was likely that introspection failed (e.g., no fields/methods found).
+        // A post-fix test would confirm that basic introspection *does* work.
+
+        // One way to test this indirectly is to try and create a type using TypeFactory
+        // and see if the basic properties match what SimpleType.construct might provide
+        // after the fix.
+        JavaType typeViaFactory = typeFactory.constructType(List.class);
+        assertNotNull(typeViaFactory, "JavaType constructed via TypeFactory should not be null");
+        assertTrue(typeViaFactory.isContainerType(), "Type via Factory should be container type");
+        assertTrue(typeViaFactory.getRawClass().equals(List.class), "Type via Factory raw class should be List.class");
+
+        // The key is that `SimpleType.construct(Class)` should now yield a `JavaType`
+        // that `TypeFactory` can at least partially work with, or that basic
+        // introspection methods on `JavaType` itself don't fail outright.
+        // The provided test case focuses on ensuring the basic `JavaType` object
+        // is created and has fundamental properties, which would have been
+        // problematic in the buggy version for complex types.
+    }
+}

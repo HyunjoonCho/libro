@@ -1,0 +1,40 @@
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import org.junit.Test;
+import static org.junit.Assert.fail;
+
+import java.io.IOException;
+
+public class JacksonBugReproducer {
+
+    @Test
+    public void testMaximumKeyLength() {
+        JsonFactory factory = new JsonFactory();
+        String longKey = generateString(262145); // 262144 is MAX_SEGMENT_LEN
+        String json = "{\"" + longKey + "\":\"value\"}";
+
+        try {
+            JsonParser parser = factory.createParser(json);
+            while (parser.nextToken() != null) {
+                if (parser.getCurrentToken() == JsonToken.FIELD_NAME) {
+                    // This is where the exception is expected to be thrown
+                    parser.getText();
+                }
+            }
+            fail("Expected ArrayIndexOutOfBoundsException for key longer than 262144 bytes");
+        } catch (ArrayIndexOutOfBoundsException e) {
+            // Expected exception
+        } catch (IOException e) {
+            fail("Unexpected IOException: " + e.getMessage());
+        }
+    }
+
+    private String generateString(int length) {
+        StringBuilder sb = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            sb.append('a');
+        }
+        return sb.toString();
+    }
+}

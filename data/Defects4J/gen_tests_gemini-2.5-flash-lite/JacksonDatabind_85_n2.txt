@@ -1,0 +1,201 @@
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Date;
+import java.util.TimeZone;
+
+import static org.junit.Assert.assertTrue;
+
+public class DateTimeSerializerTest {
+
+    @Test
+    public void testSerializerIgnoresConfiguredFormat() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.setTimeZone(TimeZone.getTimeZone("UTC"));
+        mapper.enable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+        // This date object will be serialized
+        Date date = new Date();
+
+        // Custom serializer that uses a specific format
+        class CustomSerializer extends com.fasterxml.jackson.databind.ser.std.StdSerializer<Date> {
+            protected CustomSerializer() {
+                super(Date.class);
+            }
+
+            @Override
+            public void serialize(Date value, com.fasterxml.jackson.core.JsonGenerator gen, com.fasterxml.jackson.databind.SerializerProvider provider) throws IOException {
+                // This part is not directly tested here, but it's where the format is used
+                // The issue is in createContextual which is called before serialize
+                gen.writeString("custom_format_string");
+            }
+
+            @Override
+            public com.fasterxml.jackson.databind.ser.ContextualSerializer createContextual(com.fasterxml.jackson.databind.DeserializationContext ctxt, com.fasterxml.jackson.databind.BeanProperty property) throws com.fasterxml.jackson.databind.JsonMappingException {
+                // Simulate the behavior described in the bug report
+                // This is where the format is incorrectly reset
+                com.fasterxml.jackson.databind.ser.std.StdDateFormat stdDateFormat = new com.fasterxml.jackson.databind.ser.std.StdDateFormat();
+                // The bug is that it doesn't check for format.hasPattern() and always falls back to ISO8601
+                return new com.fasterxml.jackson.databind.ser.std.DateSerializer(null, null, null, stdDateFormat);
+            }
+        }
+
+        // A simple POJO with a field annotated with @JsonFormat
+        class MyObject {
+            @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT")
+            public Date eventDate;
+
+            public MyObject(Date eventDate) {
+                this.eventDate = eventDate;
+            }
+        }
+
+        MyObject obj = new MyObject(date);
+
+        // We need to register our custom serializer for Date
+        com.fasterxml.jackson.databind.module.SimpleModule module = new com.fasterxml.jackson.databind.module.SimpleModule();
+        module.addSerializer(Date.class, new CustomSerializer());
+        mapper.registerModule(module);
+
+        // Perform serialization
+        String json = mapper.writeValueAsString(obj);
+
+        // The problem is that the serializer created by createContextual uses StdDateFormat.DATE_FORMAT_STR_ISO8601
+        // instead of the format specified in @JsonFormat.
+        // We are asserting that the output *does not* contain the ISO8601 format,
+        // implying that the custom format *was not* used as expected by the serializer.
+        // The actual serialization output format is not the primary concern for this test,
+        // but rather the internal behavior of createContextual.
+        // Since the bug description implies that the format is reset to ISO8601,
+        // we can infer that if the output doesn't match the @JsonFormat pattern,
+        // the bug is present.
+        // However, the CustomSerializer.serialize method above just writes "custom_format_string",
+        // so we can't directly check the date format in the output string.
+        // The best we can do is to ensure that the *intended* behavior (using the configured format)
+        // is *not* happening by checking for the absence of a format that *would* be produced
+        // if the serializer correctly picked up the @JsonFormat.
+
+        // A more direct test would involve modifying CustomSerializer to actually use the format
+        // and then checking the output. But based on the description, the issue is in createContextual.
+        // For the purpose of reproducing the failure, we can assert that the output is NOT
+        // what we'd expect if the format was correctly applied.
+
+        // The bug implies that the serializer would fall back to ISO8601.
+        // If the @JsonFormat pattern was correctly used, the output would look different.
+        // Since our CustomSerializer.serialize() just returns a fixed string, we cannot
+        // directly assert the format of the date string.
+        // The most we can do is to confirm that the `createContextual` method in the bug report
+        // is being invoked and that it's *not* correctly handling the format.
+        // The following assertion is a placeholder to indicate that the test is running and
+        // to highlight that the expected behavior (using the @JsonFormat pattern) is not achieved.
+        // A more robust test would require modifying the CustomSerializer to actually serialize
+        // the date using the format provided by the property.
+
+        // To make this test more meaningful for reproduction, let's assume the CustomSerializer
+        // *would* have serialized the date if it had correctly picked up the format.
+        // The bug report states that it resets to StdDateFormat.DATE_FORMAT_STR_ISO8601.
+        // So, if the @JsonFormat pattern was respected, the output would NOT be ISO8601.
+        // Since our CustomSerializer.serialize() doesn't actually serialize the date,
+        // we can't directly check the output date format.
+        // The critical part is the `createContextual` method.
+        // The fact that we are here and the custom serializer is registered means that
+        // `createContextual` is called. The bug is *within* that method.
+
+        // Let's modify the CustomSerializer to actually serialize using the provided format
+        // to make the test verifiable.
+
+        class FailingCustomSerializer extends com.fasterxml.jackson.databind.ser.std.StdSerializer<Date> {
+            protected FailingCustomSerializer() {
+                super(Date.class);
+            }
+
+            @Override
+            public void serialize(Date value, com.fasterxml.jackson.core.JsonGenerator gen, com.fasterxml.jackson.databind.SerializerProvider provider) throws IOException {
+                // This part will be affected by the format obtained in createContextual
+                DateFormat dateFormat = provider.getConfig().getDateFormat();
+                gen.writeString(dateFormat.format(value));
+            }
+
+            @Override
+            public com.fasterxml.jackson.databind.ser.ContextualSerializer createContextual(com.fasterxml.jackson.databind.DeserializationContext ctxt, com.fasterxml.jackson.databind.BeanProperty property) throws com.fasterxml.jackson.databind.JsonMappingException {
+                // This is the buggy part from the description
+                // It ignores format.getPattern() and falls back to ISO8601
+                final String pattern = com.fasterxml.jackson.databind.ser.std.StdDateFormat.DATE_FORMAT_STR_ISO8601;
+                StdDateFormat stdDateFormat = new StdDateFormat();
+                // The actual bug is here: it should check format.hasPattern() and use format.getPattern()
+                // instead of always defaulting to DATE_FORMAT_STR_ISO8601.
+                // It also doesn't properly handle the timezone from @JsonFormat.
+                return new com.fasterxml.jackson.databind.ser.std.DateSerializer(null, null, null, stdDateFormat.withPattern(pattern));
+            }
+        }
+
+        // Re-register the failing serializer
+        mapper.registerModule(new com.fasterxml.jackson.databind.module.SimpleModule().addSerializer(Date.class, new FailingCustomSerializer()));
+
+        // Re-serialize
+        json = mapper.writeValueAsString(obj);
+
+        // Now we can check the output. The @JsonFormat specifies "yyyy-MM-dd HH:mm:ss" and timezone "GMT".
+        // The buggy serializer will use ISO8601 (e.g., "2023-10-27T10:00:00.000+0000").
+        // The test should assert that the output *does not* match the expected format from @JsonFormat,
+        // which indicates the bug is present.
+        // However, since the bug is that it *ignores* the format and defaults to ISO8601,
+        // we can assert that the output *is* ISO8601, which is *not* what @JsonFormat specified.
+
+        // Let's refine the test to be more direct.
+        // The bug is that createContextual uses StdDateFormat.DATE_FORMAT_STR_ISO8601
+        // instead of the pattern from @JsonFormat.
+        // So, when DateSerializer is created, it gets an StdDateFormat instance that
+        // has the ISO8601 pattern, overriding the @JsonFormat pattern.
+
+        // We need a way to inspect the DateSerializer created by createContextual.
+        // A simpler approach is to rely on the serialization output.
+        // If the bug is present, the output format will be ISO8601, not the one from @JsonFormat.
+
+        // Expected format from @JsonFormat: "yyyy-MM-dd HH:mm:ss" (and GMT timezone)
+        // Actual format due to bug: ISO8601 (e.g., "2023-10-27T10:00:00.000+0000")
+
+        // Since the Date object is created just before serialization, its exact value is unknown.
+        // We can check if the output string *contains* parts of the ISO8601 format,
+        // and *does not* contain parts of the specified "yyyy-MM-dd HH:mm:ss" format.
+
+        // The timezone in @JsonFormat is "GMT". StdDateFormat.DATE_FORMAT_STR_ISO8601 uses UTC.
+        // Let's simplify the test to focus on the pattern itself.
+
+        // Create a specific date for predictable output
+        java.util.Calendar cal = java.util.Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+        cal.set(2023, java.util.Calendar.OCTOBER, 27, 10, 30, 0);
+        cal.set(java.util.Calendar.MILLISECOND, 123);
+        date = cal.getTime();
+
+        obj = new MyObject(date);
+
+        // Re-register the failing serializer
+        mapper.registerModule(new com.fasterxml.jackson.databind.module.SimpleModule().addSerializer(Date.class, new FailingCustomSerializer()));
+
+        json = mapper.writeValueAsString(obj);
+
+        // Expected output if bug is fixed (using @JsonFormat pattern and timezone):
+        // "2023-10-27 10:30:00" (assuming GMT conversion, Jackson's default date serializer might add ms and timezone info differently)
+        // The bug report implies it falls back to ISO8601 format.
+        // So, the output will be something like: "2023-10-27T10:30:00.123Z" or similar ISO8601.
+
+        // Assert that the output is NOT in the format specified by @JsonFormat.
+        // This implicitly means the bug is present because the format was ignored.
+        // We can't assert it IS ISO8601 because the exact ISO8601 representation can vary slightly.
+        // However, we *can* assert that the pattern from @JsonFormat is NOT used.
+
+        // Let's check if the output string contains the milliseconds part, which is typical for ISO8601
+        // but not for the specified "yyyy-MM-dd HH:mm:ss" pattern.
+        assertTrue("Output should not contain milliseconds if @JsonFormat pattern was used correctly", !json.contains("."));
+
+        // Also check that the separator is 'T' which is common in ISO8601
+        assertTrue("Output should contain 'T' if ISO8601 format was used due to bug", json.contains("T"));
+
+        // And check that the timezone indicator is present (like Z for UTC or offset)
+        assertTrue("Output should contain timezone indicator if ISO8601 format was used due to bug", json.matches(".*Z|\\[-+]\\d{2}:\\d{2}.*"));
+    }
+}

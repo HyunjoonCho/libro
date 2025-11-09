@@ -1,0 +1,165 @@
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+// Assuming the following classes are defined elsewhere:
+// MyHashMap.java, Foo.java, MyCustomIdInterface.java
+// And that the test class is named something like JacksonMapDeserializationTest
+
+public class JacksonMapDeserializationTest {
+
+    // --- Mock classes to make the test runnable ---
+    public static class MyCustomIdInterface {
+        private String id;
+
+        public String getId() {
+            return id;
+        }
+
+        public void setId(String id) {
+            this.id = id;
+        }
+    }
+
+    public static class Foo extends MyCustomIdInterface {
+        private String property;
+
+        public String getProperty() {
+            return property;
+        }
+
+        public void setProperty(String property) {
+            this.property = property;
+        }
+    }
+
+    public static class MyHashMap<K, V> extends HashMap<K, V> {
+        // Custom deserialization logic would be here,
+        // but for the test, we just need the class to be referenced.
+    }
+
+    public static class Container {
+        @JsonDeserialize(as = MyHashMap.class)
+        private Map<String, Foo> something;
+
+        public Map<String, Foo> getSomething() {
+            return something;
+        }
+
+        public void setSomething(Map<String, Foo> something) {
+            this.something = something;
+        }
+    }
+    // --- End of mock classes ---
+
+
+    @Test
+    public void testMapDeserializationWithSubtype() throws Exception {
+        String json = "{\n" +
+                      "  \"something\": [\n" +
+                      "        {\n" +
+                      "           \"id\": \"a uuid\",\n" +
+                      "           \"property\": \"value\"\n" +
+                      "         }\n" +
+                      "  ]\n" +
+                      "}";
+
+        // In a real scenario, you would use ObjectMapper here.
+        // Since we are only testing the deserialization behavior as described,
+        // and the core of the issue is how Jackson resolves types,
+        // we'll simulate the expected outcome based on the bug description.
+
+        // The bug report states that in 2.7.x, it fails to deserialize MyCustomIdInterface
+        // because it tries to use AbstractDeserializer.
+        // In 2.6.6, it worked by using BeanDeserializer for Foo.java.
+
+        // This test aims to reproduce the *failure* in 2.7.x.
+        // Therefore, we expect an exception during deserialization if the behavior
+        // described in the bug report is present.
+        // If we were to *fix* the bug, the test would assert the correct deserialized object.
+
+        // For the purpose of reproducing the *failure*, we will attempt to deserialize
+        // and expect it to throw an exception related to abstract type instantiation.
+        // The exact exception type and message might vary slightly depending on the Jackson version.
+
+        // To reproduce the failure, we need an ObjectMapper.
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+
+        // The bug implies that the type resolution for the Map's value (Foo) is the problem.
+        // The @JsonDeserialize(as = MyHashMap.class) is on the setter, which is tricky for direct testing.
+        // Let's simulate the scenario where the value type `Foo` is the issue.
+        // The provided JSON is an array, but the setter expects a Map.
+        // The original bug description implies that Jackson should have handled mapping the array
+        // into a Map based on the "id" property and that the `as = MyHashMap.class` annotation
+        // was supposed to guide this.
+
+        // The error message "Can not construct instance of MyCustomIdInterface" strongly suggests
+        // that Jackson is trying to instantiate the interface directly or an abstract type.
+
+        // Let's try to deserialize a simple object that *uses* the annotated field/setter.
+        // The original bug description is a bit ambiguous on how the array is mapped to a Map.
+        // It says: "allow us to map the array json above into a Map where "id" is the key".
+        // This implies a custom deserializer for the Map itself or a specific handling of arrays
+        // that result in a Map.
+
+        // Given the error message, let's focus on the `Foo` type.
+        // If `Foo` were an abstract class or an interface, the error would be expected.
+        // However, `Foo` is concrete. The issue seems to be how Jackson infers the type
+        // when `MyHashMap` is specified with `as`.
+
+        // Let's simplify the JSON to directly represent a Map to isolate the type issue,
+        // even though the original bug mentioned an array.
+        // The core problem is the type resolution of the *value* in the map.
+
+        String mapJson = "{\n" +
+                         "  \"a uuid\": {\n" + // Simulating the "id" being the key
+                         "     \"id\": \"a uuid\",\n" +
+                         "     \"property\": \"value\"\n" +
+                         "   }\n" +
+                         "}";
+
+        // The bug description is about `Map<UUID, Foo>` and `@JsonDeserialize(as = MyHashMap.class)`.
+        // The provided JSON is an array of objects. The description states:
+        // "allow us to map the array json above into a Map where "id" is the key and everything else serializes into the value."
+        // This suggests a custom deserializer for the Map itself or a feature that transforms arrays to maps.
+        // The error "Can not construct instance of MyCustomIdInterface" points to the *value* type.
+
+        // Let's try to deserialize the original JSON structure with the `Container` class.
+        // This is the most direct way to test the scenario.
+
+        try {
+            mapper.readValue(json, Container.class);
+            // If we reach here, it means deserialization succeeded, which is NOT the failure.
+            // The test should fail if it succeeds in a version where it's supposed to fail.
+            // However, we want to *reproduce* the failure.
+            // This means we expect an exception.
+            org.junit.jupiter.api.Assertions.fail("Deserialization should have failed due to abstract type issue.");
+        } catch (com.fasterxml.jackson.databind.JsonMappingException e) {
+            // Check if the exception message indicates the problem described.
+            String message = e.getMessage();
+            System.out.println("Caught expected exception: " + message);
+            // The specific message "Can not construct instance of MyCustomIdInterface" might be
+            // a simplification or specific to the user's exact setup.
+            // The core issue is the failure to resolve the concrete type for the map value.
+            // Let's check for keywords related to abstract types or instantiation problems.
+            if (message.contains("Can not construct instance") ||
+                message.contains("abstract types") ||
+                message.contains("No suitable constructor found") ||
+                message.contains("Cannot resolve type")) {
+                // This exception indicates the failure described in the bug report.
+                // We have successfully reproduced the failure.
+                // No assertion needed here, the catch block itself confirms the failure.
+            } else {
+                // Caught an exception, but it's not the one we expected.
+                // Re-throw or assert failure.
+                throw e;
+            }
+        } catch (Exception e) {
+            // Caught a different type of exception.
+            throw e;
+        }
+    }
+}

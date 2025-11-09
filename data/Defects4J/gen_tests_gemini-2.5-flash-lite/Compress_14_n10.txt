@@ -1,0 +1,231 @@
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+public class TarSymlinkAixTest {
+
+    @Test
+    public void testAixTarSymlink() throws IOException {
+        // This is a simplified representation of a tar file containing a symlink
+        // created by AIX tar. The key is the header format for symlinks.
+        // The problematic part is the octal representation of the size field
+        // when it's a symlink, which AIX tar seems to handle differently.
+        // A typical AIX tar symlink entry has a size of 0 but a non-zero mode
+        // and linkname field. The 'parseOctal' method in TarUtils was failing
+        // because it expected a valid octal number for the size field, even for symlinks.
+
+        // A minimal tar entry for a symlink named "link" pointing to "target".
+        // This byte array is constructed to mimic the problematic AIX tar header.
+        // It's a highly simplified representation and might not be a fully valid tar file,
+        // but it should trigger the parsing issue described.
+        // The critical part is the size field (bytes 124-131) which is 00000000000
+        // and the type indicator (byte 156) which is '2' for a symlink.
+        // The original bug report's stack trace points to an issue with parsing
+        // the size field as octal when it might not be a standard octal representation.
+
+        byte[] tarHeader = new byte[512]; // Standard tar header size
+
+        // Fill with null bytes initially
+        for (int i = 0; i < tarHeader.length; i++) {
+            tarHeader[i] = 0;
+        }
+
+        // Set the file name
+        String name = "aix_symlink";
+        System.arraycopy(name.getBytes(), 0, tarHeader, 0, name.length());
+
+        // Set mode (example: 0777 for permissions, and 0120000 for symlink type in POSIX)
+        // The AIX tar might use a different combination or representation.
+        // For this test, we focus on the size and type field.
+        // Let's set a typical symlink mode indicator in the type field (byte 156).
+        // For this test, we'll rely on the fact that AIX tar produces a header
+        // that causes `parseOctal` to fail on the size field when it's a symlink.
+        // The provided stack trace shows `Invalid byte 0 at offset 0 in '{NUL}1722000726 ' len=12`
+        // which suggests an issue with parsing the size field.
+
+        // Setting the size field to 0 (which is standard for symlinks)
+        // The problem arises when `TarUtils.parseOctal` is called on this.
+        // We'll rely on the library's internal representation of a symlink
+        // where the size field is 0.
+
+        // Set the type indicator for symlink (octal '2')
+        tarHeader[156] = (byte) ('2'); // Type '2' indicates a symbolic link
+
+        // Set the link name (target of the symlink)
+        String linkName = "target_file";
+        System.arraycopy(linkName.getBytes(), 0, tarHeader, 157, linkName.length());
+
+        // Calculate and set the header checksum (often 0 or space-padded for AIX)
+        // For simplicity, we'll leave it as 0s or spaces as the issue is not checksum-related.
+        // The original error was in parsing the size field, not the checksum.
+
+        // A minimal tar file needs at least two null blocks (1024 bytes) after the entry.
+        byte[] padding = new byte[1024];
+        ByteArrayInputStream bais = new ByteArrayInputStream(tarHeader);
+        bais.read(new byte[512]); // Skip the first header block if it was just padding
+        bais.mark(0); // Mark the beginning of the actual tar data
+
+        // We need to simulate a tar file that TarArchiveInputStream can attempt to read.
+        // The core issue is how `TarArchiveEntry.parseTarHeader` or `TarUtils.parseOctal`
+        // handles the size field when it's a symlink and the AIX tar format.
+        // The provided stack trace shows `Invalid byte 0 at offset 0 in '{NUL}1722000726 ' len=12`
+        // which suggests that `parseOctal` is being called on a field that is not a valid octal number
+        // when it should be handled differently for symlinks.
+
+        // The fix likely involves checking the entry type *before* attempting to parse
+        // the size field as an octal number, or ensuring `parseOctal` correctly handles
+        // zero-sized entries which are typical for symlinks.
+
+        // To reproduce the error, we need to create a byte stream that TarArchiveInputStream
+        // will process. The error happens when `getNextTarEntry` is called.
+        // The problem described is that AIX tar, when creating symlinks, produces headers
+        // that Commons Compress's TarArchiveInputStream cannot parse correctly because
+        // its `parseOctal` method is too strict or doesn't account for the specific
+        // way AIX tar formats symlink entries (e.g., size field being 0).
+
+        // Let's create a minimal tar archive in memory.
+        // A tar archive consists of records of 512 bytes.
+        // A file entry is followed by its data, and then two 512-byte null records.
+        // For a symlink, the data size is 0.
+
+        // Constructing a minimal tar archive entry for a symlink.
+        // The problematic header format from AIX tar is what we aim to simulate.
+        // The key issue is the `size` field (bytes 124-131), which for symlinks is 0.
+        // The `parseOctal` method expects a valid octal string.
+
+        byte[] minimalSymlinkTar = createMinimalSymlinkTar("testlink", "testtarget");
+
+        try (InputStream is = new ByteArrayInputStream(minimalSymlinkTar)) {
+            TarArchiveInputStream tais = new TarArchiveInputStream(is);
+            ArchiveEntry entry = tais.getNextTarEntry();
+
+            assertNotNull("Should have found at least one entry", entry);
+            assertEquals("Entry name should be correct", "testlink", entry.getName());
+            assertTrue("Entry should be a TarArchiveEntry", entry instanceof TarArchiveEntry);
+            TarArchiveEntry tarEntry = (TarArchiveEntry) entry;
+
+            // The specific error occurs during `getNextTarEntry` when it tries to parse the header.
+            // If the test reaches this point without throwing an exception, it means the parsing
+            // was successful, implying the bug is fixed or the test case isn't triggering it.
+            // The original bug description indicates an `IOException` or `IllegalArgumentException`
+            // originating from `TarArchiveInputStream.getNextTarEntry` or `TarUtils.parseOctal`.
+
+            // For a symlink, the size should be 0.
+            assertEquals("Symlink size should be 0", 0, tarEntry.getSize());
+
+            // We can also check if it's recognized as a symlink.
+            assertTrue("Entry should be recognized as a symlink", tarEntry.isSymbolicLink());
+            assertEquals("Symlink target should be correct", "testtarget", tarEntry.getLinkName());
+
+            // Try to read the next entry to ensure the stream is still usable.
+            ArchiveEntry nextEntry = tais.getNextTarEntry();
+            // If there are no more entries, nextEntry will be null.
+            // If the error was in the first entry parsing, this might not be reached.
+            // We are primarily focused on the failure of reading the *first* symlink entry.
+
+        } catch (IOException e) {
+            // If an IOException occurs here, it's likely the bug is still present.
+            // We want to fail the test if the specific exception described in the bug report occurs.
+            // The bug description points to "Error detected parsing the header" and
+            // "Invalid byte 0 at offset 0 in '{NUL}1722000726 ' len=12".
+            // This means we expect an exception *not* to be thrown if the bug is fixed.
+            // If an exception *is* thrown, we want to analyze it.
+            // For reproduction, we *expect* an exception if the bug is present.
+            // However, a good test should assert the *absence* of failure.
+            // So, if an exception *is* caught, and it matches the bug's symptoms,
+            // we re-throw it to fail the test. If it's a different exception,
+            // it might indicate a different issue.
+
+            if (e.getMessage() != null && e.getMessage().contains("Invalid byte 0 at offset 0")) {
+                // This is the specific error from the bug report. Re-throw to fail the test.
+                throw e;
+            } else if (e instanceof org.apache.commons.compress.archivers.tar.TarFormatException) {
+                // Another common format exception that might be related.
+                throw e;
+            } else {
+                // If it's a different IOException, it might be unrelated.
+                // For the purpose of reproducing *this* bug, we'd ideally want
+                // the test to pass if the specific AIX tar symlink issue is resolved.
+                // If an exception is thrown here, it means the `getNextTarEntry` failed.
+                // The test is designed to *pass* if `getNextTarEntry` succeeds.
+                // If it fails with a relevant exception, the test framework will report it.
+                // We re-throw to ensure the test fails if the error condition is met.
+                throw e;
+            }
+        }
+    }
+
+    // Helper method to create a minimal tar archive in memory containing a symlink.
+    // This is a simplified representation and might not conform to all tar standards,
+    // but it should contain the elements necessary to trigger the parsing logic.
+    private byte[] createMinimalSymlinkTar(String linkName, String targetName) {
+        byte[] tarBlock = new byte[512];
+        byte[] archive = new byte[1024]; // Header + 2 null blocks
+
+        // Fill header with null bytes
+        for (int i = 0; i < tarBlock.length; i++) {
+            tarBlock[i] = 0;
+        }
+
+        // Set file name
+        byte[] nameBytes = linkName.getBytes();
+        System.arraycopy(nameBytes, 0, tarBlock, 0, Math.min(nameBytes.length, 100)); // Max 100 chars for name
+
+        // Set mode: octal 0120000 for symlink + permissions (e.g., 0777)
+        // POSIX mode for symlink is 0120000. Let's use 0120777.
+        String mode = "120777"; // Octal string representation
+        byte[] modeBytes = mode.getBytes();
+        System.arraycopy(modeBytes, 0, tarBlock, 100, modeBytes.length);
+
+        // Set owner UID and GID (e.g., 0)
+        String uid = "0";
+        byte[] uidBytes = uid.getBytes();
+        System.arraycopy(uidBytes, 0, tarBlock, 108, uidBytes.length);
+        System.arraycopy(uidBytes, 0, tarBlock, 116, uidBytes.length); // GID
+
+        // Set size to 0 for symlink
+        String size = "0"; // Size of the symlink target name, not the link itself
+        byte[] sizeBytes = size.getBytes();
+        System.arraycopy(sizeBytes, 0, tarBlock, 124, sizeBytes.length);
+
+        // Set modification time (e.g., 0)
+        String mtime = "0";
+        byte[] mtimeBytes = mtime.getBytes();
+        System.arraycopy(mtimeBytes, 0, tarBlock, 119, mtimeBytes.length);
+
+        // Set type indicator: '2' for symbolic link
+        tarBlock[156] = (byte) '2';
+
+        // Set link name (target)
+        byte[] linkNameBytes = targetName.getBytes();
+        System.arraycopy(linkNameBytes, 0, tarBlock, 157, Math.min(linkNameBytes.length, 256)); // Max 256 chars for link name
+
+        // Calculate checksum (simplified, often space-padded in older tars)
+        // A proper checksum calculation is complex. For this test, we'll use spaces.
+        // The bug is about parsing the size field, not checksum validity.
+        // Let's fill with spaces for checksum and padding.
+        for (int i = 148; i < 156; i++) { // Checksum field
+            tarBlock[i] = ' ';
+        }
+        // Pad the rest of the block to 512 bytes
+        // The remaining fields like devmajor/devminor, gid/uid, mtime are often zero-padded or space-padded.
+
+        // Copy the header block into the archive buffer
+        System.arraycopy(tarBlock, 0, archive, 0, tarBlock.length);
+
+        // Add two null blocks (1024 bytes) to signify the end of the archive
+        // (or the end of this entry if more follow).
+        // No actual data for a symlink.
+
+        return archive;
+    }
+}

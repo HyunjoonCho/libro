@@ -1,0 +1,53 @@
+public void testRecursiveTypeBug() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+
+    // Define the types as described in the bug report
+    SimpleType subType = SimpleType.constructUnsafe(Sub.class);
+    // We need to simulate the IFace<Sub> type construction
+    JavaType baseInterfaceType = mapper.getTypeFactory().constructType(IFace.class).containedType(0).forcedNarrowBy(subType);
+    JavaType baseClassType = mapper.getTypeFactory().constructParametricType(Base.class, subType);
+
+    // Create a BeanDeserializerModifier to see how types are processed
+    BeanDeserializerModifier modifier = new BeanDeserializerModifier() {
+        @Override
+        public JsonDeserializer<?> modifyDeserializer(DeserializationConfig config, BeanDescription beanDesc, JsonDeserializer<?> deserializer) {
+            // Log the bean description to observe type processing
+            System.out.println("Modifying deserializer for: " + beanDesc.getType());
+            return super.modifyDeserializer(config, beanDesc, deserializer);
+        }
+    };
+
+    // Configure the ObjectMapper to use the modifier
+    mapper.setDeserializerProvider(new BeanDeserializerFactory(null) {
+        @Override
+        protected BeanDeserializerModifier getDefaultModifiers() {
+            return modifier;
+        }
+    });
+
+    // Create an instance of the subclass with expected properties
+    Sub subInstance = new Sub();
+    subInstance.sub = 2;
+
+    // Serialize the subclass instance
+    String json = mapper.writeValueAsString(subInstance);
+
+    // Assert that the serialized JSON contains properties from both Sub and Base
+    // The bug report implies that 'base' property is missing.
+    // Therefore, we expect the JSON to include both "sub":2 and "base":1.
+    // If the bug is present, it will only contain "sub":2.
+    assertTrue(json.contains("\"sub\":2"));
+    // This assertion will fail if the bug is present, as "base":1 will be missing.
+    assertTrue(json.contains("\"base\":1"));
+}
+
+// Define the classes as described in the bug report for the test context
+static class Base implements IFace<Sub> {
+    @JsonProperty int base = 1;
+}
+
+static class Sub {
+    @JsonProperty int sub = 2;
+}
+
+interface IFace<T> {}

@@ -1,0 +1,82 @@
+public void testGsonWildcardDeserialization() {
+    Gson gson = new Gson();
+    String json = "{'inBig':{'key':[{'inSmall':'hello'}]}}".replace("'", "\"");
+
+    // Construct the expected object
+    SmallClass expectedSmallClass = new SmallClass();
+    expectedSmallClass.inSmall = "hello";
+    Map<String, List<SmallClass>> expectedMap = new HashMap<>();
+    expectedMap.put("key", Collections.singletonList(expectedSmallClass));
+    BigClass expectedBigClass = new BigClass();
+    expectedBigClass.inBig = expectedMap;
+
+    // Deserialize and assert
+    BigClass actualBigClass = gson.fromJson(json, BigClass.class);
+
+    // We expect a ClassCastException when trying to access elements directly if the wildcard is not handled
+    // The bug is that actualBigClass.inBig.get("key").get(0) will not be a SmallClass
+    // but a LinkedTreeMap.
+    // To reproduce the failure, we try to cast it.
+    try {
+        SmallClass actualSmallClass = (SmallClass) actualBigClass.inBig.get("key").get(0);
+        // If the above line does not throw ClassCastException, the test should assert that it is indeed a SmallClass
+        // and that its content matches.
+        assertEquals(expectedSmallClass.inSmall, actualSmallClass.inSmall);
+    } catch (ClassCastException e) {
+        // This is the expected path for the buggy behavior
+        fail("Expected a ClassCastException due to wildcard deserialization, but it did not occur. " + e.getMessage());
+    }
+
+    // However, if the bug is fixed, the above try-catch should not be needed,
+    // and the cast should succeed. The original bug report implies a ClassCastException.
+    // Let's add an assertion that verifies the successful cast IF the bug is fixed.
+    // If the bug is present, the test will fail at the 'try' block's cast.
+    // If the bug is fixed, the test will proceed and potentially fail if the content is wrong,
+    // or pass if everything is correct.
+
+    // A more direct way to test the failure:
+    // Directly attempt the cast that is known to fail in the buggy version.
+    try {
+        SmallClass castedObject = (SmallClass) actualBigClass.inBig.get("key").get(0);
+        // If we reach here, it means the cast unexpectedly succeeded.
+        // We should assert the content is correct.
+        assertEquals(expectedSmallClass.inSmall, castedObject.inSmall);
+    } catch (ClassCastException e) {
+        // This is the expected outcome if the bug is present.
+        // The test should pass if this exception is thrown.
+        // However, JUnit tests are designed to assert expected outcomes, not catch expected exceptions
+        // unless specifically testing exception throwing.
+        // The original bug report states a ClassCastException occurs.
+        // To make this a proper JUnit test that FAILS when the bug is present,
+        // we should try to use the result as if it were correct and let it throw.
+        // If it throws, the test fails. If it doesn't throw, we then assert the content.
+        // This is a bit counter-intuitive for a "reproduce failure" test.
+
+        // Let's refine: The goal is to write a test that *fails* when the bug is present.
+        // If the bug is present, `actualBigClass.inBig.get("key").get(0)` is a LinkedTreeMap.
+        // Casting it to `SmallClass` will throw `ClassCastException`.
+        // So, the test should attempt this cast and expect it to throw.
+
+        // A better approach for testing a failure scenario:
+        // Use Assertions.assertThrows to verify the exception.
+        assertThrows(ClassCastException.class, () -> {
+            // This lambda should execute code that throws the ClassCastException
+            // when the bug is present.
+            SmallClass potentiallyIncorrectlyCasted = (SmallClass) actualBigClass.inBig.get("key").get(0);
+            // If the cast succeeds (bug fixed), this line won't be reached, and the test will fail
+            // because the expected exception was not thrown.
+            // However, if we want to ensure the content is right *if* it succeeds,
+            // we'd need a more complex setup or a separate test for the fixed behavior.
+        }, "Gson should throw ClassCastException when deserializing wildcard type to LinkedTreeMap");
+
+    }
+}
+
+// Helper classes as defined in the bug report
+class BigClass {
+    Map<String, ? extends List<SmallClass>> inBig;
+}
+
+class SmallClass {
+    String inSmall;
+}

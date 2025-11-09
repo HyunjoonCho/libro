@@ -1,0 +1,38 @@
+public void testHeaderMapDuplicateColumnNames() throws IOException {
+    String csvData = "Col1,Col2,Col2,Col3,Col4\n1,2,3,4,5\n4,5,6,7,8";
+    CSVFormat myFormat = CSVFormat.RFC4180.withDelimiter(",").withQuoteChar('"').withQuotePolicy(Quote.MINIMAL)
+            .withIgnoreSurroundingSpaces(true).withHeader().withSkipHeaderRecord(true);
+    
+    Reader in = new StringReader(csvData);
+    CSVParser parser = new CSVParser(in, myFormat);
+    
+    List<CSVRecord> records = parser.getRecords();
+    CSVRecord firstRecord = records.get(0);
+    
+    // According to the description, the HeaderMap is inconsistent.
+    // We expect that accessing the second "Col2" will not yield the correct value.
+    // The actual behavior is that the last "Col2" overwrites the previous one.
+    // So, accessing by "Col2" will give the value from the *last* duplicate column.
+    // We'll assert based on this observed behavior.
+    
+    Map<String, Integer> headerMap = firstRecord.getMapping();
+    
+    // Check if the header map has the expected number of entries based on unique column names
+    // In this case, with duplicates, the map will only contain unique keys.
+    // The number of entries should be 4 (Col1, Col2, Col3, Col4), not 5.
+    assertEquals(4, headerMap.size());
+    
+    // Verify the mapping for the duplicate column. It should map to the index of the last occurrence.
+    assertEquals(Integer.valueOf(2), headerMap.get("Col2")); 
+    
+    // Verify other columns
+    assertEquals(Integer.valueOf(0), headerMap.get("Col1"));
+    assertEquals(Integer.valueOf(3), headerMap.get("Col3"));
+    assertEquals(Integer.valueOf(4), headerMap.get("Col4"));
+
+    // Accessing the values using the mapping should reflect the duplicate column issue.
+    // The value for the second "Col2" (index 2) will be retrieved when calling get("Col2").
+    assertEquals("3", firstRecord.get("Col2")); // This should be the value from the third column
+
+    parser.close();
+}

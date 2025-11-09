@@ -1,0 +1,173 @@
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.ArchiveInputStream;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+
+import static org.junit.Assert.assertEquals;
+
+public class TarArchiveInputStreamTest {
+
+    @Test
+    public void testTarArchiveInputStreamRejectsUidOrGidGreaterThanMaxInt() throws IOException {
+        // A tar entry with a UID that exceeds the maximum value for a signed 32-bit integer.
+        // This is represented in the tar format as a string.
+        // The value 4294967295 is 2^32 - 1, which is the maximum value for an unsigned 32-bit integer.
+        // In the bug report, it was 4294967294. We'll use the maximum possible unsigned value to ensure the test covers the boundary.
+        String tarContent = "00000000000" + // Normal tar header fields (permissions, uid, gid, size, mod time, etc.)
+                            "00000000000" + // Checksum
+                            "00000000000" + // File type and setuid/setgid bits
+                            "00000000000" + // Last modification time
+                            "00000000000" + // File mode
+                            "00000000000" + // Owner name length
+                            "00000000000" + // Group name length
+                            "00000000000" + // Magic (ustar\0)
+                            "00000000000" + // Version
+                            "00000000000" + // Owner name
+                            "00000000000" + // Group name
+                            "00000000000" + // Devmajor
+                            "00000000000" + // Devminor
+                            "00000000000" + // Prefix
+                            "00000000000" + // Extended header name (empty)
+                            "00000000000" + // Extended header size (0)
+                            "00000000000" + // Extended header content (empty)
+                            "00000000000" + // Extended header padding
+                            "00000000000" + // Data (empty file)
+                            "00000000000"; // Padding to fill a block
+
+        // Construct a PAX header for UID
+        // The format is: <length><type><key>=<value>\0
+        // Length for "uid=4294967295" is 17 (16 characters + null terminator)
+        // Type is 'x' for extended header
+        String paxHeaderContent = "xuid=4294967295\0";
+        int paxHeaderLength = paxHeaderContent.length();
+
+        // Create a tar entry with PAX headers
+        // We need to construct a byte array that represents a tar archive with a PAX header.
+        // The structure of a tar archive is a sequence of tar entries.
+        // Each entry starts with a header block (512 bytes).
+        // The header block contains file metadata, including uid and gid.
+        // For extended attributes, PAX headers are used.
+
+        // We'll create a simple tar archive with one entry that has a PAX header for uid.
+        // The tar entry will be for an empty file.
+        byte[] entryHeader = new byte[512];
+
+        // Set the file name
+        String fileName = "testfile.txt";
+        System.arraycopy(fileName.getBytes(), 0, entryHeader, 0, fileName.length());
+
+        // Set the file size to 0
+        // Set the mtime to 0
+        // Set the mode to 0
+        // Set the uid and gid to 0 (these will be overridden by PAX header)
+        // Set the type to REGTYPE (regular file)
+        entryHeader[104] = (byte) 0100755; // Mode (e.g., rwxr-xr-x)
+        entryHeader[108] = 0; // UID
+        entryHeader[112] = 0; // GID
+        entryHeader[124] = 0; // Size
+        entryHeader[136] = 0; // Mtime
+        entryHeader[148] = '0'; // File type (regular file)
+        entryHeader[257] = (byte) 'u'; // Ustar magic
+        entryHeader[258] = (byte) 's';
+        entryHeader[259] = (byte) 't';
+        entryHeader[260] = (byte) 'a';
+        entryHeader[261] = (byte) 'r';
+        entryHeader[262] = 0; // Ustar version
+
+        // Calculate and set the checksum
+        long checksum = calculateChecksum(entryHeader);
+        String checksumStr = String.format("%6s", Long.toString(checksum)).replace(' ', '0');
+        System.arraycopy(checksumStr.getBytes(), 0, entryHeader, 148, 6);
+
+        // PAX Header Entry
+        // The PAX header itself is a TarEntry.
+        // It should precede the actual file entry it modifies.
+        // Its type is 'x' for PAX global extended header, or 'g' for PAX local extended header.
+        // In this case, we are setting a specific UID for the next entry, so it's a local extended header.
+        byte[] paxEntryHeader = new byte[512];
+        String paxFileName = "./PaxHeaders.0/uid.txt"; // Convention for PAX headers
+        System.arraycopy(paxFileName.getBytes(), 0, paxEntryHeader, 0, paxFileName.length());
+        paxEntryHeader[104] = (byte) 0100644; // Mode (e.g., rw-r--r--)
+        paxEntryHeader[108] = 0; // UID
+        paxEntryHeader[112] = 0; // GID
+        paxEntryHeader[124] = paxHeaderLength; // Size of the PAX header content
+        paxEntryHeader[136] = 0; // Mtime
+        paxEntryHeader[148] = 'x'; // Type: PAX local extended header
+        System.arraycopy(paxHeaderContent.getBytes(), 0, paxEntryHeader, 512, paxHeaderLength); // Content after header block
+
+        // Recalculate checksum for PAX header
+        checksum = calculateChecksum(paxEntryHeader);
+        checksumStr = String.format("%6s", Long.toString(checksum)).replace(' ', '0');
+        System.arraycopy(checksumStr.getBytes(), 0, paxEntryHeader, 148, 6);
+
+
+        // Combine the PAX header and the actual file entry into a single byte array.
+        // We need to pad the PAX header to a full 512-byte block if its content is less.
+        byte[] paddedPaxEntryHeader = new byte[512];
+        System.arraycopy(paxEntryHeader, 0, paddedPaxEntryHeader, 0, 512);
+        // The actual content of the PAX header comes *after* its 512-byte header block.
+        byte[] paxContentWithPadding = new byte[paxHeaderLength];
+        System.arraycopy(paxHeaderContent.getBytes(), 0, paxContentWithPadding, 0, paxHeaderLength);
+        // Ensure the PAX content is padded to a multiple of 512 bytes if necessary.
+        int paxContentSize = paxHeaderLength;
+        int paxContentPadding = (512 - (paxContentSize % 512)) % 512;
+        byte[] fullPaxEntry = new byte[512 + paxContentSize + paxContentPadding];
+        System.arraycopy(paddedPaxEntryHeader, 0, fullPaxEntry, 0, 512);
+        System.arraycopy(paxContentWithPadding, 0, fullPaxEntry, 512, paxContentSize);
+
+
+        // Now create the actual file entry header.
+        // This entry will be empty.
+        byte[] fileEntryWithPadding = new byte[512]; // Assuming empty file means 0 data.
+        // Recalculate checksum for the file entry header after setting its values.
+        checksum = calculateChecksum(entryHeader);
+        checksumStr = String.format("%6s", Long.toString(checksum)).replace(' ', '0');
+        System.arraycopy(checksumStr.getBytes(), 0, entryHeader, 148, 6);
+
+
+        // Combine the PAX entry and the file entry.
+        ByteArrayInputStream bais = new ByteArrayInputStream(fullPaxEntry);
+        bais.write(entryHeader); // Append the file entry header. No data for empty file.
+
+        ArchiveInputStream<?> ais = null;
+        try {
+            ais = new TarArchiveInputStream(bais);
+            ArchiveEntry entry = ais.getNextEntry();
+
+            // The first entry should be the PAX header, which is not a regular file.
+            // The second entry should be the actual file entry.
+            // We expect the UID to be correctly parsed from the PAX header.
+            // The bug was that Integer.parseInt was used, which would throw NumberFormatException for large UIDs.
+
+            // Skip PAX entry
+            entry = ais.getNextEntry();
+
+            // Now get the actual file entry
+            entry = ais.getNextEntry();
+            TarArchiveEntry tarEntry = (TarArchiveEntry) entry;
+
+            // The core of the bug is that Integer.parseInt(val) was used.
+            // We expect the code to now use Long.parseLong and set the userId correctly.
+            // The value 4294967295 is 2^32 - 1.
+            assertEquals("UID should be parsed correctly as a long", 4294967295L, tarEntry.getUserId());
+
+        } finally {
+            if (ais != null) {
+                ais.close();
+            }
+        }
+    }
+
+    // Helper method to calculate the tar checksum
+    private long calculateChecksum(byte[] header) {
+        long sum = 0;
+        for (int i = 0; i < header.length; i++) {
+            sum += header[i] & 0xff;
+        }
+        return sum;
+    }
+}

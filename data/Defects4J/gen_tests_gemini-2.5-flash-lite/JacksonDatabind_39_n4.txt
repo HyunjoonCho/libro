@@ -1,0 +1,69 @@
+public void testFailOnInvalidSubtype() throws IOException {
+    ObjectMapper objectMapper = new ObjectMapper().disable(DeserializationFeature.FAIL_ON_INVALID_SUBTYPE,
+            DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES);
+
+    String json1 = "{\"version\":0.0,\"application\":\"123\",\"item\":{\"type\":\"xevent\",\"location\":\"location1\"},\"item2\":{\"type\":\"event\",\"location\":\"location1\"}}";
+    CallRecord call1 = objectMapper.readValue(json1, CallRecord.class);
+    assertNotNull(call1.item2);
+    assertEquals("location1", call1.item2.location);
+
+    String json2 = "{\"version\":0.0,\"application\":\"123\"},{\"item\":{\"type\":\"xevent\",\"location\":\"location1\"}";
+    // This test doesn't strictly reproduce the bug as described, as the input JSON is malformed for a single object.
+    // However, it demonstrates that the parser can continue after an invalid subtype if configured correctly.
+    // A more accurate reproduction would require a valid JSON structure where an invalid subtype error occurs mid-parsing.
+    // For the purpose of generating a test method based on the description, we'll assume a scenario where parsing can continue.
+    // If the original bug was about a single JSON object with an invalid subtype, the test would be structured differently.
+
+    // Simulating a scenario where parsing *should* continue after an invalid subtype.
+    // Let's construct a JSON that has an invalid subtype for 'item' but a valid 'application' and 'item2'.
+    String json3 = "{\"version\":0.0,\"application\":\"123\",\"item\":{\"type\":\"invalid_type\",\"data\":\"some_data\"},\"item2\":{\"type\":\"event\",\"location\":\"location1\"}}";
+    CallRecord call3 = objectMapper.readValue(json3, CallRecord.class);
+    assertNotNull(call3.application);
+    assertEquals("123", call3.application);
+    assertNotNull(call3.item2);
+    assertEquals("location1", call3.item2.location);
+    // 'item' will be null because of the invalid subtype and FAIL_ON_INVALID_SUBTYPE being disabled.
+    assertNull(call3.item);
+
+    String json4 = "{\"item\":{\"type\":\"xevent\",\"location\":\"location1\"}, \"version\":0.0,\"application\":\"123\"}";
+    CallRecord call4 = objectMapper.readValue(json4, CallRecord.class);
+    assertNotNull(call4.item);
+    assertEquals("location1", call4.item.location);
+    assertNotNull(call4.application);
+    assertEquals("123", call4.application);
+}
+
+// Helper classes (need to be defined within the test class or as separate classes if not already present)
+@JsonInclude(Include.NON_NULL)
+public static class CallRecord {
+    public float version;
+    public String application;
+    public Item item;
+    public Item item2;
+    public CallRecord() {}
+
+    @Override
+    public String toString() {
+        final StringBuilder builder = new StringBuilder();
+        builder.append("CallRecord [version=").append(version).append(", ");
+        if (application != null) {
+            builder.append("application=").append(application).append(", ");
+        }
+        if (item != null) {
+            builder.append("item=").append(item);
+        }
+        builder.append("]");
+        return builder.toString();
+    }
+}
+
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type", visible = true)
+@JsonSubTypes({@Type(value = Event.class, name = Event.TYPE)})
+public static interface Item {
+}
+
+public static final class Event implements Item {
+    public String location;
+    public static final String TYPE = "event";
+    public Event() {}
+}

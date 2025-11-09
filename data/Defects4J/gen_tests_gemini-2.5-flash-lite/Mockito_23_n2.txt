@@ -1,0 +1,106 @@
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
+
+import static org.junit.Assert.assertEquals;
+
+public class MockitoBugTest {
+
+    abstract class AbstractClass {
+        abstract protected Long lol();
+        abstract protected String wow();
+        public String give() {
+            wow();
+            lol();
+            return "give";
+        }
+    }
+
+    public class ClassExtendsAbstractClass extends AbstractClass {
+        @Override
+        protected Long lol() {
+            return 2L;
+        }
+        @Override
+        protected String wow() {
+            return "WOW";
+        }
+    }
+
+    public class A {
+        private ClassExtendsAbstractClass classExtendsAbstractClass;
+        public A(ClassExtendsAbstractClass classExtendsAbstractClass) {
+            this.classExtendsAbstractClass = classExtendsAbstractClass;
+        }
+        public String doSomeThing(){
+            return classExtendsAbstractClass.wow();
+        }
+
+        public String doSomethingElse() {
+            return classExtendsAbstractClass.give();
+        }
+    }
+
+    @Mock
+    private ClassExtendsAbstractClass classExtendsAbstractClass;
+    private A a;
+
+    @Before
+    public void before() {
+        MockitoAnnotations.initMocks(this);
+        // Mockito.when(classExtendsAbstractClass.give()).thenReturn("aaa"); // This line causes the issue
+    }
+
+    @Test
+    public void testWrongTypeOfReturnValue() {
+        // The issue arises when mocking a method that internally calls other methods
+        // from the same mocked object, especially when those other methods have
+        // abstract return types that differ from the mocked return type.
+        // In this specific case, mocking `give()` which calls `lol()` (returns Long)
+        // and `wow()` (returns String) with a `thenReturn("aaa")` (String)
+        // triggers the Mockito error because it expects `give()` to return a String,
+        // but internally it's trying to satisfy the return types of `lol()` and `wow()`.
+
+        // To reproduce the error as described, we need to mock the 'give' method.
+        // The error message itself is the test assertion here.
+        // We expect Mockito to throw WrongTypeOfReturnValue.
+        try {
+            Mockito.when(classExtendsAbstractClass.give()).thenReturn("aaa");
+            a = new A(classExtendsAbstractClass);
+            // The line below would normally be called to trigger the mock,
+            // but the exception is thrown during the setup of the mock itself.
+            // a.doSomethingElse();
+            org.junit.Assert.fail("Expected MockitoException was not thrown.");
+        } catch (org.mockito.exceptions.misusing.WrongTypeOfReturnValue e) {
+            // Assert that the exception message contains the expected information
+            String expectedMessagePart1 = "String cannot be returned by lol()";
+            String expectedMessagePart2 = "lol() should return Long";
+            assert (e.getMessage().contains(expectedMessagePart1) && e.getMessage().contains(expectedMessagePart2));
+        }
+    }
+
+    // This test demonstrates the workaround: if you don't mock the method that
+    // calls other methods with different return types, it works.
+    @Test
+    public void testWithoutMockingGiveMethod() {
+        a = new A(classExtendsAbstractClass);
+        // We are not mocking classExtendsAbstractClass.give() here.
+        // Instead, we are mocking a method that doesn't trigger the internal calls.
+        Mockito.when(classExtendsAbstractClass.wow()).thenReturn("MOCKED WOW");
+        assertEquals("MOCKED WOW", a.doSomeThing());
+    }
+
+    // This test demonstrates the workaround: if you mock all internal methods
+    // with their correct return types, it also works.
+    @Test
+    public void testMockingAllInternalMethods() {
+        Mockito.when(classExtendsAbstractClass.wow()).thenReturn("MOCKED WOW");
+        Mockito.when(classExtendsAbstractClass.lol()).thenReturn(123L);
+        Mockito.when(classExtendsAbstractClass.give()).thenReturn("MOCKED AAA"); // Mocking give as well
+
+        a = new A(classExtendsAbstractClass);
+        assertEquals("MOCKED AAA", a.doSomethingElse());
+    }
+}

@@ -1,0 +1,52 @@
+public void testToStringStyleMemoryLeak() throws InterruptedException, ExecutionException {
+    // This test aims to reproduce a potential memory leak scenario.
+    // In a real container environment, this would involve deploying and undeploying
+    // a web application that uses ToStringStyle.
+    // Here, we simulate the scenario by creating and discarding threads that
+    // might interact with the ThreadLocal in ToStringStyle.
+
+    // We'll use a Callable and an ExecutorService to manage threads and capture results.
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+
+    // Task 1: Use ToStringStyle in a way that might trigger ThreadLocal initialization.
+    Callable<String> task1 = () -> {
+        ToStringStyle style = ToStringStyle.DEFAULT_STYLE;
+        // Accessing a property that might initialize the ThreadLocal
+        String dummyString = new String("test");
+        return style.toString(dummyString);
+    };
+
+    // Task 2: Another task to ensure multiple threads might be involved.
+    Callable<String> task2 = () -> {
+        ToStringStyle style = ToStringStyle.SHORT_PREFIX_STYLE;
+        return style.toString(Integer.valueOf(123));
+    };
+
+    // Submit tasks and get futures.
+    Future<String> future1 = executor.submit(task1);
+    Future<String> future2 = executor.submit(task2);
+
+    // Retrieve results to ensure tasks complete.
+    String result1 = future1.get();
+    String result2 = future2.get();
+
+    // Assert that the tasks completed without exceptions (indicating execution).
+    assertNotNull(result1);
+    assertNotNull(result2);
+
+    // The actual memory leak is hard to assert directly in a unit test.
+    // This test primarily ensures that the code paths that *could* lead to a leak
+    // are executed. A true leak detection would require profiling tools and
+    // running the test in a long-lived environment, observing heap dumps over time.
+    // For the purpose of reproducing the *potential* for the leak,
+    // executing the relevant code is the goal.
+
+    // Shutdown the executor service.
+    executor.shutdown();
+    // Wait for tasks to complete.
+    executor.awaitTermination(1, TimeUnit.SECONDS);
+
+    // If the code runs without immediate exceptions related to ThreadLocal management,
+    // it has reproduced the scenario where the ThreadLocal *could* be set.
+    // The fix would involve ensuring that if a ThreadLocal is used, it's properly cleaned up.
+}

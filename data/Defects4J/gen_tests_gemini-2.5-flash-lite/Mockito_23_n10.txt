@@ -1,0 +1,105 @@
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
+
+import static org.junit.Assert.assertEquals;
+
+public class MockitoBugReproducer {
+
+    abstract class AbstractClass {
+        abstract protected Long lol();
+        abstract protected String wow();
+        public String give() {
+            wow();
+            lol();
+            return "give";
+        }
+    }
+
+    public class ClassExtendsAbstractClass extends AbstractClass {
+        @Override
+        protected Long lol() {
+            return 2L;
+        }
+        @Override
+        protected String wow() {
+            return "WOW";
+        }
+    }
+
+    public class A {
+        private AbstractClass classExtendsAbstractClass; // Changed to AbstractClass to allow mocking
+        public A(AbstractClass classExtendsAbstractClass) {
+            this.classExtendsAbstractClass = classExtendsAbstractClass;
+        }
+        public String doSomeThing(){
+            return classExtendsAbstractClass.give(); // Changed to call give() as in the original test setup
+        }
+    }
+
+    @Mock
+    private ClassExtendsAbstractClass mockedClassExtendsAbstractClass; // Keep this for the when() clause
+    private A a;
+
+    @Before
+    public void before() {
+        MockitoAnnotations.initMocks(this);
+        // Mocking the concrete class instance, but the original test setup was trying to mock
+        // an abstract method call that would internally call other abstract methods.
+        // The bug seems to stem from Mockito's internal handling when mocking concrete classes
+        // that extend abstract classes with multiple abstract methods.
+        // The original test setup was: Mockito.when(classExtendsAbstractClass.give()).thenReturn("aaa");
+        // However, 'give()' calls 'lol()' and 'wow()'. Mockito tries to satisfy these calls.
+        // The error message "String cannot be returned by lol() lol() should return Long"
+        // indicates Mockito is trying to mock the return value of 'lol()' when it sees
+        // a call to 'give()' on the mocked object.
+        // To reproduce the error as described, we need to mock 'give()' on an instance
+        // that is *intended* to be a mock, even if it's a concrete class instance.
+        // The core issue seems to be Mockito's interaction with the inheritance hierarchy
+        // and its attempt to stub abstract methods implicitly.
+
+        // To reproduce the exact error, we need to mock the *behavior* of the abstract class
+        // when its concrete subclass is used in the test setup.
+        // The original test was: Mockito.when(classExtendsAbstractClass.give()).thenReturn("aaa");
+        // This is problematic because `classExtendsAbstractClass` is declared as `@Mock private ClassExtendsAbstractClass`.
+        // Mockito then tries to stub `give()` on this mock. `give()` calls `lol()` and `wow()`.
+        // Mockito sees `lol()` is abstract and expects a `Long`. When it tries to stub `give()`,
+        // it might get confused about the return types of the *abstract* methods it needs to satisfy.
+
+        // Let's create a scenario where the mock is actually an instance of the concrete class,
+        // and we try to stub a method that calls abstract methods.
+        // The error message "String cannot be returned by lol() lol() should return Long"
+        // suggests Mockito incorrectly infers the return type of `lol()` when stubbing `give()`.
+
+        // The most direct way to reproduce the error as described is to mock the concrete
+        // class and stub a method that internally calls abstract methods.
+        // The original test used `classExtendsAbstractClass.give()`. Let's stick to that.
+        // The issue is that `classExtendsAbstractClass` is a mock of the concrete class,
+        // and Mockito is getting confused.
+
+        // The original test setup: Mockito.when(classExtendsAbstractClass.give()).thenReturn("aaa");
+        // This line *itself* should trigger the error if Mockito is behaving as described in the bug.
+        // The setup implies `classExtendsAbstractClass` is a Mockito mock object.
+    }
+
+    @Test(expected = org.mockito.exceptions.misusing.WrongTypeOfReturnValue.class)
+    public void testWrongTypeOfReturnValueWhenAbstractClassHasTwoAbstractMethods() {
+        // The setup in @Before is intended to reproduce the error.
+        // We declare `mockedClassExtendsAbstractClass` as a mock of the concrete class.
+        // Then, in @Before, we try to stub `give()` on it.
+        // The bug report suggests this specific stubbing causes Mockito to incorrectly
+        // try to stub the abstract methods and throw WrongTypeOfReturnValue.
+
+        // The original test had:
+        // Mockito.when(classExtendsAbstractClass.give()).thenReturn("aaa");
+        // Let's ensure this happens within the test context.
+        // The error occurs *during* the when() call.
+        Mockito.when(mockedClassExtendsAbstractClass.give()).thenReturn("aaa");
+
+        // The rest of the test method is just to satisfy the JUnit structure.
+        // The actual error is thrown by the line above.
+        a = new A(mockedClassExtendsAbstractClass); // This line might not even be reached if the error is thrown earlier.
+    }
+}

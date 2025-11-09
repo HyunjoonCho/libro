@@ -1,0 +1,47 @@
+public void testJsonIdentityReferenceClassOnly() throws Exception {
+    ObjectMapper MAPPER = new ObjectMapper();
+    MAPPER.setAnnotationIntrospector(new JacksonAnnotationIntrospector() {
+        @Override
+        public ObjectIdInfo findObjectIdInfo(Annotated a) {
+            if (a.getRawType() == ReallyAlwaysAsId.class) {
+                return new ObjectIdInfo(new QName("id"), ReallyAlwaysAsId.class, ObjectIdGenerators.IntSequenceGenerator.class);
+            }
+            return super.findObjectIdInfo(a);
+        }
+
+        @Override
+        public ObjectIdInfo findObjectReferenceInfo(Annotated accessor, ObjectIdInfo defaultInfo) {
+            if (accessor.getRawType() == ReallyAlwaysAsId.class) {
+                return defaultInfo.withAlwaysAsId(true);
+            }
+            return super.findObjectReferenceInfo(accessor, defaultInfo);
+        }
+    });
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class, property = "id")
+    @JsonIdentityReference(alwaysAsId = true)
+    static class ReallyAlwaysAsId {
+        public int value;
+
+        public ReallyAlwaysAsId() {
+            this(0);
+        }
+
+        public ReallyAlwaysAsId(int v) {
+            value = v;
+        }
+    }
+
+    @JsonPropertyOrder(alphabetic = true)
+    static class ReallyAlwaysContainer {
+        @JsonIdentityReference(alwaysAsId = true)
+        public ReallyAlwaysAsId a = new ReallyAlwaysAsId(13); // Explicitly annotated property
+        public ReallyAlwaysAsId b = new ReallyAlwaysAsId(13); // Class annotated only
+    }
+
+    String json = MAPPER.writeValueAsString(new ReallyAlwaysContainer());
+    // The failing case is "b" which should be serialized as an ID (2)
+    // but is serialized as a full object in the original bug description.
+    // The fix expects both to be IDs.
+    assertEquals("{\"a\":1,\"b\":2}", json);
+}

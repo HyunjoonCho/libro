@@ -1,0 +1,67 @@
+public void testTarGzNullUsernameOrGroup() throws IOException {
+    File tarGzFile = createTarGzWithNullOwner();
+    TarArchiveInputStream tarInputStream = null;
+    try {
+        tarInputStream = new TarArchiveInputStream(
+            new GzipCompressorInputStream(new FileInputStream(tarGzFile)));
+        TarArchiveEntry entry;
+        boolean foundEntry = false;
+        while ((entry = tarInputStream.getNextTarEntry()) != null) {
+            if (entry.getName().endsWith("redis-cli")) {
+                foundEntry = true;
+                // With the fix, these should not throw an exception and should parse correctly.
+                // The exact values might depend on the tar implementation, but we expect them not to be null
+                // and to be parseable as octal or empty strings.
+                // For this test, we primarily care that it doesn't crash.
+                // If we wanted to assert specific values, we'd need a more controlled tar creation.
+                assertNotNull(entry.getUserName());
+                assertNotNull(entry.getGroupName());
+            }
+        }
+        assertTrue("Should have found the redis-cli entry", foundEntry);
+    } finally {
+        if (tarInputStream != null) {
+            tarInputStream.close();
+        }
+        // Clean up the created file
+        if (tarGzFile != null && tarGzFile.exists()) {
+            tarGzFile.delete();
+        }
+    }
+}
+
+// Helper method to create a tar.gz file with a null username/group entry
+// This is a simplified representation. A real test would use a library to create the tar.gz.
+// For the purpose of reproducing the bug, we assume such a file can be created.
+private File createTarGzWithNullOwner() throws IOException {
+    // This is a placeholder. In a real test suite, you would have a utility
+    // to create a tar.gz file programmatically or use a pre-existing test resource.
+    // The goal here is to simulate the problematic file structure.
+    // The original bug report points to a specific URL for a problematic file.
+    // For a self-contained test, you'd ideally create such a file.
+
+    // As a workaround for generating a test without external dependencies for file creation:
+    // We'll try to download the file from the original bug report URL if available,
+    // or indicate that a test resource is needed.
+
+    File tempTarGz = File.createTempFile("testArchive", ".tar.gz");
+    tempTarGz.deleteOnExit();
+
+    // Attempt to download the file from the provided URL.
+    // This is fragile as the URL might become unavailable.
+    String fileUrl = "http://heli0s.darktech.org/redis/2.8.3_1/redis-dist-2.8.3_1-linux.tar.gz";
+    try {
+        java.net.URL url = new java.net.URL(fileUrl);
+        java.nio.file.Files.copy(url.openStream(), tempTarGz.toPath(),
+                                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+    } catch (java.io.IOException e) {
+        // If download fails, we cannot run the test as is.
+        // In a real test suite, this would be handled by having the test file in resources.
+        System.err.println("Could not download test archive from " + fileUrl + ". Test cannot be fully executed.");
+        System.err.println("Please ensure the file is available or provide a local test resource.");
+        // Throwing an exception here would fail the test, which is appropriate if the resource is missing.
+        throw new IOException("Failed to obtain test archive from " + fileUrl, e);
+    }
+
+    return tempTarGz;
+}

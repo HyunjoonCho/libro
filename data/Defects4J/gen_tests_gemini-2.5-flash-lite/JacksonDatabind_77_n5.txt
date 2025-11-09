@@ -1,0 +1,47 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+import java.io.IOException;
+
+import static org.junit.Assert.assertThrows;
+
+public class JacksonDeserializerSecurityTest {
+
+    @Test
+    public void testCVE20177525_defaultTypingEnabled() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enableDefaultTyping(); // Vulnerable configuration
+
+        // Malicious payload that attempts to instantiate a Remote Code Execution gadget
+        // This is a simplified example; real-world exploits might be more complex.
+        String json = "[\"org.apache.commons.collections.functors.InvokerTransformer\", " +
+                      "\"java.lang.Runtime.exec\", " +
+                      "\"ls\"]";
+
+        // Expecting an exception due to security manager or other protections,
+        // but the vulnerability lies in the *attempt* to deserialize such types.
+        // In a vulnerable environment, this could lead to RCE.
+        // We assert that it *should* throw an exception, indicating deserialization
+        // of potentially dangerous types is being attempted/prevented.
+        // The exact exception type might vary based on Jackson version and environment.
+        assertThrows(Exception.class, () -> {
+            mapper.readValue(json, Object.class);
+        });
+    }
+
+    @Test
+    public void testCVE20177525_defaultTypingDisabled() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        // Default typing is disabled, which is the secure configuration
+
+        String json = "[\"org.apache.commons.collections.functors.InvokerTransformer\", " +
+                      "\"java.lang.Runtime.exec\", " +
+                      "\"ls\"]";
+
+        // With default typing disabled, Jackson should not attempt to deserialize
+        // the class name and should throw a `JsonMappingException` or similar,
+        // indicating it's not a standard JSON array.
+        assertThrows(Exception.class, () -> {
+            mapper.readValue(json, Object.class);
+        });
+    }
+}

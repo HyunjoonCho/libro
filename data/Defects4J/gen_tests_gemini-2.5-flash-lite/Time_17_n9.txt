@@ -1,0 +1,283 @@
+public void testIssue141() {
+    TimeZone.setDefault(TimeZone.getTimeZone("America/Sao_Paulo"));
+    DateTimeZone.setDefault(DateTimeZone.forID("America/Sao_Paulo"));
+
+    DateTime dtch = new DateTime(2012, 2, 25, 5, 5, 5, 5).millisOfDay().withMaximumValue();
+    dtch = dtch.plus(60001);
+    DateTime earlierOffset = dtch.withEarlierOffsetAtOverlap();
+    DateTime laterOffset = earlierOffset.withLaterOffsetAtOverlap();
+
+    // Check that withLaterOffsetAtOverlap did not change the offset in this case
+    assertEquals(earlierOffset.getOffset(), laterOffset.getOffset());
+
+    // Expected offset for America/Sao_Paulo on 2012-02-25 at 23:01:00.001
+    // This is during DST, so the offset should be -02:00
+    assertEquals(-2 * 60 * 60 * 1000, earlierOffset.getOffset());
+    assertEquals(-2 * 60 * 60 * 1000, laterOffset.getOffset());
+
+    // Add a case where withLaterOffsetAtOverlap *should* change the offset
+    // Example: March 10, 2013, 02:30:00 in America/New_York (DST starts)
+    TimeZone.setDefault(TimeZone.getTimeZone("America/New_York"));
+    DateTimeZone.setDefault(DateTimeZone.forID("America/New_York"));
+
+    DateTime preDst = new DateTime(2013, 3, 10, 2, 0, 0, 0); // Before DST
+    DateTime postDst = preDst.plusHours(1); // 03:00:00.000, which will have the new offset
+
+    // Simulate an overlap scenario where we have a date that could be interpreted
+    // with either the old or new offset.
+    // Let's create a DateTime that falls into the "gap" of DST change.
+    // The DST change in America/New_York for 2013 was on March 10th at 2 AM.
+    // The clock jumped from 2:00:00 to 3:00:00.
+    // So, times between 2:00:00 and 2:59:59.999 don't exist in local time.
+    // Let's try to create a DateTime that might be ambiguous.
+
+    // Create a DateTime just before the DST jump
+    DateTime dtBeforeJump = new DateTime(2013, 3, 10, 1, 59, 59, 999, DateTimeZone.forID("America/New_York"));
+    // This should have the standard offset (-05:00)
+    assertEquals(-5 * 60 * 60 * 1000, dtBeforeJump.getOffset());
+
+    // Now, let's try to construct a DateTime that might fall into the overlap or gap.
+    // A common way to get into an overlap is when the offset changes by an hour.
+    // Let's try to create a DateTime at 2:30 AM on the day DST starts.
+    // This time doesn't exist in local time. The library might interpret it
+    // using the offset *before* or *after* the jump.
+
+    // Let's create a DateTime at 3:30 AM, which *does* exist after the jump.
+    DateTime dtAfterJump = new DateTime(2013, 3, 10, 3, 30, 0, 0, DateTimeZone.forID("America/New_York"));
+    // This should have the DST offset (-04:00)
+    assertEquals(-4 * 60 * 60 * 1000, dtAfterJump.getOffset());
+
+    // The issue seems to be around the `withEarlierOffsetAtOverlap` and `withLaterOffsetAtOverlap`
+    // methods when the offset change is exactly 1 hour and it's a DST transition.
+    // Let's try to force an overlap scenario.
+
+    // Consider a specific time that exists in both offsets during an overlap.
+    // For example, if the offset changes from -5 to -4 at 2 AM.
+    // A time like 01:30:00 exists with offset -5.
+    // A time like 02:30:00 (local) doesn't exist.
+    // A time like 03:30:00 (local) exists with offset -4.
+
+    // Let's create a DateTime that *could* be interpreted in two ways.
+    // This is tricky because `DateTime` constructor usually picks one.
+    // The `withEarlierOffsetAtOverlap` and `withLaterOffsetAtOverlap` are meant
+    // to resolve ambiguity when parsing or creating a DateTime that falls into
+    // the hour where the offset changes.
+
+    // Let's try to create a DateTime that falls into the ambiguous hour (2:00 to 2:59).
+    // The `DateTime(year, month, day, hour, minute, second, millis, DateTimeZone)` constructor
+    // will use the offset that is valid at that *local* time.
+    // For 2013-03-10 02:30:00 in America/New_York, this local time *doesn't exist*.
+    // The library might throw an exception or pick an offset.
+    // Joda-Time documentation states: `withEarlierOffsetAtOverlap()` and `withLaterOffsetAtOverlap()`
+    // "Used when a local time falls into an overlapping hour. [...] The later of the two possible offsets will be used."
+
+    // Let's try to create a DateTime that is known to be ambiguous.
+    // The problem description implies that `withLaterOffsetAtOverlap()` is not working.
+    // Let's recreate the scenario from the description but with New York time.
+
+    // A date where DST starts: March 10, 2013, 2:00 AM
+    // The clock jumps from 02:00:00 EST (-05:00) to 03:00:00 EDT (-04:00).
+    // The hour between 2:00:00 and 2:59:59.999 does not exist in local time.
+
+    // Let's create a DateTime object that has the earlier offset.
+    // The original bug report example used `millisOfDay().withMaximumValue()` and then added time.
+    // Let's try a similar approach, but focus on the DST transition hour.
+
+    DateTimeZone nyZone = DateTimeZone.forID("America/New_York");
+    // Create a DateTime at the very end of the standard time day before DST
+    DateTime dtEndOfStdDay = new DateTime(2013, 3, 9, 23, 59, 59, 999, nyZone);
+    // This should have offset -05:00
+    assertEquals(-5 * 60 * 60 * 1000, dtEndOfStdDay.getOffset());
+
+    // Add a small amount of time to cross into the DST transition day
+    DateTime dtCrossingMidnight = dtEndOfStdDay.plusMillis(1);
+    // This should be March 10, 2013, 00:00:00.000
+    assertEquals(2013, dtCrossingMidnight.getYear());
+    assertEquals(3, dtCrossingMidnight.getMonthOfYear());
+    assertEquals(10, dtCrossingMidnight.getDayOfMonth());
+    assertEquals(0, dtCrossingMidnight.getHourOfDay());
+    assertEquals(-5 * 60 * 60 * 1000, dtCrossingMidnight.getOffset());
+
+    // Now, let's try to create a DateTime that falls into the "gap" hour (2 AM).
+    // Joda-Time's `DateTime(year, month, day, hour, minute, second, millis, DateTimeZone)`
+    // constructor is designed to handle this by using the offset that *would have been*
+    // in effect if the DST change hadn't happened yet, or by throwing an exception if
+    // the time is truly non-existent.
+    // However, `withEarlierOffsetAtOverlap` and `withLaterOffsetAtOverlap` are for
+    // when you *already have* a DateTime object and want to resolve ambiguity.
+
+    // Let's construct a scenario where we have a DateTime representing a time
+    // that could exist with two different offsets. This typically happens during
+    // the "fall back" transition (when clocks go back).
+    // For example, in Europe, on Oct 27, 2013, clocks went back from 03:00 CEST (+02:00) to 02:00 CET (+01:00).
+    // The hour from 02:00:00 to 02:59:59.999 occurs twice.
+
+    TimeZone.setDefault(TimeZone.getTimeZone("Europe/Paris"));
+    DateTimeZone parisZone = DateTimeZone.forID("Europe/Paris");
+
+    // Create a DateTime that falls into the ambiguous hour (2 AM to 3 AM on Oct 27, 2013)
+    // Let's create it with the *earlier* offset (CET, +01:00)
+    DateTime dtParisAmbiguousEarlier = new DateTime(2013, 10, 27, 2, 30, 0, 0, parisZone);
+    // This should have the CET offset (+01:00)
+    assertEquals(1 * 60 * 60 * 1000, dtParisAmbiguousEarlier.getOffset());
+
+    // Now, use withLaterOffsetAtOverlap to get the *later* offset (CEST, +02:00)
+    DateTime dtParisAmbiguousLater = dtParisAmbiguousEarlier.withLaterOffsetAtOverlap();
+    // This should now have the CEST offset (+02:00)
+    assertEquals(2 * 60 * 60 * 1000, dtParisAmbiguousLater.getOffset());
+
+    // The original bug report's issue was that `withLaterOffsetAtOverlap` was not changing the offset.
+    // Let's test that specific behavior: create a DateTime, apply `withEarlierOffsetAtOverlap`,
+    // then apply `withLaterOffsetAtOverlap` and assert that the offset changed as expected.
+
+    // Re-using the Paris example which has a clear overlap hour.
+    DateTime dtParisOverlap = new DateTime(2013, 10, 27, 2, 30, 0, 0, parisZone); // Starts with CET offset (+01:00)
+
+    DateTime dtParisEarlier = dtParisOverlap.withEarlierOffsetAtOverlap();
+    // This should remain CET offset (+01:00) as it already has the earlier offset.
+    assertEquals(1 * 60 * 60 * 1000, dtParisEarlier.getOffset());
+
+    DateTime dtParisLater = dtParisEarlier.withLaterOffsetAtOverlap();
+    // This should now switch to CEST offset (+02:00) because we started with the earlier offset
+    // and are asking for the later one during the overlap.
+    assertEquals(2 * 60 * 60 * 1000, dtParisLater.getOffset());
+
+    // Now, let's try the scenario described in the bug report where `withLaterOffsetAtOverlap`
+    // did not work. This implies that after calling `withEarlierOffsetAtOverlap`,
+    // calling `withLaterOffsetAtOverlap` did not change the offset.
+
+    // Let's assume `dtch` from the original report represents a DateTime that has the *earlier* offset.
+    // We need to find a timezone and a date/time that exhibits this behavior.
+    // The original example used America/Sao_Paulo and a date in February.
+    // America/Sao_Paulo has DST changes.
+    // In 2012, DST in Sao Paulo started on Oct 14, 2012 and ended on Feb 17, 2013.
+    // So, Feb 25, 2012 was *after* DST ended (standard time).
+
+    TimeZone.setDefault(TimeZone.getTimeZone("America/Sao_Paulo"));
+    DateTimeZone saoPauloZone = DateTimeZone.forID("America/Sao_Paulo");
+
+    // Let's try to construct a DateTime that falls into the hour where the offset changes
+    // during the "fall back" period (when clocks go back).
+    // DST ended on Feb 17, 2013. Clocks went back from 00:00 BRST (-02:00) to 23:00 BRT (-03:00) on Feb 16.
+    // So the hour from 00:00 to 00:59:59.999 on Feb 17 occurred twice.
+
+    // Let's create a DateTime that falls into this ambiguous hour, starting with the *later* offset (BRST, -02:00)
+    DateTime dtSaoPauloAmbiguous = new DateTime(2013, 2, 17, 0, 30, 0, 0, saoPauloZone);
+    // This should have the BRST offset (-02:00)
+    assertEquals(-2 * 60 * 60 * 1000, dtSaoPauloAmbiguous.getOffset());
+
+    // Now, let's apply `withEarlierOffsetAtOverlap`. It should switch to the BRT offset (-03:00).
+    DateTime dtSaoPauloEarlier = dtSaoPauloAmbiguous.withEarlierOffsetAtOverlap();
+    assertEquals(-3 * 60 * 60 * 1000, dtSaoPauloEarlier.getOffset());
+
+    // Now, apply `withLaterOffsetAtOverlap` to `dtSaoPauloEarlier`.
+    // Since `dtSaoPauloEarlier` has the BRT offset (-03:00), and the overlap hour
+    // existed with BRST (-02:00), `withLaterOffsetAtOverlap` should switch back to BRST (-02:00).
+    DateTime dtSaoPauloLater = dtSaoPauloEarlier.withLaterOffsetAtOverlap();
+    assertEquals(-2 * 60 * 60 * 1000, dtSaoPauloLater.getOffset());
+
+    // The bug report suggests that `withLaterOffsetAtOverlap` did NOT change the offset.
+    // This implies that `dtSaoPauloLater.getOffset()` would have been equal to `dtSaoPauloEarlier.getOffset()`.
+    // So, the test should assert that the offset *does* change as expected.
+    // If this assertion fails, it reproduces the bug.
+
+    // Let's re-check the original bug report's specific code and output.
+    // DateTime dtch = new DateTime(2012,2,25,5,5,5,5).millisOfDay().withMaximumValue();
+    // This creates 2012-02-25T23:59:59.999-02:00. The offset is -02:00.
+    // This is during BRST (Daylight Saving Time in Brazil).
+    // DST in Brazil for 2011-2012 ended on Feb 19, 2012. So Feb 25, 2012 was during DST.
+    // The offset -02:00 is correct for BRST.
+
+    // dtch = dtch.plus(60001); // Adds 60.001 seconds.
+    // This results in 2012-02-25T23:01:00.000-03:00. The offset changed to -03:00.
+    // This implies the DST transition happened *between* 23:59:59.999 and 23:01:00.000 on the same day, which is impossible.
+    // This part of the example seems to be based on a misunderstanding of how the offset changes.
+    // The `millisOfDay().withMaximumValue()` already sets the time to the end of the day.
+    // Adding time might roll over to the next day or change the offset if the DST transition occurs at that exact moment.
+
+    // Let's re-examine the DST transition for America/Sao_Paulo.
+    // DST ended on Feb 19, 2012 at 00:00 BRST, clocks went back to 23:00 BRT.
+    // So, the hour from 23:00 to 23:59:59.999 on Feb 18, 2012 occurred twice.
+
+    // Let's try to construct a DateTime that falls into this overlapping hour.
+    // Let's create a DateTime at 23:30 on Feb 18, 2012.
+    DateTime dtSaoPauloOverlapHour = new DateTime(2012, 2, 18, 23, 30, 0, 0, saoPauloZone);
+    // This time exists twice. Does the constructor pick the earlier or later offset?
+    // By default, it should pick the offset that is valid at that local time.
+    // On Feb 18, 2012, before midnight, BRST (-02:00) was still in effect.
+    assertEquals(-2 * 60 * 60 * 1000, dtSaoPauloOverlapHour.getOffset()); // Should be BRST
+
+    // Now, let's use `withEarlierOffsetAtOverlap`. It should switch to BRT (-03:00).
+    DateTime dtSaoPauloEarlierOffset = dtSaoPauloOverlapHour.withEarlierOffsetAtOverlap();
+    assertEquals(-3 * 60 * 60 * 1000, dtSaoPauloEarlierOffset.getOffset()); // Should be BRT
+
+    // Now, let's use `withLaterOffsetAtOverlap` on `dtSaoPauloEarlierOffset`.
+    // `dtSaoPauloEarlierOffset` has the BRT offset (-03:00).
+    // The overlapping hour was 23:00 to 23:59:59.999.
+    // The earlier offset during this hour was BRST (-02:00).
+    // The later offset during this hour was BRT (-03:00).
+    // So, if `dtSaoPauloEarlierOffset` has the BRT offset (-03:00), then `withLaterOffsetAtOverlap`
+    // should have no effect if we consider it as already having the later offset.
+    // However, the intent of `withLaterOffsetAtOverlap` is to resolve ambiguity.
+
+    // The description says: "Here is the problem we should have a -03:00 offset here since we called withLaterOffsetAtOverlap() expecting to change to the second 23:\*\* of the day"
+    // This implies that `dtSaoPauloEarlierOffset` (which has -03:00) was expected to become -02:00 after calling `withLaterOffsetAtOverlap()`.
+    // This contradicts the expected behavior of `withLaterOffsetAtOverlap()`.
+    // `withLaterOffsetAtOverlap()` should give the *later* of the two possible offsets for that local time.
+    // If `dtSaoPauloEarlierOffset` is already at -03:00 (BRT), and the overlapping hour had -02:00 (BRST) and -03:00 (BRT),
+    // then -03:00 is the later offset. So `withLaterOffsetAtOverlap()` should result in -03:00.
+
+    // Let's re-read the original bug description carefully.
+    // "dtch = new DateTime(2012,2,25,5,5,5,5).millisOfDay().withMaximumValue();"
+    // This creates 2012-02-25T23:59:59.999-02:00. Offset is -02:00 (BRST).
+    // "dtch = dtch.plus(60001);"
+    // This results in 2012-02-25T23:01:00.000-03:00. Offset is -03:00 (BRT).
+    // The DST transition for 2011-2012 ended on Feb 19, 2012.
+    // So on Feb 25, 2012, it was already standard time (BRT, -03:00).
+    // The original output "2012-02-25T23:59:59.999-02:00" is incorrect for America/Sao_Paulo on that date.
+    // It should have been "2012-02-25T23:59:59.999-03:00".
+    // Let's assume the original code was run when the default timezone was set differently or Joda-Time's DST rules were different.
+
+    // Let's try to simulate the *stated output* and see if the methods behave as described.
+    // Assume `dtch` is initially 2012-02-25T23:59:59.999-02:00.
+    DateTime dtInitial = new DateTime(2012, 2, 25, 23, 59, 59, 999, DateTimeZone.forOffsetOverrides("-02:00"));
+    // This creates a DateTime with offset -02:00.
+
+    // Now apply the addition.
+    DateTime dtAfterPlus = dtInitial.plusMillis(60001);
+    // If the offset is -02:00, adding 60001ms to 23:59:59.999 should result in
+    // 00:00:00.000 of the next day, with the offset potentially changing if DST transition occurs.
+    // However, the original output says it becomes 2012-02-25T23:01:00.000-03:00.
+    // This implies the date *did not* roll over, but the time *and* offset changed.
+    // This is highly unusual behavior for `plusMillis` unless the timezone rules are very complex or incorrect.
+
+    // Let's focus on the `withEarlierOffsetAtOverlap` and `withLaterOffsetAtOverlap` methods themselves.
+    // The core issue seems to be that `withLaterOffsetAtOverlap()` is not changing the offset when it should.
+    // This happens when a DateTime object represents a local time that falls into an overlapping hour (during DST fallback).
+
+    // Let's use the Paris example again, as it has a clear overlap hour.
+    DateTimeZone parisZoneForBug = DateTimeZone.forID("Europe/Paris");
+    // DST fallback: Oct 27, 2013, 03:00 CEST (+02:00) -> 02:00 CET (+01:00).
+    // The hour 02:00:00 to 02:59:59.999 occurs twice.
+
+    // Create a DateTime object that falls into this ambiguous hour, starting with the *later* offset (CEST, +02:00).
+    DateTime dtParisLaterOffset = new DateTime(2013, 10, 27, 2, 30, 0, 0, parisZoneForBug);
+    // This should have the CEST offset (+02:00)
+    assertEquals(2 * 60 * 60 * 1000, dtParisLaterOffset.getOffset());
+
+    // Now, call `withEarlierOffsetAtOverlap()`. It should switch to the CET offset (+01:00).
+    DateTime dtParisEarlier = dtParisLaterOffset.withEarlierOffsetAtOverlap();
+    assertEquals(1 * 60 * 60 * 1000, dtParisEarlier.getOffset());
+
+    // Now, call `withLaterOffsetAtOverlap()` on `dtParisEarlier`.
+    // `dtParisEarlier` has the CET offset (+01:00).
+    // The overlapping hour had two offsets: CET (+01:00) and CEST (+02:00).
+    // `withLaterOffsetAtOverlap()` should select the *later* of these two offsets, which is CEST (+02:00).
+    DateTime dtParisLaterAgain = dtParisEarlier.withLaterOffsetAtOverlap();
+
+    // The bug is that `dtParisLaterAgain.getOffset()` is still `+01:00` (CET), not `+02:00` (CEST).
+    // So, the assertion should be that the offset *does* change to the later one.
+    // If this assertion fails, the bug is reproduced.
+    assertEquals("Offset should have changed to the later one after withLaterOffsetAtOverlap()",
+                 2 * 60 * 60 * 1000, dtParisLaterAgain.getOffset());
+}

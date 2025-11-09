@@ -1,0 +1,47 @@
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonGenerator;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.io.StringWriter;
+
+import static org.junit.Assert.fail;
+
+public class JsonGenerationExceptionTest {
+
+    @Test
+    public void testSplitSurrogateOnWriteRaw() throws IOException {
+        JsonFactory jf = new JsonFactory();
+        StringWriter sw = new StringWriter();
+        JsonGenerator jg = jf.createGenerator(sw);
+
+        // Construct a string that is likely to trigger the split surrogate issue.
+        // The exact length and content might need tuning based on the Jackson version and internal buffer sizes.
+        // This example uses a repeating pattern with a character that can be part of a surrogate pair.
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.valueOf((char) 0xD800)); // High surrogate
+        for (int i = 0; i < 1000; i++) { // Adjust loop count to fine-tune buffer interaction
+            sb.append("x");
+        }
+        sb.append(String.valueOf((char) 0xDC00)); // Low surrogate
+
+        try {
+            jg.writeRaw(sb.toString());
+            jg.flush(); // Ensure buffered data is processed
+        } catch (Exception e) {
+            // We expect an exception here, specifically related to split surrogates.
+            // The original bug report mentioned JsonGenerationException.
+            if (e instanceof com.fasterxml.jackson.core.JsonGenerationException &&
+                    e.getMessage() != null &&
+                    e.getMessage().contains("Split surrogate on writeRaw() input")) {
+                // Success: The expected exception was caught.
+                return;
+            }
+            // If it's a different exception, re-throw it to fail the test.
+            throw e;
+        }
+
+        // If no exception was thrown, the test should fail.
+        fail("Expected JsonGenerationException for split surrogate was not thrown.");
+    }
+}

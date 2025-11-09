@@ -1,0 +1,156 @@
+public void testPosixParserStopsAtNonOption() throws ParseException {
+    Options options = new Options();
+    options.addOption("a", false, "a");
+    Option b = new Option("b", true, "b");
+    options.addOption("b", b);
+    PosixParser parser = new PosixParser();
+    String[] args = {"--zop", "-abfoo"};
+    CommandLine cl = parser.parse(options, args, true);
+    assertTrue(cl.hasOption("a"));
+    assertTrue(cl.hasOption("b"));
+    assertEquals("foo", cl.getOptionValue("b"));
+    assertFalse(cl.hasOption("zop")); // --zop is not recognized and should stop parsing
+    // The remaining arguments should not be parsed further.
+    // In this specific case, "-abfoo" should not be split.
+    // However, the bug description implies that the parser might still try to split it.
+    // We need to check how the parser behaves *after* it encounters the non-option.
+    // The description states tokens *after* the unrecognized long option are processed.
+    // Let's simulate a scenario closer to the description:
+    // If --zop is the unrecognized option, then -abfoo comes after it.
+    // The parser *should* stop at --zop and treat -abfoo as a single argument.
+
+    // Let's re-evaluate the example given: "--zop -abfoo"
+    // If --zop is unrecognized, parsing should stop.
+    // The remaining "-abfoo" should be treated as a single command line argument.
+    // The bug report states: "The tokens after the unrecognized long option are burst, split around '=', etc.. instead of being kept as is."
+    // This means that if --zop is unrecognized, and -abfoo follows, the parser *should not* split -abfoo into -a and -b foo.
+
+    // Let's create a scenario that directly tests the splitting behavior after an unrecognized option.
+    // We expect the parser to stop at "--zop" and not process "-abfoo" further.
+    // The original CommandLine object obtained from parser.parse() might not directly expose
+    // the "remaining" unparsed arguments in a way that's easy to assert against the bug description.
+    // However, the description implies that if "-abfoo" *were* processed after "--zop", it would be split.
+    // The fix is that it *should not* be split.
+
+    // A better test case might be to check the remaining arguments.
+    // The PosixParser, when stopAtNonOption is true, should put the non-option
+    // and subsequent arguments into the list of remaining arguments.
+    // Let's try a slightly different command line that better illustrates the issue.
+
+    Options options2 = new Options();
+    options2.addOption("x", false, "x");
+    options2.addOption("y", true, "y"); // y takes an argument
+    PosixParser parser2 = new PosixParser();
+
+    // Command line: --unknown -x -y value other
+    // Expected behavior with stopAtNonOption = true:
+    // --unknown is the first non-option. Parsing stops.
+    // Remaining arguments should be: "--unknown", "-x", "-y", "value", "other"
+    // The bug implies that if --unknown were *not* the first non-option,
+    // and parsing continued, then "-x" might be processed, and then "-y value" processed,
+    // and then "other" might be treated as an argument to -y if it wasn't separated.
+    // The core issue is that after an unrecognized long option, subsequent tokens are still processed and potentially split.
+
+    // Let's test the scenario described: "--zop -abfoo" with options 'a' and 'b' (which takes an argument).
+    // If --zop is unrecognized, parsing should stop. "-abfoo" should be treated as a single argument.
+    // The bug is that it gets split into "-a" and "-b foo".
+
+    // The current parser implementation might not expose the "remaining" arguments directly easily.
+    // Let's try to assert the state of the parsed options and values, and infer the behavior.
+    // If "-abfoo" is NOT split, then we would not expect "-a" to be parsed, nor "-b" to take "foo".
+
+    // Let's refine the test to match the description's example more closely.
+    Options options3 = new Options();
+    options3.addOption("a", false, "Option A");
+    Option bOpt = new Option("b", true, "Option B with argument");
+    options3.addOption("b", bOpt);
+
+    PosixParser parser3 = new PosixParser();
+    String[] args3 = {"--zop", "-abfoo"}; // --zop is unrecognized, stopAtNonOption = true
+
+    CommandLine cl3 = parser3.parse(options3, args3, true);
+
+    // If the parser correctly stops at "--zop", then "-abfoo" should NOT be parsed at all.
+    // This means cl3 should NOT have options 'a' or 'b'.
+    assertFalse("Option 'a' should not be parsed", cl3.hasOption("a"));
+    assertFalse("Option 'b' should not be parsed", cl3.hasOption("b"));
+
+    // The unparsed arguments should be available. Let's assume the parser puts them in getArgs().
+    // The description implies that the parser *does* process them but incorrectly.
+    // The fix is that it should stop and leave them as is.
+    // So, the test should verify that they are NOT processed.
+
+    // Let's verify the remaining arguments if available.
+    // The `parse` method of `PosixParser` doesn't directly return remaining arguments in a separate list
+    // when `stopAtNonOption` is true. Instead, it populates the `CommandLine` object.
+    // If an option is not recognized and `stopAtNonOption` is true, it becomes a positional argument.
+    // And all subsequent arguments are also treated as positional.
+
+    // The bug description: "PosixParser keeps processing tokens after a non unrecognized long option when stopAtNonOption is enabled."
+    // This means that even though `stopAtNonOption` is true, it's still trying to parse subsequent tokens.
+    // Example: "--zop -abfoo" with options "a" and "b" (takes arg).
+    // Expected: --zop is unrecognized, stop. "-abfoo" is one argument.
+    // Buggy: --zop is unrecognized, stop *BUT* it still tries to parse "-abfoo" as if it were after valid options.
+    // This leads to "-a" and "-b foo".
+
+    // So, the test should check for the WRONG behavior.
+    // If the bug is present, cl3.hasOption("a") would be true, and cl3.getOptionValue("b") would be "foo".
+    // The corrected behavior is that neither 'a' nor 'b' should be present.
+
+    // Let's run the code as is and assert the *buggy* behavior.
+    // The test method should reproduce the failure.
+    // So, we assert that the options ARE parsed, which is incorrect.
+
+    Options buggyOptions = new Options();
+    buggyOptions.addOption("a", false, "Option A");
+    Option bOptionWithArg = new Option("b", true, "Option B with argument");
+    buggyOptions.addOption("b", bOptionWithArg);
+
+    PosixParser buggyParser = new PosixParser();
+    String[] buggyArgs = {"--zop", "-abfoo"};
+
+    CommandLine buggyCl = buggyParser.parse(buggyOptions, buggyArgs, true);
+
+    // Assert the INCORRECT behavior described in the bug report.
+    // This test will FAIL if the bug is fixed.
+    assertTrue("Bug: Option 'a' was incorrectly parsed", buggyCl.hasOption("a"));
+    assertTrue("Bug: Option 'b' was incorrectly parsed", buggyCl.hasOption("b"));
+    assertEquals("Bug: Option 'b' incorrectly parsed with value 'foo'", "foo", buggyCl.getOptionValue("b"));
+
+    // The description also says "the last token should remain unchanged."
+    // In the example "--zop -abfoo", if --zop is unrecognized, parsing stops.
+    // The remaining token "-abfoo" should not be split.
+    // The bug is that it *is* split.
+    // So, the test checks that it *is* split.
+
+    // We can also check the remaining arguments *after* the incorrect parsing.
+    // If the parser incorrectly splits "-abfoo" into "-a" and "-b foo",
+    // then "-b" would have "foo" as its argument, and there would be no remaining arguments in `getArgs()`.
+    // This is what the current assertions check.
+
+    // Let's add a test for a slightly different case to be sure.
+    // Command line: --unknown -x -yvalue
+    // Options: x (no arg), y (takes arg)
+    // stopAtNonOption = true
+    Options options4 = new Options();
+    options4.addOption("x", false, "Option X");
+    Option yOption = new Option("y", true, "Option Y with argument");
+    options4.addOption("y", yOption);
+
+    PosixParser parser4 = new PosixParser();
+    String[] args4 = {"--unknown", "-x", "-yvalue"};
+
+    CommandLine cl4 = parser4.parse(options4, args4, true);
+
+    // Buggy behavior: --unknown is unrecognized, but parsing continues.
+    // -x is processed.
+    // -yvalue is processed as -y with argument "value".
+    // There are no remaining arguments.
+    assertTrue("Bug: Option 'x' was incorrectly parsed", cl4.hasOption("x"));
+    assertTrue("Bug: Option 'y' was incorrectly parsed", cl4.hasOption("y"));
+    assertEquals("Bug: Option 'y' incorrectly parsed with value 'value'", "value", cl4.getOptionValue("y"));
+    assertEquals("Bug: No remaining arguments were left after incorrect parsing", 0, cl4.getArgs().length);
+
+    // The original example "--zop -abfoo" is more specific about option bursting.
+    // Let's stick to that for clarity.
+}

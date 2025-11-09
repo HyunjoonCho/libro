@@ -1,0 +1,62 @@
+public void testIssue107() {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setLanguage(CompilerOptions.LanguageMode.ECMASCRIPT5);
+    options.setPrettyPrint(true);
+    options.setWarningLevel(CheckLevel.VERBOSE);
+    options.setIdeMode(false);
+    options.setAllowVariableShadowing(false);
+    options.setCheckGlobalThis(false);
+    options.setCheckSuspiciousCode(false);
+    options.setInferTypes(true);
+
+    String source = "var test = {};\n" +
+            "\n" +
+            "/**\n" +
+            " * @interface\n" +
+            " */\n" +
+            "test.T = function() {};\n" +
+            "\n" +
+            "/**\n" +
+            " * @constructor\n" +
+            " * @implements {test.T}\n" +
+            " */\n" +
+            "test.A = function() {};\n" +
+            "\n" +
+            "/**\n" +
+            " * @constructor\n" +
+            " * @implements {test.T}\n" +
+            " */\n" +
+            "test.B = function() {};\n" +
+            "\n" +
+            "/**\n" +
+            " * @constructor\n" +
+            " */\n" +
+            "test.X = function() {\n" +
+            " this.type = test.A;\n" +
+            " this.t = this.f();\n" +
+            "};\n" +
+            "\n" +
+            "/**\n" +
+            " * @return {test.T}\n" +
+            " */\n" +
+            "test.X.prototype.f = function() {\n" +
+            " if (this.type === test.A) {\n" +
+            " return new test.A();\n" +
+            " } else if (this.type === test.B) {\n" +
+            " return new test.B();\n" +
+            " }\n" +
+            "};";
+
+    JSSourceFile externs = JSSourceFile.fromCode("externs.js", "");
+    JSSourceFile mainJs = JSSourceFile.fromCode("crash.js", source);
+
+    // The actual error happens during type checking, so we need to run passes that include it.
+    // The simplest way to trigger this is to just compile.
+    // If the error were specific to a certain pass, we would need to enable that pass.
+    Result result = compiler.compile(externs, mainJs, options);
+
+    // We expect a compilation error due to the IllegalStateException.
+    // The test should fail if the compilation succeeds without the exception.
+    assertFalse("Compilation failed with an exception, expected failure.", result.success);
+}

@@ -1,0 +1,42 @@
+public void testNonEmptyExclusion() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.addSerializer(String.class, new NonEmptySerializer(String.class));
+    mapper.registerModule(module);
+
+    // Test with null
+    assertNull(mapper.readValue("null", String.class));
+
+    // Test with empty string
+    assertEquals("", mapper.readValue("\"\"", String.class));
+
+    // Test with non-empty string
+    assertEquals("test", mapper.readValue("\"test\"", String.class));
+
+    // Test with int (should not be affected by NonEmptySerializer)
+    assertEquals(Integer.valueOf(0), mapper.readValue("0", Integer.class));
+    assertEquals(Integer.valueOf(1), mapper.readValue("1", Integer.class));
+}
+
+// Dummy NonEmptySerializer for reproduction
+private static class NonEmptySerializer extends JsonSerializer<Object> {
+    private final Class<?> handledType;
+
+    public NonEmptySerializer(Class<?> handledType) {
+        this.handledType = handledType;
+    }
+
+    @Override
+    public void serialize(Object value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+        if (value == null || "".equals(value) || (value instanceof Collection && ((Collection<?>) value).isEmpty())) {
+            gen.writeNull();
+        } else {
+            gen.writeObject(value);
+        }
+    }
+
+    @Override
+    public JsonNode getSchema(SerializerProvider provider, Type typeHint) {
+        return createSchemaNode("string");
+    }
+}

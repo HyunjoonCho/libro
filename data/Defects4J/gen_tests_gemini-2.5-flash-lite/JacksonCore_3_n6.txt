@@ -1,0 +1,28 @@
+public void testCurrInputRowStartInitialization() throws IOException {
+    byte[] jsonBytes = new byte[] { '{', '"', 'a', '"', ':', '1', '}' };
+    ByteArrayInputStream bais = new ByteArrayInputStream(jsonBytes);
+    IOContext ctxt = new IOContext(null, null, false);
+    ObjectCodec codec = null;
+    BytesToNameCanonicalizer sym = BytesToNameCanonicalizer.getEmptyNameCanonicalizer();
+    int startPos = 10;
+    UTF8StreamJsonParser parser = new UTF8StreamJsonParser(ctxt, 0, bais, codec, sym, jsonBytes, startPos, jsonBytes.length, false);
+
+    try {
+        parser.nextToken(); // Consume '{'
+        parser.nextToken(); // Consume '"'
+        parser.nextToken(); // Consume 'a'
+        parser.nextToken(); // Consume '"'
+        parser.nextToken(); // Consume ':'
+        parser.nextToken(); // Consume '1'
+        parser.nextToken(); // Expecting '}' to trigger exception if column count is wrong
+    } catch (Exception e) {
+        // Check the exception message for column number information
+        String message = e.getMessage();
+        assertTrue(message.contains("column"));
+        // The expected column should be related to the startPos and the current position
+        // For this simple JSON, after parsing "1", the next token is '}', which is at index 6 in jsonBytes.
+        // The expected column (1-based) should be (6 - startPos + 1)
+        int expectedColumn = 6 - startPos + 1;
+        assertTrue(message.contains("column " + expectedColumn));
+    }
+}

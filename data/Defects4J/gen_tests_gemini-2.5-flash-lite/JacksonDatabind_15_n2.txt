@@ -1,0 +1,99 @@
+public void testXmlAdapterWithObjectValueType() throws JsonProcessingException {
+    ObjectMapper mapper = (new ObjectMapper()).setAnnotationIntrospector(new JaxbAnnotationIntrospector());
+    SomeIntListHolder listHolder = new SomeIntListHolder();
+    listHolder.setListOne(asList(1, 2, 3));
+
+    // This should not throw a JsonMappingException
+    String json = mapper.writeValueAsString(listHolder);
+    assertTrue(json.contains("\"listOne\":\"1,2,3\""));
+}
+
+// Helper classes from the bug report, needed for the test context
+public static class IntegerListXmlAdapter extends XmlAdapter<Object, List<Integer>> {
+    @Override
+    public List<Integer> unmarshal(Object value) throws Exception {
+        return null;
+    }
+
+    @Override
+    public Object marshal(List<Integer> list) throws Exception {
+        return Joiner.on(",").join(list);
+    }
+}
+
+@XmlRootElement
+@XmlAccessorType(XmlAccessType.NONE)
+public static class SomeIntListHolder {
+    @XmlAttribute
+    @XmlJavaTypeAdapter(IntegerListXmlAdapter.class)
+    private List<Integer> listOne;
+
+    public List<Integer> getListOne() {
+        return listOne;
+    }
+
+    public void setListOne(List<Integer> listOne) {
+        this.listOne = listOne;
+    }
+}
+
+// Mock JaxbAnnotationIntrospector and Joiner to make the test self-contained
+// In a real test suite, these would likely be imported.
+static class JaxbAnnotationIntrospector extends AnnotationIntrospector {
+    @Override
+    public java.lang.reflect.AnnotatedElement getElementForProperty(java.lang.reflect.Annotated p, String propertyName) {
+        try {
+            return p.getRawType().getMethod(propertyName).getAnnotated();
+        } catch (Exception e) {
+            // simplified for test
+            return null;
+        }
+    }
+
+    @Override
+    public String findJaxbAdapter(AnnotatedClass ac) {
+        // simplified for test
+        return null;
+    }
+
+    @Override
+    public String findJaxbAdapter(AnnotatedMember am) {
+        XmlJavaTypeAdapter annotation = am.getAnnotation(XmlJavaTypeAdapter.class);
+        return (annotation != null) ? annotation.value().getName() : null;
+    }
+}
+
+static class Joiner {
+    public static Joiner on(String separator) {
+        return new Joiner(separator);
+    }
+
+    private final String separator;
+
+    private Joiner(String separator) {
+        this.separator = separator;
+    }
+
+    public String join(List<?> list) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < list.size(); i++) {
+            sb.append(list.get(i));
+            if (i < list.size() - 1) {
+                sb.append(separator);
+            }
+        }
+        return sb.toString();
+    }
+}
+
+// Mock necessary Jackson classes if not available in the test environment
+static class XmlAttribute {}
+static class XmlElement {}
+static class XmlRootElement {}
+static class XmlAccessorType {
+    public static final XmlAccessType NONE = new XmlAccessType();
+    public static class XmlAccessType {}
+}
+static class XmlJavaTypeAdapter {
+    public Class<?> value() { return null; }
+}

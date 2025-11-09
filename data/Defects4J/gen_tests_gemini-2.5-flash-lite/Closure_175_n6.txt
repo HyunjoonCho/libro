@@ -1,0 +1,54 @@
+public void testAdvancedOptimizationSideEffect() {
+    CompilerOptions options = new CompilerOptions();
+    options.setCompilationLevel(CompilationLevel.ADVANCED_OPTIMIZATIONS);
+    options.setLanguage(Language.ECMASCRIPT5);
+    options.setExtraSmartNameRemoval(true);
+
+    // Mock externs to simulate window.anchor and window.foo
+    String externs = "var window = {}; window.anchor = function(obj, modifiesProp) {};";
+    SourceFile externFile = SourceFile.fromCode("externs.js", externs);
+
+    // The JavaScript code to compile
+    String jsCode = "window[\"anchor\"] = function (obj, modifiesProp) {" +
+                    " return (function (saved) {" +
+                    " return modifiesProp(obj) + saved;" +
+                    " })(obj[\"prop\"]);" +
+                    " }";
+
+    SourceFile inputJs = SourceFile.fromCode("input.js", jsCode);
+
+    Compiler compiler = new Compiler();
+    compiler.compile(externFile, inputJs, options);
+
+    // The expected output after advanced optimizations
+    // The original bug describes a specific optimization that incorrectly reorders
+    // operations involving side effects. The original code intends to save obj["prop"]
+    // before calling modifiesProp(obj), which might modify obj["prop"].
+    // The buggy optimization removes the 'saved' variable, leading to incorrect behavior
+    // if modifiesProp(obj) changes obj["prop"].
+    // The expected output in the bug report is:
+    // window.foo=function(a,b){return b(a)+a.prop};
+    // This implies that the compiler incorrectly assumes modifiesProp(obj) does not
+    // affect obj["prop"] and directly uses a.prop in the return statement.
+    // We will check if the compiled output reflects this incorrect optimization.
+
+    String compiledCode = compiler.toSource();
+
+    // We expect the compiled code to have a function that looks like the buggy version.
+    // The exact output might vary slightly in formatting or variable names,
+    // but the core issue is the removal of the 'saved' variable and direct use of obj["prop"].
+    // Let's check for the presence of the problematic pattern.
+    // The original bug report shows the output as: window.foo=function(a,b){return b(a)+a.prop};
+    // In our case, the function name is 'anchor'. So we expect something like:
+    // window.anchor=function(obj,modifiesProp){return modifiesProp(obj)+obj.prop};
+    // The key is that 'saved' is gone and obj.prop is used directly.
+
+    assertTrue("Compiled code should reflect the erroneous optimization.",
+               compiledCode.contains("return modifiesProp(obj) + obj[\"prop\"]") ||
+               compiledCode.contains("return modifiesProp(obj) + obj.prop"));
+
+    // To specifically test the failure, we would need to execute this compiled code
+    // with a specific input where obj["prop"] is modified by modifiesProp.
+    // However, this method is for reproducing the *compilation* failure.
+    // The above check verifies that the compiler produced the code described in the bug.
+}

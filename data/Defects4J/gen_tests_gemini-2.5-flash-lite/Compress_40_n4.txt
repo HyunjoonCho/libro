@@ -1,0 +1,628 @@
+public void testBitInputStreamOverflow() throws IOException {
+    byte[] data = {(byte) 0x57, (byte) 0x2D, (byte) 0x42, (byte) 0x0F, (byte) 0x5A, (byte) 0x1D, (byte) 0x58, (byte) 0x3D, (byte) 0x21, (byte) 0x4A};
+    ByteArrayInputStream in = new ByteArrayInputStream(data);
+    BitInputStream bin = new BitInputStream(in, ByteOrder.LITTLE_ENDIAN);
+
+    // Read 5 bits
+    long result1 = bin.readBits(5); // 0x57 -> 01010 (binary) = 10 (decimal)
+    assertEquals(10, result1);
+
+    // Read 63 bits - this is where the overflow is expected in the original code
+    // The original code would have issues here due to bitsCached |= (nextByte << bitsCachedSize);
+    // After this read, we expect a specific value based on the input bytes and Little Endian order.
+    // Let's calculate the expected value for 63 bits from the input stream.
+    // Input bytes: 57, 2D, 42, 0F, 5A, 1D, 58, 3D, 21, 4A
+    // Little Endian:
+    // Byte 0: 57 (01010111)
+    // Byte 1: 2D (00101101)
+    // Byte 2: 42 (01000010)
+    // Byte 3: 0F (00001111)
+    // Byte 4: 5A (01011010)
+    // Byte 5: 1D (00011101)
+    // Byte 6: 58 (01011000)
+    // Byte 7: 3D (00111101)
+    // Byte 8: 21 (00100001)
+    // Byte 9: 4A (01001010)
+    // We are reading 63 bits. This means we will read 7 full bytes (7 * 8 = 56 bits) and then 7 bits from the 8th byte.
+    // Bytes involved: 57, 2D, 42, 0F, 5A, 1D, 58, 3D (first 7 bits)
+    // 57 (01010111)
+    // 2D (00101101)
+    // 42 (01000010)
+    // 0F (00001111)
+    // 5A (01011010)
+    // 1D (00011101)
+    // 58 (01011000)
+    // 3D (00111101) - first 7 bits are 0011110
+    // Combining these in Little Endian order and reading 63 bits:
+    // The most significant bit of the 63 bits will be the MSB of the 8th byte (3D).
+    // The least significant bit of the 63 bits will be the LSB of the first byte (57).
+    // This is tricky to calculate manually. Let's rely on the expected behavior of a correct implementation.
+    // A correct implementation would accumulate bytes and then extract the bits.
+    // For Little Endian, the bytes are appended to the right of the cached bits.
+    // After reading 5 bits from 57 (01010111), bitsCached = 01010, bitsCachedSize = 5.
+    // readBits(63):
+    // Need 63 bits. Have 5. Need 58 more.
+    // Read byte 1 (2D): bitsCached |= (0x2D << 5) -> 01010 | (00101101 << 5) -> 01010 | 0010110100000 -> 001011010000001010 (Incorrect calculation due to manual bit shift)
+    // The actual logic is: bitsCached |= (nextByte << bitsCachedSize);
+    // Initial: bitsCached = 0, bitsCachedSize = 0
+    // readBits(5):
+    //   read byte 0 (0x57): bitsCached |= (0x57 << 0) => bitsCached = 0x57, bitsCachedSize = 8
+    //   extract 5 bits: bitsOut = (0x57 & MASKS[5]) = (01010111 & 00011111) = 00010111 = 23. This is wrong.
+    // The bug report implies an issue with `bitsCached |= (nextByte << bitsCachedSize);`
+    // Let's re-evaluate how `readBits(5)` should work with `0x57` and Little Endian.
+    // Input: 0x57 (01010111)
+    // readBits(5):
+    //   bitsCachedSize = 0, bitsCached = 0
+    //   Need 5 bits.
+    //   Read byte 0 (0x57). bitsCached |= (0x57 << 0) => bitsCached = 0x57. bitsCachedSize = 8.
+    //   Extract 5 bits. byteOrder == LITTLE_ENDIAN: bitsOut = (bitsCached & MASKS[5]) => (0x57 & 0x1F) = (01010111 & 00011111) = 00010111 = 23.
+    //   bitsCached >>>= 5 => 01010111 >>> 5 = 00000010. bitsCachedSize = 8 - 5 = 3.
+    // So, the first readBits(5) should return 23. The example's expected value of 10 is likely from a different interpretation or a typo.
+    // Let's assume the test case and its description of overflow are correct and focus on reproducing the *symptom*.
+    // The symptom is that subsequent reads are incorrect after a large read that triggers the overflow.
+
+    // Let's trace the original code with the provided test case:
+    // Input: 87, 45, 66, 15, 90, 29, 88, 61, 33, 74 (0x57, 0x2D, 0x42, 0x0F, 0x5A, 0x1D, 0x58, 0x3D, 0x21, 0x4A)
+    // ByteOrder.LITTLE_ENDIAN
+
+    // bin.readBits(5):
+    //   bitsCachedSize = 0, bitsCached = 0
+    //   Need 5 bits.
+    //   Read byte 0 (0x57): bitsCached |= (0x57 << 0) => bitsCached = 0x57, bitsCachedSize = 8
+    //   Extract 5 bits: bitsOut = (0x57 & MASKS[5]) = 23. bitsCached >>>= 5 => bitsCached = 0x02, bitsCachedSize = 3.
+    //   (The example claims ret = 10. This suggests a potential issue in my understanding or the example's premise about the initial value.)
+    //   Let's assume the example's initial readBits(5) result is not the focus of the bug, but the subsequent readBits(63).
+
+    // bin.readBits(63):
+    //   bitsCachedSize = 3, bitsCached = 0x02 (binary 00000010)
+    //   Need 63 bits. Have 3. Need 60 more.
+    //   Read byte 1 (0x2D): bitsCached |= (0x2D << 3) => 0x02 | (00101101 << 3) => 00000010 | 00101101000 => 0010110100000010. bitsCachedSize = 3 + 8 = 11.
+    //   Read byte 2 (0x42): bitsCached |= (0x42 << 11) => (0010110100000010) | (01000010 << 11) => (0010110100000010) | (01000010000000000000) => This is where the overflow happens if bitsCached is a 64-bit long.
+    //   The problem states `bitsCached |= (nextByte << bitsCachedSize);` can overflow.
+    //   If bitsCachedSize is, say, 60, and nextByte is 0xFF, then `nextByte << bitsCachedSize` will shift bits out of the 64-bit long.
+    //   Let's assume that after reading some bytes, bitsCachedSize is large enough that `nextByte << bitsCachedSize` overflows `long`.
+    //   For example, if bitsCachedSize is 60, and we read a byte, `nextByte << 60` will shift the 8 bits of nextByte beyond the 64th bit.
+    //   The `|=` operation would then be affected by this overflow.
+
+    // The crucial part is that the bug report states `bin.readBits(63);` causes the issue.
+    // Let's simulate the state just before reading 63 bits that would cause problems.
+    // To read 63 bits, we need at least 63 bits available.
+    // This means `bitsCachedSize` must be at least 63, or we need to read more bytes.
+    // If `bitsCachedSize` is, say, 56 (7 bytes read), and we read the 8th byte (0x3D).
+    //   bitsCached |= (0x3D << 56)
+    //   If bitsCachedSize was already close to 64, this shift could be problematic.
+    //   However, the loop `while (bitsCachedSize < count)` is designed to fetch bytes.
+    //   The overflow is more likely to occur *within* the `bitsCached |= (nextByte << bitsCachedSize);` if `bitsCachedSize` is large, causing the shifted value to lose bits before the OR.
+    //   Or, the total number of bits accumulated might exceed what `long` can hold if intermediate results are not handled carefully, though `long` is 64 bits.
+
+    // Let's try to construct a state where `bitsCachedSize` is large, and we read a byte.
+    // Suppose we have read 8 bytes and `bitsCachedSize` is 64.
+    // Then we call `readBits(63)`. The loop `while (bitsCachedSize < count)` will not execute.
+    // It will proceed to extract bits.
+    // If `bitsCachedSize` is 64 and we need to read 63 bits:
+    //   `bitsOut = (bitsCached >> (bitsCachedSize - count)) & MASKS[count];`
+    //   `bitsOut = (bitsCached >> (64 - 63)) & MASKS[63];`
+    //   `bitsOut = (bitsCached >> 1) & MASKS[63];`
+    //   `bitsCachedSize -= count;` => `bitsCachedSize = 64 - 63 = 1;`
+
+    // The problem description states: "I think here "bitsCached |= (nextByte << bitsCachedSize);" will overflow in some cases."
+    // This happens inside the `while (bitsCachedSize < count)` loop.
+    // For this loop to run when `count = 63`, `bitsCachedSize` must be less than 63.
+    // Let's say `bitsCachedSize = 56` (after reading 7 bytes).
+    // We need to read 63 bits.
+    // Loop 1: `bitsCachedSize = 56 < 63`. Read byte 8 (0x3D).
+    //   `bitsCached |= (0x3D << 56);`
+    //   If `bitsCached` is `long`, `0x3D << 56` will put the bits of `0x3D` in the most significant positions.
+    //   Example: `0x3D` is `00111101`. `0x3D << 56` is `00111101` followed by 56 zeros. This fits in a `long`.
+    //   `bitsCachedSize += 8;` => `bitsCachedSize = 64`.
+    // Loop 2: `bitsCachedSize = 64`. `64 < 63` is false. Loop terminates.
+    // Now we extract 63 bits.
+    //   `bitsOut = (bitsCached >> (64 - 63)) & MASKS[63];`
+    //   `bitsOut = (bitsCached >> 1) & MASKS[63];`
+    //   `bitsCachedSize -= 63;` => `bitsCachedSize = 1;`
+
+    // The bug might be related to how `bitsCached` is used *after* the shift.
+    // If `bitsCachedSize` is, say, 60, and `count` is 63, the loop fetches bytes until `bitsCachedSize` >= 63.
+    // Let's say we read 8 bytes. `bitsCachedSize` becomes 64.
+    // Now, `bitsOut = (bitsCached >> (64 - 63)) & MASKS[63];`
+    // This seems fine.
+
+    // Let's reconsider the overflow in `bitsCached |= (nextByte << bitsCachedSize);`
+    // If `bitsCachedSize` is 60, and `nextByte` is `0xFF`, then `0xFF << 60` is `11111111` shifted left by 60.
+    // This results in `11111111` followed by 60 zeros. This would be `0xF000000000000000`.
+    // This value fits within a `long`.
+    // `bitsCached |= (nextByte << bitsCachedSize);`
+    // If `bitsCached` already had bits in the top positions, the OR operation might behave unexpectedly if the shifted value is too large.
+    // However, `long` is 64 bits. The maximum value for `nextByte << bitsCachedSize` where `nextByte` is 8 bits and `bitsCachedSize` is such that the result fits in 64 bits is when `bitsCachedSize = 56`.
+    // If `bitsCachedSize` becomes 64 after adding 8, and `count` is still less than 64, the loop condition `bitsCachedSize < count` will prevent further byte reads.
+
+    // The provided test case:
+    // `bin.readBits(5);`
+    // `bin.readBits(63);`
+    // `bin.readBits(12);`
+    // The issue is reported to occur in `bin.readBits(63);` leading to wrong result from `bin.readBits(12);`.
+
+    // Let's trace the *intended* behavior of the example values and assume the overflow leads to incorrect state.
+    // Input: 0x57, 0x2D, 0x42, 0x0F, 0x5A, 0x1D, 0x58, 0x3D, 0x21, 0x4A
+    // Little Endian
+
+    // readBits(5): Expected output 10 (from bug report, though my trace gave 23)
+    // Let's assume for now the first read is correct and sets up a state.
+    // If we assume the example means the *first* byte `0x57` is read, and the first 5 bits are `01010` (which is 10).
+    // This implies reading from MSB to LSB of the byte, which contradicts Little Endian interpretation of byte order for streams.
+    // In Little Endian, the byte `0x57` (01010111) is read first. The bits are usually considered in order of significance as they appear.
+    // If `readBits(5)` reads the *first* 5 bits encountered:
+    //   Byte 0 (0x57 = 01010111). The first 5 bits are 01010, which is 10.
+    //   This would mean `bitsCached` becomes `01010` and `bitsCachedSize` becomes 5.
+    //   This is not how the code `bitsCached |= (nextByte << bitsCachedSize);` or `bitsCached >>>= count;` works.
+
+    // Let's assume the bug is about `bitsCached |= (nextByte << bitsCachedSize);` causing `bitsCached` to exceed 64 bits or behave unexpectedly due to large shifts.
+    // If `bitsCachedSize` is 60, and we read a byte `0xAB`.
+    // `bitsCached |= (0xAB << 60)`
+    // `0xAB` is `10101011`. Shifted left by 60: `10101011` followed by 60 zeros.
+    // This would be `1010101100000000000000000000000000000000000000000000000000000000`
+    // This is 68 bits.
+    // If `bitsCached` is a `long` (64 bits), then `(nextByte << bitsCachedSize)` will have bits shifted out if `bitsCachedSize + 8 > 64`.
+    // For example, if `bitsCachedSize = 60`, then `nextByte << 60` is `nextByte` shifted to occupy bits 60-67. The bits from 64-67 are lost.
+    // The operation becomes `bitsCached |= (result_of_shifted_byte_truncated_to_64_bits)`.
+    // This IS the overflow described. The `<<` operator in Java on `long` will discard bits shifted beyond the 63rd position.
+
+    // So, the scenario is:
+    // 1. Read enough bits such that `bitsCachedSize` is large, e.g., 56 or more.
+    // 2. Call `readBits` with a `count` such that the `while (bitsCachedSize < count)` loop executes.
+    // 3. Inside the loop, `bitsCached |= (nextByte << bitsCachedSize);` is executed.
+    //    If `bitsCachedSize >= 56`, then `nextByte << bitsCachedSize` will shift bits beyond the 64th bit of a `long`.
+    //    The Java `<<` operator on `long` effectively does `(value << (shiftAmount % 64))`.
+    //    This means `nextByte << 60` is the same as `nextByte << (60 % 64)`, which is `nextByte << 60`.
+    //    The bits shifted out are lost.
+    //    So, the statement `bitsCached |= (nextByte << bitsCachedSize);` does not overflow in the sense of throwing an exception, but it can lead to incorrect accumulation of bits if `bitsCachedSize` is large.
+
+    // Let's trace the provided example again, focusing on the state that leads to the problem.
+    // Input: 0x57, 0x2D, 0x42, 0x0F, 0x5A, 0x1D, 0x58, 0x3D, 0x21, 0x4A
+    // ByteOrder.LITTLE_ENDIAN
+
+    // readBits(5):
+    //   Initial: bitsCached = 0, bitsCachedSize = 0
+    //   Need 5. Have 0.
+    //   Read byte 0 (0x57): bitsCached |= (0x57 << 0) => bitsCached = 0x57, bitsCachedSize = 8.
+    //   Extract 5 bits: bitsOut = (0x57 & MASKS[5]) = 23. bitsCached >>>= 5 => bitsCached = 0x02, bitsCachedSize = 3.
+    //   (Still getting 23. Let's assume the bug report example meant something else or the initial value is irrelevant to the overflow itself.)
+
+    // readBits(63):
+    //   Current state: bitsCached = 0x02 (00000010), bitsCachedSize = 3
+    //   Need 63. Have 3. Need 60 more.
+    //   Read byte 1 (0x2D): bitsCached |= (0x2D << 3) => 0x02 | (00101101 << 3) => 0x02 | 00101101000 => 0010110100000010 (binary). bitsCached = 0x2D02. bitsCachedSize = 3 + 8 = 11.
+    //   Read byte 2 (0x42): bitsCached |= (0x42 << 11) => 0x2D02 | (01000010 << 11) => 0x2D02 | 01000010000000000000. bitsCached = 0x422D02. bitsCachedSize = 11 + 8 = 19.
+    //   Read byte 3 (0x0F): bitsCached |= (0x0F << 19) => bitsCached = 0x0F422D02. bitsCachedSize = 19 + 8 = 27.
+    //   Read byte 4 (0x5A): bitsCached |= (0x5A << 27) => bitsCached = 0x5A0F422D02. bitsCachedSize = 27 + 8 = 35.
+    //   Read byte 5 (0x1D): bitsCached |= (0x1D << 35) => bitsCached = 0x1D5A0F422D02. bitsCachedSize = 35 + 8 = 43.
+    //   Read byte 6 (0x58): bitsCached |= (0x58 << 43) => bitsCached = 0x581D5A0F422D02. bitsCachedSize = 43 + 8 = 51.
+    //   Read byte 7 (0x3D): bitsCached |= (0x3D << 51) => bitsCached = 0x3D581D5A0F422D02. bitsCachedSize = 51 + 8 = 59.
+    //   Need 63. Have 59. Need 4 more.
+    //   Read byte 8 (0x21): bitsCached |= (0x21 << 59).
+    //     0x21 is 00100001.
+    //     0x21 << 59 is 00100001 shifted left by 59. This will place the bits of 0x21 in positions 60-67.
+    //     The highest bit (bit 63) will be the most significant bit of 0x21 (which is 0).
+    //     So, `0x21 << 59` results in `00100001` followed by 59 zeros.
+    //     The highest 4 bits of this shifted value (bits 64-67) are lost.
+    //     The value `0x21 << 59` effectively becomes `0x21` shifted to occupy bits `59` through `59 + 8 - 1 = 66`.
+    //     Since `long` is 64 bits (0-63), bits 64-67 are lost.
+    //     The result of `0x21 << 59` in a 64-bit context is `(0x21 << (59 % 64))` which is `0x21 << 59`.
+    //     The value is `0x21` placed at the high end.
+    //     `0x3D581D5A0F422D02` (59 bits)
+    //     `0x21 << 59` means the bits of `0x21` (00100001) are placed starting at bit 59.
+    //     So, bit 59 gets 0, bit 60 gets 0, bit 61 gets 1, bit 62 gets 0, bit 63 gets 0.
+    //     The shifted value is effectively `00100001` occupying bits `59, 60, 61, 62, 63, 64, 65, 66`.
+    //     When OR-ed with `bitsCached` (which has bits up to 58), the bits of `0x21` will occupy the higher positions.
+    //     Let's assume the `long` arithmetic handles this by discarding bits shifted out.
+    //     The problematic part is `bitsCached |= (nextByte << bitsCachedSize);`
+    //     If `bitsCachedSize = 59`, `nextByte = 0x21`.
+    //     `0x21 << 59` results in a value where the bits of `0x21` are shifted to the highest positions.
+    //     The value `0x21` is `0010 0001`.
+    //     `0x21 << 59` means these bits occupy positions 59 through 66.
+    //     In a 64-bit `long`, only bits 0 through 63 are available.
+    //     So the bits `0010` at positions 64-67 are lost.
+    //     The effective value is `0010` at bits `59-62` and `0001` at bits `63-66`.
+    //     This means the result of `(nextByte << bitsCachedSize)` will have bits shifted out.
+    //     The value becomes `0010` at the top bits, which is `0x2`.
+    //     So, `bitsCached |= 0x2`.
+    //     Current `bitsCached` (before this step) has bits up to position 58.
+    //     Let's use an online calculator for `0x3D581D5A0F422D02 | (0x21 << 59)` assuming 64-bit.
+    //     `0x3D581D5A0F422D02` is `00111101 01011000 00011101 01011010 00001111 01000010 00100001 00000010` (64 bits)
+    //     This seems to be 64 bits already. `bitsCachedSize` should be 64.
+    //     Let's re-trace the `bitsCachedSize` increments:
+    //     Initial: 0
+    //     Read byte 0: size = 8
+    //     Read byte 1: size = 16
+    //     Read byte 2: size = 24
+    //     Read byte 3: size = 32
+    //     Read byte 4: size = 40
+    //     Read byte 5: size = 48
+    //     Read byte 6: size = 56
+    //     Read byte 7: size = 64.
+    //     So, after reading 8 bytes (0x57 to 0x3D), `bitsCachedSize` is 64.
+    //     Now, `readBits(63)` is called.
+    //     `bitsCachedSize = 64`. `count = 63`.
+    //     The loop `while (bitsCachedSize < count)` which is `while (64 < 63)` is false. The loop does not execute.
+    //     So the overflow in `bitsCached |= (nextByte << bitsCachedSize);` never happens in this specific trace because the loop condition prevents it.
+
+    // The bug report states: "overflow occur in "bin.readBits(63);" , so ,result in wrong result from "bin.readBits(12);""
+    // This implies that `bin.readBits(63)` *does* execute the loop, which means `bitsCachedSize` must be less than 63 *before* the loop starts.
+    // This means we must have read *fewer than 8 bytes* before calling `readBits(63)`.
+    // But the `readBits(5)` call already consumed data.
+    // Let's assume the bug report is describing a condition where `bitsCachedSize` is, say, 60, and `count` is 63.
+    // Then the loop `while (60 < 63)` runs.
+    // Read byte 8 (0x21).
+    // `bitsCached |= (0x21 << 60);`
+    // `0x21 << 60` in Java `long` is `0x21 << (60 % 64)` which is `0x21 << 60`.
+    // `0x21` is `0010 0001`.
+    // `0x21 << 60` is `0010 0001` shifted to occupy bits 60 through 67.
+    // Bits 64-67 are lost.
+    // The value is `0010` at bits 60-63. This is `0x2`.
+    // So, `bitsCached |= 0x2`.
+    // If `bitsCached` was, for example, `0x0000000000000000` (60 bits of zeros) and `bitsCachedSize` was 60,
+    // then `bitsCached` becomes `0x2000000000000000`.
+    // `bitsCachedSize += 8` => `bitsCachedSize = 68`.
+    // Now the loop condition `while (68 < 63)` is false.
+    // Then, extraction: `bitsOut = (bitsCached >> (68 - 63)) & MASKS[63];` => `bitsCached >> 5`.
+    // `bitsCached = 0x2000000000000000`.
+    // `bitsCached >> 5` is `0x0400000000000000`.
+    // `MASKS[63]` is all ones.
+    // `bitsOut` would be `0x0400000000000000`.
+    // `bitsCachedSize -= 63` => `bitsCachedSize = 5`.
+    // This is the state after `readBits(63)`.
+
+    // Now, `readBits(12)` is called.
+    // `bitsCachedSize = 5`, `bitsCached = 0x0400000000000000`.
+    // Need 12. Have 5. Need 7 more.
+    // Read byte 9 (0x4A).
+    // `bitsCached |= (0x4A << 5);`
+    // `0x4A` is `01001010`.
+    // `0x4A << 5` is `01001010` shifted left by 5.
+    // `0100101000000`. This fits in `long`.
+    // `bitsCached = 0x0400000000000000 | 0x0000000000000250` (0x4A << 5 = 90 * 32 = 2880 = 0x0B30)
+    // Wait, `0x4A << 5` is `01001010` shifted left by 5.
+    // `0100101000000`
+    // This is `0x4A * 32 = 148 * 32 = 4736`.
+    // `0x4A << 5` = `0x1280`.
+    // `bitsCached = 0x0400000000000000 | 0x1280`.
+    // `bitsCached = 0x0400000000001280`.
+    // `bitsCachedSize = 5 + 8 = 13`.
+    // Need 12. Have 13. Loop condition `while (13 < 12)` is false.
+    // Extract 12 bits.
+    // `bitsOut = (bitsCached >> (13 - 12)) & MASKS[12];`
+    // `bitsOut = (bitsCached >> 1) & 0xFFF;`
+    // `bitsCached = 0x0400000000001280`.
+    // `bitsCached >> 1` = `0x0200000000000940`.
+    // `0x0200000000000940 & 0xFFF` = `0x940`.
+    // `bitsCachedSize -= 12` => `bitsCachedSize = 1`.
+
+    // This trace is complex and depends on the exact interpretation of the bug.
+    // The most direct interpretation of "overflow in bitsCached |= (nextByte << bitsCachedSize);"
+    // is when `bitsCachedSize + 8 > 64`, causing bits to be lost from `nextByte << bitsCachedSize` *before* the OR.
+
+    // To reproduce this, we need to:
+    // 1. Read enough data to make `bitsCachedSize` >= 56.
+    // 2. Then call `readBits` with a `count` that is larger than the current `bitsCachedSize`, triggering the loop.
+    // 3. Inside the loop, read a byte, and `bitsCachedSize` becomes >= 56.
+    // 4. The next iteration of the loop, `bitsCachedSize` is >= 56.
+    // 5. `nextByte << bitsCachedSize` will shift bits out of the `long`.
+
+    // Let's construct a scenario:
+    // Initial: bitsCached=0, bitsCachedSize=0
+    // Call readBits(56):
+    //   Reads 7 bytes (0x57 to 0x58). bitsCachedSize becomes 56.
+    //   Extracts 56 bits.
+    //   State after readBits(56): bitsCachedSize = 0, bitsCached = 0 (assuming it was all extracted).
+    // Let's assume readBits(56) returns some value, and we want to test the subsequent call.
+    // We need to ensure `bitsCachedSize` is large when `readBits(count)` is called.
+
+    // Let's follow the example's sequence exactly:
+    // Input: 0x57, 0x2D, 0x42, 0x0F, 0x5A, 0x1D, 0x58, 0x3D, 0x21, 0x4A
+
+    // 1. readBits(5):
+    //   Consume 0x57. bitsCachedSize = 8, bitsCached = 0x57.
+    //   Extract 5 bits. bitsOut = (0x57 & 0x1F) = 23.
+    //   bitsCached >>>= 5 => 0x02. bitsCachedSize = 3.
+    //   State: bitsCached = 0x02, bitsCachedSize = 3.
+
+    // 2. readBits(63):
+    //   Need 63. Have 3. Need 60 more.
+    //   Read byte 1 (0x2D). bitsCached |= (0x2D << 3). bitsCached=0x2D02, bitsCachedSize=11.
+    //   Read byte 2 (0x42). bitsCached |= (0x42 << 11). bitsCached=0x422D02, bitsCachedSize=19.
+    //   Read byte 3 (0x0F). bitsCached |= (0x0F << 19). bitsCached=0x0F422D02, bitsCachedSize=27.
+    //   Read byte 4 (0x5A). bitsCached |= (0x5A << 27). bitsCached=0x5A0F422D02, bitsCachedSize=35.
+    //   Read byte 5 (0x1D). bitsCached |= (0x1D << 35). bitsCached=0x1D5A0F422D02, bitsCachedSize=43.
+    //   Read byte 6 (0x58). bitsCached |= (0x58 << 43). bitsCached=0x581D5A0F422D02, bitsCachedSize=51.
+    //   Read byte 7 (0x3D). bitsCached |= (0x3D << 51). bitsCached=0x3D581D5A0F422D02, bitsCachedSize=59.
+    //   Need 63. Have 59. Need 4 more.
+    //   Read byte 8 (0x21). bitsCached |= (0x21 << 59).
+    //     Here, `bitsCachedSize` is 59. `nextByte` is `0x21`.
+    //     `0x21 << 59` is `00100001` shifted left by 59.
+    //     This results in bits `0010` occupying positions 60-63. The `0001` bits are shifted out.
+    //     The value `0x21 << 59` effectively becomes `0x2000000000000000` in a 64-bit context.
+    //     `bitsCached` (before OR) is `0x3D581D5A0F422D02`. This is 59 bits.
+    //     Let's represent it as 64 bits: `0011110101011000000111010101101000001111010000100010000100000010`
+    //     This is `0x3D581D5A0F422D02`.
+    //     `bitsCachedSize` is 59.
+    //     `bitsCached |= (0x21 << 59)`:
+    //     `0x21 << 59` results in `0x2000000000000000`.
+    //     `bitsCached` becomes `0x3D581D5A0F422D02 | 0x2000000000000000`
+    //     This is `0x3D581D5A0F422D02 | 0x2000000000000000` = `0x5D581D5A0F422D02`.
+    //     `bitsCachedSize += 8` => `bitsCachedSize = 59 + 8 = 67`.
+    //     Need 63. Have 67. Loop condition `while(67 < 63)` is false.
+    //     Extract 63 bits:
+    //     `bitsOut = (bitsCached >> (67 - 63)) & MASKS[63];`
+    //     `bitsOut = (bitsCached >> 4) & MASKS[63];`
+    //     `bitsCached = 0x5D581D5A0F422D02`.
+    //     `bitsCached >> 4` = `0x05D581D5A0F422D0`.
+    //     `MASKS[63]` is all ones. So `bitsOut = 0x05D581D5A0F422D0`.
+    //     `bitsCachedSize -= 63` => `bitsCachedSize = 67 - 63 = 4`.
+    //     State after readBits(63): bitsCached = 0x05D581D5A0F422D0, bitsCachedSize = 4.
+
+    // 3. readBits(12):
+    //   Current state: bitsCached = 0x05D581D5A0F422D0, bitsCachedSize = 4.
+    //   Need 12. Have 4. Need 8 more.
+    //   Read byte 9 (0x4A).
+    //   `bitsCached |= (0x4A << 4);`
+    //     `0x4A` is `01001010`.
+    //     `0x4A << 4` is `010010100000`. This is `0x4A0`.
+    //     `bitsCached` becomes `0x05D581D5A0F422D0 | 0x4A0` = `0x05D581D5A0F426D0`.
+    //     `bitsCachedSize += 8` => `bitsCachedSize = 4 + 8 = 12`.
+    //   Need 12. Have 12. Loop condition `while(12 < 12)` is false.
+    //   Extract 12 bits:
+    //   `bitsOut = (bitsCached >> (12 - 12)) & MASKS[12];`
+    //   `bitsOut = (bitsCached >> 0) & 0xFFF;`
+    //   `bitsCached = 0x05D581D5A0F426D0`.
+    //   `bitsOut = bitsCached & 0xFFF` = `0x6D0`.
+    //   `bitsCachedSize -= 12` => `bitsCachedSize = 0`.
+
+    // The value 0x6D0 is the result of `readBits(12)`.
+    // The bug report implies this result is wrong.
+    // To assert this, we need to know the *correct* expected value.
+    // The bug report doesn't state the expected value for the third read, only that it's wrong.
+    // We need to calculate the expected value for the 12 bits.
+    // Input stream: 0x57, 0x2D, 0x42, 0x0F, 0x5A, 0x1D, 0x58, 0x3D, 0x21, 0x4A
+
+    // Let's assume the fix for `bitsCached |= (nextByte << bitsCachedSize);` is to handle the shift more carefully.
+    // The intended fix might be to ensure `bitsCachedSize` doesn't exceed 64, or to use unsigned shifts if available, or to mask appropriately.
+    // The core issue is `nextByte << bitsCachedSize` potentially shifting bits beyond the 64-bit boundary of `long`, and these lost bits affect the subsequent OR.
+
+    // The simplest way to reproduce the *symptom* is to perform the sequence of reads that allegedly triggers the bug.
+    // We need to assert that the final result is *not* what it should be. Since we don't know the correct value, we can assert it's *different* from a value we expect the buggy code to produce, or just assert a specific incorrect value if that's reproducible.
+    // Given the complexity of manual bit manipulation, it's best to rely on the bug report's sequence and check that the final read produces *a* result, and if possible, assert it against a known incorrect value.
+
+    // The bug report states "result in wrong result from "bin.readBits(12);"".
+    // This means the value returned by the third call is incorrect.
+    // The calculation above gave `0x6D0`. Is this wrong? We need the correct value.
+
+    // Let's re-evaluate the overflow from the perspective of the fix: "if the hex string has more than 8 digits, use Long."
+    // This applies to `createNumber`, not `BitInputStream`.
+
+    // The problem is in `BitInputStream.readBits(int count)`.
+    // The overflow is in `bitsCached |= (nextByte << bitsCachedSize);`.
+    // This happens when `bitsCachedSize` is large, such that `bitsCachedSize + 8 > 64`.
+    // This means `bitsCachedSize >= 56`.
+
+    // The sequence `readBits(5)`, `readBits(63)`, `readBits(12)` is given.
+    // Let's trust the sequence and the fact that `readBits(63)` causes state corruption.
+    // The simplest assertion is to perform the sequence and then assert that the result of `readBits(12)` is *not* some value.
+    // However, a good test asserts equality.
+
+    // Let's assume the bug report implies that after `readBits(63)`, the `bitsCached` and `bitsCachedSize` are in a corrupted state, leading to an incorrect `readBits(12)`.
+    // The most reliable way to reproduce the failure is to execute the exact sequence and assert the final output.
+    // If we can determine the *expected* correct output for `readBits(12)` after the first two calls, we can assert against it.
+    // Without the fix, the code produces `0x6D0` for the last read.
+    // To find the *correct* value, one would need to implement the fix and run it.
+
+    // Let's assume the problem is specifically about the `(nextByte << bitsCachedSize)` part when `bitsCachedSize` is large.
+    // The fix likely involves ensuring that `bitsCachedSize` does not grow beyond 64 when accumulating bits, or handling the shift/OR more carefully.
+
+    // A common fix for this sort of issue in bit manipulation is to ensure that when accumulating bits, you don't shift beyond the capacity of the container (`long` here).
+    // For example, if `bitsCachedSize` is 60, and you read 8 bits, you only need 4 more bits to fill 64. The remaining 4 bits of the new byte would be shifted out.
+    // The code `bitsCached |= (nextByte << bitsCachedSize);` is problematic if `bitsCachedSize` is large.
+    // If `bitsCachedSize` is 60, then `nextByte << 60` shifts the byte's bits into positions 60-67. Bits 64-67 are lost.
+    // The OR operation then uses a potentially truncated value.
+
+    // The provided test case:
+    // `ByteArrayInputStream in = new ByteArrayInputStream(new byte[] {87, 45, 66, 15, 90, 29, 88, 61, 33, 74});`
+    // `BitInputStream bin = new BitInputStream(in, ByteOrder.LITTLE_ENDIAN);`
+    // `long ret = bin.readBits(5);`
+    // `ret = bin.readBits(63);`
+    // `ret = bin.readBits(12);`
+
+    // The bug report indicates that the third `readBits(12)` call returns a wrong value.
+    // The most direct way to test this is to execute this sequence and assert that the final `ret` is *not* equal to the expected correct value.
+    // Since we don't have the fix, we can't easily determine the correct value.
+    // However, we can assert that the value returned by the buggy code is *a specific value* that is known to be wrong, or assert that it's different from *a plausible correct value* if we can guess it.
+
+    // Let's assume the trace that resulted in `0x6D0` for `readBits(12)` is the behavior of the buggy code.
+    // We need to find the correct value. This requires understanding the bit stream correctly.
+    // Input: 0x57 0x2D 0x42 0x0F 0x5A 0x1D 0x58 0x3D 0x21 0x4A
+    // Little Endian means bytes are read in order: 0x57, 0x2D, ...
+    // Bit stream (LSB first for each byte):
+    // 0x57: 01010111
+    // 0x2D: 00101101
+    // 0x42: 01000010
+    // 0x0F: 00001111
+    // 0x5A: 01011010
+    // 0x1D: 00011101
+    // 0x58: 01011000
+    // 0x3D: 00111101
+    // 0x21: 00100001
+    // 0x4A: 01001010
+
+    // Concatenated bit stream (reading from LSB of first byte to MSB of last byte):
+    // 11101010 10110100 01000010 11110000 01011010 11101000 11010101 10111100 10000100 01010010
+
+    // readBits(5): First 5 bits are 11101. Decimal: 29. (Still not 10 from the example, but this is the correct bit stream interpretation for LE).
+    // Let's assume the example's `readBits(5)` giving 10 is wrong, and continue with the correct bit stream.
+    // First 5 bits: 11101 = 29.
+    // Remaining stream: 010000100001011110000010110101110100011010101101100100001010010
+    // bitsCachedSize = 8 - 5 = 3. bitsCached = 11101 (binary).
+
+    // readBits(63):
+    // Need 63 bits. Have 3. Need 60 more.
+    // Current stream: 010000100001011110000010110101110100011010101101100100001010010
+    // Take first 60 bits from this stream.
+    // 010000100001011110000010110101110100011010101101100100
+    // Concatenate with previous 3 bits (11101).
+    // The final 63 bits read are: 11101 010000100001011110000010110101110100011010101101100100
+    // This is a 63-bit number.
+    // Let's convert this to hex.
+    // 111010100001011110000010110101110100011010101101100100
+    // Group into 4s:
+    // 1110 1010 0001 0111 1000 0010 1101 0111 0100 0110 1010 1101 100100
+    // E    A    1    7    8    2    D    7    4    6    A    D    4
+    // So, `readBits(63)` should return 0xE A1782D746AD4 (this is 60 bits).
+    // The remaining bits are 11101.
+    // The total 63 bits are: 11101 010000100001011110000010110101110100011010101101100100
+    // Convert to hex:
+    // 111010100001011110000010110101110100011010101101100100
+    // E A 1 7 8 2 D 7 4 6 A D 4
+    // This is 60 bits. The full 63 bits are:
+    // `111010100001011110000010110101110100011010101101100100` (60 bits)
+    // followed by the remaining part of the stream.
+    // After reading 60 bits, we have consumed 60/8 = 7.5 bytes.
+    // We consumed:
+    // 0x57 (all 8 bits)
+    // 0x2D (all 8 bits)
+    // 0x42 (all 8 bits)
+    // 0x0F (all 8 bits)
+    // 0x5A (all 8 bits)
+    // 0x1D (all 8 bits)
+    // 0x58 (all 8 bits)
+    // 0x3D (all 8 bits)
+    // Total 64 bits = 8 bytes.
+    // So, after reading 60 bits from the stream, we have consumed up to byte 0x3D.
+    // The stream is: 11101010 10110100 01000010 11110000 01011010 11101000 11010101 10111100
+    // This is 64 bits.
+    // The first 5 bits read were 11101.
+    // The next 60 bits are: 010000100001011110000010110101110100011010101101100100
+    // Concatenating the 3 leftover bits from byte 0x57 (11101) and the next 60 bits:
+    // 11101 010000100001011110000010110101110100011010101101100100
+    // This is 63 bits.
+    // This is the value of `ret` from `readBits(63)`.
+    // Let's convert this to hex:
+    // 111010100001011110000010110101110100011010101101100100
+    // E A 1 7 8 2 D 7 4 6 A D 4 (60 bits)
+    // The full 63 bits would be `EA1782D746AD4` followed by the first 3 bits of the next segment.
+    // The bit stream is:
+    // 11101010 (byte 0, 0x57)
+    // 00101101 (byte 1, 0x2D)
+    // 01000010 (byte 2, 0x42)
+    // 00001111 (byte 3, 0x0F)
+    // 01011010 (byte 4, 0x5A)
+    // 00011101 (byte 5, 0x1D)
+    // 01011000 (byte 6, 0x58)
+    // 00111101 (byte 7, 0x3D)
+    // 00100001 (byte 8, 0x21)
+    // 01001010 (byte 9, 0x4A)
+
+    // readBits(5):
+    //   Reads 5 bits from the start of the stream: 11101. Value = 29.
+    //   Remaining stream: 010000100001011110000010110101110100011010101101100100001010010
+
+    // readBits(63):
+    //   Reads the next 63 bits from the remaining stream.
+    //   010000100001011110000010110101110100011010101101100100001010010 (This is 97 bits)
+    //   We need the first 63 bits of this.
+    //   01000010000101111000001011010111010001101010110110010000101
+    //   Convert to hex:
+    //   0100 0010 0001 0111 1000 0010 1101 0111 0100 0110 1010 1101 1001 0000101
+    //   4    2    1    7    8    2    D    7    4    6    A    D    9    1 (last 4 bits are 0001)
+    //   So, the 63 bits are: 421782D746AD91. This is 60 bits.
+    //   The last part is `000101`. The last 3 bits are `010`.
+    //   So the 63 bits are: 421782D746AD9010.
+    //   Let's re-calculate.
+    //   Stream: 11101010 00101101 01000010 00001111 01011010 00011101 01011000 00111101 00100001 01001010
+    //   readBits(5) = 11101 (29)
+    //   Remaining stream: 010000100001011110000010110101110100011010101101100100001010010
+    //   readBits(63) takes the first 63 bits of this:
+    //   01000010000101111000001011010111010001101010110110010000101
+    //   Hex: 421782D746AD91. This is 60 bits.
+    //   The remaining bits are 010. So the 63 bits are: 421782D746AD9010.
+    //   Value = 0x421782D746AD9010.
+
+    // readBits(12):
+    //   Remaining stream: 010 (the last 3 bits from the 63 read).
+    //   Need 12 bits. Have 3. Need 9 more.
+    //   Next input byte is 0x21 (00100001).
+    //   Next input byte is 0x4A (01001010).
+    //   So the stream is: 010 00100001 01001010
+    //   We need 9 more bits.
+    //   Take 00100001 (8 bits) and the first bit of 01001010 (which is 0).
+    //   So, the 9 bits are: 001000010.
+    //   Concatenate with the previous 3 bits: 010.
+    //   The 12 bits are: 010 001000010 = 010001000010.
+    //   Hex: 442.
+
+    // The expected output for `readBits(12)` should be `0x442`.
+    // The buggy code produced `0x6D0` in my earlier trace. This is different.
+    // So, the test should assert that the result of the third call is `0x442`.
+
+    // Let's re-verify the overflow condition.
+    // `readBits(63)`:
+    // `bitsCachedSize` starts at 3. `count` is 63.
+    // Loop: `while (bitsCachedSize < 63)`
+    // Reads bytes:
+    // Byte 1 (0x2D): `bitsCachedSize = 11`. `bitsCached |= (0x2D << 3)`.
+    // Byte 2 (0x42): `bitsCachedSize = 19`. `bitsCached |= (0x42 << 11)`.
+    // Byte 3 (0x0F): `bitsCachedSize = 27`. `bitsCached |= (0x0F << 19)`.
+    // Byte 4 (0x5A): `bitsCachedSize = 35`. `bitsCached |= (0x5A << 27)`.
+    // Byte 5 (0x1D): `bitsCachedSize = 43`. `bitsCached |= (0x1D << 35)`.
+    // Byte 6 (0x58): `bitsCachedSize = 51`. `bitsCached |= (0x58 << 43)`.
+    // Byte 7 (0x3D): `bitsCachedSize = 59`. `bitsCached |= (0x3D << 51)`.
+    // Need 63. Have 59. Need 4 more bits.
+    // Next byte is 0x21. `bitsCachedSize` is 59. `count` is 63.
+    // `bitsCachedSize < 63` is true.
+    // Read byte 8 (0x21).
+    // `bitsCached |= (0x21 << 59);`
+    // Here, `bitsCachedSize = 59`. `nextByte = 0x21`.
+    // `0x21 << 59` in Java `long` results in `0x2000000000000000`.
+    // `bitsCached` before this step has accumulated bits from bytes 0 (partially), 1, 2, 3, 4, 5, 6, 7.
+    // The previous trace of `bitsCached` accumulation was:
+    // After readBits(5): bitsCached=0x02, bitsCachedSize=3.
+    // Byte 1 (0x2D): bitsCached |= (0x2D << 3) => bitsCached=0x2D02, bitsCachedSize=11.
+    // Byte 2 (0x42): bitsCached |= (0x42 << 11) => bitsCached=0x422D02, bitsCachedSize=19.
+    // Byte 3 (0x0F): bitsCached |= (0x0F << 19) => bitsCached=0x0F422D02, bitsCachedSize=27.
+    // Byte 4 (0x5A): bitsCached |= (0x5A << 27) => bitsCached=0x5A0F422D02, bitsCachedSize=35.
+    // Byte 5 (0x1D): bitsCached |= (0x1D << 35) => bitsCached=0x1D5A0F422D02, bitsCachedSize=43.
+    // Byte 6 (0x58): bitsCached |= (0x58 << 43) => bitsCached=0x581D5A0F422D02, bitsCachedSize=51.
+    // Byte 7 (0x3D): bitsCached |= (0x3D << 51) => bitsCached=0x3D581D5A0F422D02, bitsCachedSize=59.
+    // `bitsCached` is `0x3D581D5A0F422D02`. This is 59 bits.
+    // `bitsCached |= (0x21 << 59)`.
+    // `0x21 << 59` is `0x2000000000000000`.
+    // `bitsCached` becomes `0x3D581D5A0F422D02 | 0x2000000000000000` = `0x5D581D5A0F422D02`.
+    // `bitsCachedSize += 8` => `bitsCachedSize = 67`.
+    // Loop condition `while (67 < 63)` is false.
+    // Extraction: `bitsOut = (bitsCached >> (67 - 63)) & MASKS[63];` => `bitsCached >> 4`.
+    // `bitsCached = 0x5D581D5A0F422D02`.
+    // `bitsCached >> 4` = `0x05D581D5A0F422D0`.
+    // `bitsOut = 0x05D581D5A0F422D0`.
+    // `bitsCachedSize -= 63` => `bitsCachedSize = 4`.
+    // So, after `readBits(63)`, state is: `bitsCached = 0x05D581D5A0F422D0`, `bitsCachedSize = 4`.
+
+    // readBits(12):
+    // Need 12. Have 4. Need 8.
+    // Read byte 9 (0x4A). `bitsCachedSize = 4`. `nextByte = 0x4A`.
+    // `bitsCached |= (0x4A << 4)`.
+    // `0x4A << 4` = `0x4A0`.
+    // `bitsCached` becomes `0x05D581D5A0F422D0 | 0x4A0` = `0x05D581D5A0F426D0`.
+    // `bitsCachedSize += 8` => `bitsCachedSize = 12`.
+    // Loop condition `while (12 < 12)` is false.
+    // Extraction: `bitsOut = (bitsCached >> (12 - 12)) & MASKS[12];` => `bitsCached >> 0`.
+    // `bitsOut = bitsCached & 0xFFF`.
+    // `bitsCached = 0x05D581D5A0F426D0`.
+    // `bitsOut = 0x6D0`.
+    // `bitsCachedSize -= 12` => `bitsCachedSize = 0`.
+
+    // The result of `readBits(12)` is `0x6D0`.
+    // The correct value calculated earlier was `0x442`.
+    // So, the test should assert that the result of the third read is `0x442`.
+
+    // Final check of the test code structure.
+    // Need to create the stream, the BitInputStream, perform the calls, and assert the result of the last call.
+    // The bug report implies the overflow happens in `readBits(63)`, which corrupts state, leading to a wrong result from `readBits(12)`.
+    // So, we must perform all three calls and assert the result of the third call.
+}

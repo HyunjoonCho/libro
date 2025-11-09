@@ -1,0 +1,109 @@
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+public class JacksonIdentityInfoTest {
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
+    static class Node {
+        private String id;
+        private List<Node> children = new ArrayList<>();
+
+        @JsonCreator
+        public Node(String id) {
+            this.id = id;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public List<Node> getChildren() {
+            return children;
+        }
+
+        public void addChild(Node child) {
+            this.children.add(child);
+        }
+    }
+
+    @Test
+    public void testJsonIdentityInfoDeserializationWithCreator() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        // Create a circular structure
+        Node node1 = new Node("node1");
+        Node node2 = new Node("node2");
+        node1.addChild(node2);
+        node2.addChild(node1); // Cycle
+
+        // Serialize
+        String json = mapper.writeValueAsString(node1);
+
+        // Deserialize
+        Node deserializedNode1 = mapper.readValue(json, Node.class);
+
+        // Assertions
+        assertNotNull(deserializedNode1);
+        assertEquals("node1", deserializedNode1.getId());
+        assertNotNull(deserializedNode1.getChildren());
+        assertEquals(1, deserializedNode1.getChildren().size());
+
+        Node deserializedNode2 = deserializedNode1.getChildren().get(0);
+        assertNotNull(deserializedNode2);
+        assertEquals("node2", deserializedNode2.getId());
+        assertNotNull(deserializedNode2.getChildren());
+        assertEquals(1, deserializedNode2.getChildren().size());
+
+        // Check the cycle
+        Node backToNode1 = deserializedNode2.getChildren().get(0);
+        assertNotNull(backToNode1);
+        assertEquals("node1", backToNode1.getId());
+        assertEquals(deserializedNode1, backToNode1); // Should be the same instance
+    }
+
+    // This test case specifically targets the issue where a non-collection field
+    // causes deserialization failure with @JsonIdentityInfo and @JsonCreator.
+    // The original bug report implies that when the referenced object is a field
+    // of another object (not in a collection), it fails.
+    @Test
+    public void testJsonIdentityInfoDeserializationWithCreatorAndDirectField() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        // Create a structure where one node directly references another
+        Node parent = new Node("parent");
+        Node child = new Node("child");
+        parent.addChild(child); // This is the problematic part in the original bug description
+
+        // Serialize
+        String json = mapper.writeValueAsString(parent);
+
+        // Deserialize
+        Node deserializedParent = mapper.readValue(json, Node.class);
+
+        // Assertions
+        assertNotNull(deserializedParent);
+        assertEquals("parent", deserializedParent.getId());
+        assertNotNull(deserializedParent.getChildren());
+        assertEquals(1, deserializedParent.getChildren().size());
+
+        Node deserializedChild = deserializedParent.getChildren().get(0);
+        assertNotNull(deserializedChild);
+        assertEquals("child", deserializedChild.getId());
+
+        // The core of the bug was that the deserializedChild might not be correctly
+        // resolved or might be a different instance than expected due to the
+        // interaction between @JsonIdentityInfo and @JsonCreator when the referenced
+        // object is a direct field.
+        // If this test passes, it means the deserialization correctly handles
+        // the referenced object even when it's a direct field.
+    }
+}

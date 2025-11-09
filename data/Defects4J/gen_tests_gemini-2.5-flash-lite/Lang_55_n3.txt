@@ -1,0 +1,69 @@
+public void testStopWatchSuspendResume() throws InterruptedException {
+    StopWatch sw = new StopWatch();
+    sw.start();
+    Thread.sleep(1000);
+    sw.suspend();
+    long time1 = sw.getTime();
+    Thread.sleep(2000);
+    long time1Again = sw.getTime();
+    assertTrue(time1Again >= time1); // Should be the same if suspend works as expected
+    sw.resume();
+    Thread.sleep(3000);
+    sw.suspend();
+    long time2 = sw.getTime();
+    assertTrue(time2 >= time1Again); // Time 2 should be greater than Time 1
+    Thread.sleep(4000);
+    long time2Again = sw.getTime();
+    assertTrue(time2Again >= time2); // Should be the same if suspend works as expected
+    Thread.sleep(5000);
+    sw.stop();
+    long time3 = sw.getTime();
+    // The bug is that time3 is larger than expected, as if the last suspend was ignored
+    // The expected behavior is that time3 should be equal to time2 (or very close due to precision)
+    // Since we can't assert equality due to thread scheduling, we assert that it's NOT significantly larger
+    // than what it should be based on the last recorded time before the final stop.
+    // A robust test would involve mocking or more precise timing, but for reproduction,
+    // we can check if it's not drastically larger than the time recorded right before the final sleep.
+    // The crucial part is that the last sleep (5000ms) should NOT be added to time2.
+    // So, time3 should be roughly equal to time2.
+    // We'll check if time3 is not excessively larger than time2.
+    // The difference should be at most the last sleep period (5000ms) plus some small tolerance.
+    // However, the bug report implies it's adding another whole interval.
+    // Let's assert that the time measured after stop is not significantly larger than time2.
+    // The actual bug means time3 will be time2 + 5000ms, which is wrong.
+    // So, we expect time3 to be roughly equal to time2.
+    // We will assert that the difference between time3 and time2 is NOT as large as the last sleep.
+    // This is a bit indirect. A better assertion would be to check the lap times.
+    // Let's re-evaluate based on the description: "Time 2 (should be, but is Time 3 => NOT ok)"
+    // This means the time measured by getTime() after stop() *should* reflect the duration up to the last suspend(),
+    // but instead, it reflects the duration up to the stop().
+    // We can infer the expected time by summing the intervals.
+    // Interval 1: ~1000ms
+    // Interval 2: ~3000ms (after resume)
+    // The time after stop should reflect Interval 1 + Interval 2.
+    // The bug causes it to be Interval 1 + Interval 2 + 5000ms (the last sleep).
+    // So, we expect time3 to be significantly larger than time2.
+    // To reproduce the failure, we need to assert something that would fail if the bug is fixed.
+    // If the bug is fixed, time3 should be approximately equal to time2.
+    // If the bug is present, time3 will be significantly larger than time2.
+    // Let's check the difference between time3 and time2.
+    long diff = time3 - time2;
+    // The bug report implies the last 5000ms sleep is added.
+    // So, if the bug exists, diff will be around 5000ms.
+    // If the bug is fixed, diff will be close to 0.
+    // Thus, to reproduce the failure, we assert that the difference is NOT close to 0.
+    // We can assert that the difference is greater than some small threshold, but less than a large threshold.
+    // A simpler approach to reproduce is to assert that `time3` is greater than `time2` by a significant margin,
+    // indicating that the last sleep was indeed counted.
+    // The most direct way to reproduce the failure is to check that `time3` is not `time2`.
+    // However, the prompt asks to reproduce the *failure behavior*.
+    // The failure is that `sw.getTime()` after `stop()` gives "Time 3", not "Time 2".
+    // "Time 2" is the value obtained from `sw.getTime()` after the second `suspend()`.
+    // So, the failure is `time3 != time2`.
+    // Let's assert that `time3` is greater than `time2` by a noticeable amount.
+    // The bug adds the last 5000ms sleep. So, time3 should be at least 5000ms more than time2 if the bug is present.
+    // If fixed, time3 should be very close to time2.
+    // The test should fail if the bug is fixed.
+    // So we assert that time3 is significantly larger than time2.
+    assertTrue("Time after stop should be larger than time before stop due to the last sleep if bug exists", time3 > time2 + 4000); // Expecting the 5000ms to be added
+}

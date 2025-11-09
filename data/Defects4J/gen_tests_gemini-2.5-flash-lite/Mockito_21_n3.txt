@@ -1,0 +1,256 @@
+import org.junit.Test;
+import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+public class MockitoAbstractClassTest {
+
+    interface UserAccount {
+        List<String> getEmails();
+        void addEmail(String email);
+    }
+
+    interface AccountService {
+        void getAccount(String id, AsyncCallback<UserAccount> callback);
+    }
+
+    interface AsyncCallback<T> {
+        void onSuccess(T result);
+        void onFailure(Throwable t);
+    }
+
+    // This is the problematic behavior that the bug report describes.
+    // Mockito's default behavior doesn't easily allow spying on abstract classes
+    // without verbose Answer implementations or workarounds.
+    @Test
+    public void testAbstractClassSpying() {
+        // We'll simulate the desired behavior by creating a concrete implementation
+        // that uses Mockito's mocking capabilities.
+        // The bug report suggests that Mockito should natively support this.
+
+        // This test demonstrates the *lack* of easy support for abstract classes
+        // as described in the bug report.
+
+        abstract class AbstractAccountService implements AccountService {
+            @Override
+            public void getAccount(String id, AsyncCallback<UserAccount> callback) {
+                // In a real scenario, this would have some logic, but for this test,
+                // we'll focus on how the callback is handled.
+                // The bug report implies that we should be able to mock this abstract method.
+                // However, directly mocking an abstract method in this way is not straightforward
+                // without custom Answers or specific Mockito features for abstract classes.
+                callback.onSuccess(mockUserAccount); // This line would ideally be handled by the mock
+            }
+            // Abstract method that would be implemented by the mock
+            public abstract UserAccount createAccount(String id);
+        }
+
+        // Create a mock of the abstract class.
+        // The core issue is that Mockito doesn't inherently know how to instantiate
+        // and manage the state of an abstract class like this without extra configuration.
+        AbstractAccountService mockService = Mockito.mock(AbstractAccountService.class, new Answer<Object>() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                // This custom Answer is a workaround for the lack of native support.
+                // The bug report suggests this should be handled more directly.
+                if ("getAccount".equals(invocation.getMethod().getName())) {
+                    String id = (String) invocation.getArguments()[0];
+                    AsyncCallback<UserAccount> callback = (AsyncCallback<UserAccount>) invocation.getArguments()[1];
+                    // Simulate calling the abstract method and then the callback
+                    UserAccount account = mockUserAccount; // Using a pre-defined mock for simplicity
+                    callback.onSuccess(account);
+                } else if ("createAccount".equals(invocation.getMethod().getName())) {
+                    // This part is tricky and shows the verbosity.
+                    // We'd ideally just want to stub createAccount directly.
+                    return mockUserAccount;
+                }
+                return Mockito.CALL_REAL_METHOD.answer(invocation); // Fallback
+            }
+        });
+
+        // Mock a UserAccount to be returned
+        UserAccount mockUserAccount = Mockito.mock(UserAccount.class);
+        List<String> emails = new ArrayList<>();
+        when(mockUserAccount.getEmails()).thenReturn(emails);
+
+        // Stubbing the abstract method (this is where the bug report indicates improvement is needed)
+        // Without native support, we might have to rely on the Answer above or other complex setups.
+        // The proposed solution in the bug report would allow something like:
+        // when(mockService.createAccount(anyString())).thenReturn(mockUserAccount);
+        // But this direct stubbing on an abstract method is not the default behavior.
+
+        // Now, test the callback mechanism. This part works, but the setup for the abstract class is cumbersome.
+        final List<UserAccount> receivedAccounts = new ArrayList<>();
+        AsyncCallback<UserAccount> callback = new AsyncCallback<UserAccount>() {
+            @Override
+            public void onSuccess(UserAccount result) {
+                receivedAccounts.add(result);
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+                // not expected for this test
+            }
+        };
+
+        // Trigger the getAccount method. The custom Answer will handle the callback.
+        // In a future version with the proposed fix, this would directly call the stubbed createAccount.
+        // For now, we're calling the mocked getAccount which internally uses the Answer.
+        // We need to ensure the Answer is correctly set up to call the callback.
+        // The current Answer in the mock constructor is designed to do this.
+
+        // To make this test pass *without* the proposed feature, we need to ensure the Answer
+        // correctly invokes the callback.
+        // The current Answer calls callback.onSuccess(mockUserAccount) if getAccount is called.
+        // This relies on the mock's default behavior or the Answer itself.
+
+        // A more direct test of the "bug" would be trying to stub the abstract method directly.
+        // For example, if we tried:
+        // when(mockService.createAccount("someId")).thenReturn(mockUserAccount);
+        // This would likely fail without the proposed feature or a specific setup like the Answer.
+
+        // Let's refine the test to show the desired outcome if the feature existed.
+        // The bug is that we can't easily mock abstract methods.
+        // The test should reflect this difficulty.
+
+        // Let's try to mock the abstract method directly and see it fail or require workaround.
+        // If we remove the custom Answer and try to mock the abstract method:
+        AbstractAccountService serviceWithoutAnswer = Mockito.mock(AbstractAccountService.class);
+
+        // This line below is what the bug report aims to make work easily.
+        // If it fails or requires complex setup, the bug is reproduced.
+        // With current Mockito, this direct stubbing might not work as expected for abstract methods
+        // without specific configurations or the proposed feature.
+        // The typical workaround involves Answers or concrete subclasses.
+
+        // Let's mock the abstract method using a default answer that simulates the behavior.
+        // This is the verbose way the bug report wants to avoid.
+        AbstractAccountService serviceWithAnswer = Mockito.mock(AbstractAccountService.class, new Answer<Object>() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                if ("createAccount".equals(invocation.getMethod().getName())) {
+                    return mockUserAccount;
+                }
+                // For getAccount, we need to simulate the callback invocation.
+                if ("getAccount".equals(invocation.getMethod().getName())) {
+                    String id = (String) invocation.getArguments()[0];
+                    AsyncCallback<UserAccount> callback = (AsyncCallback<UserAccount>) invocation.getArguments()[1];
+                    // To make it call the callback, we need to invoke the underlying method logic
+                    // if we were calling real methods, or manually call the callback here.
+                    // The bug report implies that Mockito should handle this better.
+                    // For this test, we'll manually call the callback with the mocked account.
+                    callback.onSuccess(mockUserAccount);
+                    return null; // getAccount returns void
+                }
+                return Mockito.CALL_REAL_METHOD.answer(invocation);
+            }
+        });
+
+        // Now, test the stubbed abstract method.
+        UserAccount accountFromMock = serviceWithAnswer.createAccount("testId");
+        // This assertion should pass if the Answer is correctly configured.
+        assertEquals(mockUserAccount, accountFromMock);
+
+        // Test the callback scenario using the serviceWithAnswer.
+        // This part demonstrates the workaround needed.
+        final List<UserAccount> receivedAccountsFromCallback = new ArrayList<>();
+        AsyncCallback<UserAccount> callbackForService = new AsyncCallback<UserAccount>() {
+            @Override
+            public void onSuccess(UserAccount result) {
+                receivedAccountsFromCallback.add(result);
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+                // not expected
+            }
+        };
+
+        serviceWithAnswer.getAccount("testId", callbackForService);
+
+        // Assert that the callback was indeed called with the correct account.
+        // This confirms the workaround functions, but highlights the need for simpler syntax.
+        assertEquals(1, receivedAccountsFromCallback.size());
+        assertEquals(mockUserAccount, receivedAccountsFromCallback.get(0));
+
+        // The core of the bug is the verbosity and complexity of setting up mocks for abstract classes.
+        // The proposed solution in the bug report would allow cleaner stubbing of abstract methods
+        // and potentially simpler handling of method calls on abstract classes.
+        // This test is designed to show the current state that necessitates such a feature.
+    }
+
+    // Helper class to simulate the behavior described in Example 1 (Fake with trivial Logic)
+    // This test will show the manual `when().thenReturn()` approach which is tedious.
+    @Test
+    public void testTediousMockingForFake() {
+        interface UserAccount {
+            List<String> getEmails();
+            void addEmail(String email);
+        }
+
+        UserAccount mockAccount = Mockito.mock(UserAccount.class);
+        List<String> emails = new ArrayList<>();
+
+        // Tedious stubbing to keep getEmails and addEmail consistent
+        when(mockAccount.getEmails()).thenReturn(emails);
+
+        // Manually adding logic to the mock for consistency
+        doAnswer(invocation -> {
+            String email = invocation.getArgument(0);
+            emails.add(email);
+            return null;
+        }).when(mockAccount).addEmail(anyString());
+
+        // Test the consistency
+        mockAccount.addEmail("test@example.com");
+        mockAccount.addEmail("another@example.com");
+
+        List<String> retrievedEmails = mockAccount.getEmails();
+        assertEquals(2, retrievedEmails.size());
+        assertTrue(retrievedEmails.contains("test@example.com"));
+        assertTrue(retrievedEmails.contains("another@example.com"));
+
+        // The bug report suggests that with native support for abstract classes,
+        // one could define an abstract class with this logic and Mockito would handle it more cleanly.
+    }
+
+    // Helper class to simulate the behavior described in Example 3 (Uninteresting parameters)
+    // This test will show the verbosity of using isA() for uninteresting parameters.
+    @Test
+    public void testUninterestingParameters() {
+        class RpcContext {
+            private final String value;
+            RpcContext(String value) { this.value = value; }
+            @Override public String toString() { return "RpcContext(" + value + ")"; }
+        }
+        interface AccountRpcService {
+            String getAccount(RpcContext context, String id);
+        }
+
+        AccountRpcService mockService = Mockito.mock(AccountRpcService.class);
+
+        // The "uninteresting" parameter is RpcContext.
+        // Without specific support, we have to use isA() and eq().
+        when(mockService.getAccount(any(RpcContext.class), eq("id"))).thenReturn("accountData");
+
+        // This is the verbose way. The bug report suggests cleaner syntax.
+        // If the feature existed, it might allow something like:
+        // when(mockService.getAccount("id")).thenReturn("accountData");
+        // if the context parameter was implicitly handled or ignored.
+
+        // Verify the call (this part works, but the stubbing is verbose)
+        String result = mockService.getAccount(new RpcContext("someContextValue"), "id");
+        assertEquals("accountData", result);
+
+        // Verify that it was called with the correct stubbing.
+        verify(mockService).getAccount(any(RpcContext.class), eq("id"));
+    }
+}

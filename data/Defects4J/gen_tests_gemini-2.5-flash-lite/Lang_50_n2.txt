@@ -1,0 +1,70 @@
+public void testFastDateFormatLocale() throws ParseException {
+    Locale defaultLocale = Locale.getDefault();
+    try {
+        Locale.setDefault(Locale.GERMAN);
+        FastDateFormat fdf = FastDateFormat.getDateInstance(FastDateFormat.LONG);
+        assertEquals(Locale.GERMAN, fdf.getLocale());
+        String germanDate = fdf.format(new Date(0));
+        
+        Locale.setDefault(Locale.FRENCH);
+        fdf = FastDateFormat.getDateInstance(FastDateFormat.LONG);
+        assertEquals(Locale.FRENCH, fdf.getLocale());
+        String frenchDate = fdf.format(new Date(0));
+        
+        // Ensure the dates are actually different for different locales
+        assertNotEquals(germanDate, frenchDate);
+        
+        // Test the problematic scenario: create with default, then change default
+        Locale.setDefault(Locale.ITALIAN);
+        FastDateFormat fdfItalian = FastDateFormat.getDateInstance(FastDateFormat.LONG);
+        assertEquals(Locale.ITALIAN, fdfItalian.getLocale());
+        
+        // Now, re-create using the old default (German) which should have been cached
+        // but the cache key does not contain locale.
+        // This implies it will return the Italian one if it's already cached.
+        // The bug implies it should return the German one if requested explicitly
+        // or if the default locale was German when it was first created.
+        
+        // Let's test the described behavior:
+        // 1. Create with default Locale.GERMAN
+        Locale.setDefault(Locale.GERMAN);
+        FastDateFormat germanInstance = FastDateFormat.getDateInstance(FastDateFormat.LONG);
+        
+        // 2. Change default Locale to Locale.FRENCH
+        Locale.setDefault(Locale.FRENCH);
+        
+        // 3. Get instance again. If it uses default locale from cache key, it might return the French one.
+        // The bug implies it should still be the German one if the cache key was built correctly.
+        // Or if the method is not intended to use default locale at all.
+        
+        // Let's assume the intent is that getDateInstance() should use the *current* default locale
+        // unless a specific locale is provided.
+        
+        // Test case based on description:
+        // "If the locale is null, then it is not made part of the key, but the stored object is created using the current default locale."
+        // "If the Locale is changed subsequently, then the wrong locale is applied."
+        
+        // Re-creating the scenario:
+        Locale.setDefault(Locale.CANADA_FRENCH); // Set an initial default
+        FastDateFormat cachedFdf = FastDateFormat.getDateInstance(FastDateFormat.LONG);
+        assertEquals(Locale.CANADA_FRENCH, cachedFdf.getLocale()); // Should be the initial default
+        
+        Locale.setDefault(Locale.GERMAN); // Change the default locale
+        FastDateFormat newFdf = FastDateFormat.getDateInstance(FastDateFormat.LONG);
+        // According to the bug, newFdf should *still* be using Locale.CANADA_FRENCH
+        // because the cache key didn't include the locale and it was created with it.
+        // The fix would be to ensure the locale is part of the key or that it always uses current.
+        
+        // The test should assert that the locale used by newFdf is NOT Locale.GERMAN
+        // if the bug is present.
+        assertNotEquals(Locale.GERMAN, newFdf.getLocale());
+        
+        // If the bug is fixed, newFdf.getLocale() should be Locale.GERMAN
+        // So, to reproduce the *failure*, we need to show that it *doesn't* pick up the new locale.
+        // Let's assert it's the *old* locale.
+        assertEquals(Locale.CANADA_FRENCH, newFdf.getLocale());
+        
+    } finally {
+        Locale.setDefault(defaultLocale); // Restore original default locale
+    }
+}

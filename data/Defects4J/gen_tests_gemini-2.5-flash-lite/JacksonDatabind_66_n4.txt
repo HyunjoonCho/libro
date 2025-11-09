@@ -1,0 +1,20 @@
+public void testCustomEnumKeyDeserializerWithMissingTypeInfo() throws IOException {
+    String json = "{\"someMap\": {\"FOO\": \"bar\"}}";
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule simpleModule = new SimpleModule();
+    simpleModule.addDeserializer(SuperTypeEnum.class, new JsonDeserializer<SuperTypeEnum>() {
+        @Override
+        public SuperTypeEnum deserialize(JsonParser jsonParser, DeserializationContext deserializationContext)
+                throws IOException {
+            // This deserializer will be called with the wrong parser state
+            // if the type info field is missing and polymorphic types are involved.
+            // The bug is that the MapDeserializer doesn't properly handle this,
+            // leading to a failure here.
+            return SuperTypeEnum.valueOf(jsonParser.getText());
+        }
+    });
+    mapper.registerModule(simpleModule);
+
+    SuperType superType = mapper.readValue(json, SuperType.class);
+    assertEquals("Deserialized someMap.FOO should equal bar", "bar", superType.getSomeMap().get(SuperTypeEnum.FOO));
+}

@@ -1,0 +1,207 @@
+public void testBZip2CompressorInputStreamReadToFullBuffer() throws Exception {
+    byte[] rawData = new byte[1048576];
+    for (int i = 0; i < rawData.length; ++i) {
+        rawData[i] = (byte) Math.floor(Math.random() * 256);
+    }
+
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    BZip2CompressorOutputStream bzipOut = new BZip2CompressorOutputStream(baos);
+    bzipOut.write(rawData);
+    bzipOut.finish(); // Use finish instead of close to allow further reads
+    baos.flush();
+    baos.close();
+
+    ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+    BZip2CompressorInputStream bzipIn = new BZip2CompressorInputStream(bais);
+    byte[] buffer = new byte[1024];
+    
+    // Read some data to ensure the stream is not empty
+    int bytesRead = bzipIn.read(buffer, 0, buffer.length);
+    assertTrue("Should have read some data", bytesRead > 0);
+
+    // Attempt to read with offset equal to length, which should return 0 if buffer is full
+    // and not -1 indicating end of stream.
+    // The original bug report's test case had an issue where it expected 0 for read(buffer, 1024, 0)
+    // which is invalid arguments. The correct way to test the described scenario is to attempt
+    // to read into a buffer where the offset + length would exceed the buffer capacity,
+    // or more specifically, to test the case where the stream has just enough data to fill a buffer
+    // and then the next read attempt with invalid arguments that should yield 0.
+    // However, the core of the bug is that read(buffer, offset, length) returns -1 when
+    // offset == length, which is incorrect.
+    // To reproduce the *reported* behavior as closely as possible, we simulate the condition
+    // where the stream might be perceived as finished due to an incorrect read return.
+    // The provided test in the bug report is flawed in its argument for the failing read.
+    // A more accurate reproduction of the *intent* of the bug report is to check the return
+    // value of a read operation that *would* fill the buffer, followed by an operation
+    // that *should* return 0, not -1.
+
+    // Let's re-create the scenario as described by the user's test case,
+    // focusing on the problematic call signature.
+    // The user's test has `bzipIn.read(buffer, 1024, 0)` which is invalid.
+    // The description implies `read(buffer, offset, length)` where `offset == length` is the issue.
+    // A more direct interpretation of the bug:
+    // If the stream has data, and we call read with an offset equal to the buffer length,
+    // it should not return -1.
+
+    // Let's try to read the *exact* amount of data that would fill the buffer,
+    // then attempt a read that *should* return 0.
+    
+    // We need to ensure there's enough data in the stream to potentially fill the buffer.
+    // The original data is large, so this should be fine.
+
+    // First read, should be 1024 if enough data exists
+    int firstRead = bzipIn.read(buffer, 0, buffer.length);
+    // If stream is smaller than buffer, this might be less than 1024.
+    // The bug is about the return value when offset == length, not necessarily
+    // when the buffer is full.
+
+    // The bug report states: "BZip2CompressorInputStream.read(buffer, offset, length) returns -1 when given an offset equal to the length of the buffer."
+    // This implies a call like `bzipIn.read(buffer, buffer.length, some_length)` or
+    // `bzipIn.read(buffer, some_offset, some_length)` where `some_offset == some_length`.
+    // The user's test case has `bzipIn.read(buffer, 1024, 0)`. This is likely a typo in the original bug report's test.
+    // A more plausible interpretation of the bug description is about the `offset` and `length` parameters themselves.
+    // Let's assume the bug means when `offset + length == buffer.length` and the stream is *not* at end.
+    // OR, when `offset == length` as stated.
+
+    // Let's recreate the user's test logic as closely as possible, even with the questionable arguments.
+    // The user's test:
+    // Assert.assertEquals(1024, bzipIn.read(buffer, 0, 1024)); // This reads into the buffer
+    // Assert.assertEquals(0, bzipIn.read(buffer, 1024, 0)); // This call is problematic (offset > buffer.length or length=0)
+    // The description: "returns -1 when given an offset equal to the length of the buffer."
+    // This implies `read(buffer, buffer.length, some_length)`.
+    // If `some_length` is 0, it's `read(buffer, 1024, 0)`. This is what the user tested.
+    // If the stream *is* at its end, this call *should* return -1.
+    // The bug is that it returns -1 *even when the stream is NOT at its end*.
+
+    // To reproduce the bug, we need a state where the stream is NOT at its end,
+    // and calling `read(buffer, 1024, 0)` (or similar invalid/edge case read)
+    // returns -1.
+
+    // Let's try to read just enough data to make the stream *almost* empty,
+    // then trigger the problematic read.
+    
+    // Read all data except for a small amount.
+    // This is complex because we don't know the exact compressed size.
+    
+    // Let's go back to the user's test and assume the intent was to test
+    // a read call with invalid arguments that might trigger the faulty logic.
+    // The user's test claims `bzipIn.read(buffer, 1024, 0)` returns -1 when it shouldn't.
+
+    // Re-running the user's problematic assertion:
+    // This call `bzipIn.read(buffer, 1024, 0)` itself is problematic because offset=1024 and length=0.
+    // The `read` method's contract typically states that if `offset < 0` or `length < 0` or `offset + length > buffer.length`, an `IndexOutOfBoundsException` should be thrown.
+    // If `length == 0`, it should return 0.
+    // The user's test expects 0 for this call, but claims it returns -1.
+    // This implies that the `read` method, under certain conditions (perhaps when the stream is nearly exhausted, or due to internal state), incorrectly returns -1 instead of 0 or throwing an exception.
+
+    // Let's try to simulate a scenario where the stream is *not* exhausted,
+    // but a read that *should* return 0 (because length is 0) returns -1.
+    // This requires careful control over the stream's content and state.
+
+    // A simpler interpretation of the bug description: "returns -1 when given an offset equal to the length of the buffer."
+    // This could mean `read(buffer, N, N)` where `N` is the buffer length.
+    // Let's try `read(buffer, buffer.length, buffer.length)` which is invalid.
+    // Or `read(buffer, buffer.length, 0)` as in the user's test.
+
+    // Let's assume the user's test case logic is the one to reproduce, despite its flaws.
+    // We will execute the exact lines and assert the *failure* condition.
+    
+    byte[] testBuffer = new byte[1024];
+    
+    // First read, to ensure stream is not empty and we have consumed some data.
+    // We don't care about the exact return value here, just that it's a valid read.
+    int initialRead = bzipIn.read(testBuffer, 0, testBuffer.length);
+    // If initialRead is -1, it means the stream was empty from the start, which is unlikely with compressed data.
+    // If initialRead is less than buffer.length, it means the stream had less data than the buffer.
+    
+    // Now, the critical part: the read call that is reported to fail.
+    // The user's test expects 0, but gets -1.
+    // We need to assert that it *gets* -1 in this specific scenario.
+    // This call itself is invalid according to standard API contracts if offset + length > buffer.length.
+    // However, the bug is in the *return value* of this call, not necessarily that it throws an exception.
+    
+    // Let's set up a stream that is *almost* empty, so a read of 0 bytes is expected,
+    // but a read attempt that would try to read beyond the end might return -1 correctly.
+    // The bug is when it returns -1 *incorrectly*.
+    
+    // Let's try to create a minimal compressed stream that is very short.
+    ByteArrayOutputStream smallBaos = new ByteArrayOutputStream();
+    BZip2CompressorOutputStream smallBzipOut = new BZip2CompressorOutputStream(smallBaos);
+    smallBzipOut.write(new byte[]{1, 2, 3}); // Very small data
+    smallBzipOut.finish();
+    smallBaos.flush();
+    smallBaos.close();
+
+    ByteArrayInputStream smallBais = new ByteArrayInputStream(smallBaos.toByteArray());
+    BZip2CompressorInputStream smallBzipIn = new BZip2CompressorInputStream(smallBais);
+    
+    byte[] smallBuffer = new byte[1024];
+    
+    // Read all available data. This should be small.
+    int readAll = 0;
+    int tempRead;
+    while ((tempRead = smallBzipIn.read(smallBuffer, readAll, smallBuffer.length - readAll)) != -1) {
+        readAll += tempRead;
+    }
+    
+    // At this point, the stream should be exhausted.
+    // Now, let's call the problematic read signature: read(buffer, offset, length) where offset=length=1024 (buffer.length)
+    // OR offset=buffer.length, length=0 as in user's test.
+    
+    // Let's test the user's exact assertion:
+    // "Assert.assertEquals(0, bzipIn.read(buffer, 1024, 0));"
+    // This assertion *expects* 0. The bug is that it *gets* -1.
+    // So, to reproduce the failure, we need to assert that the return value *is* -1.
+    
+    // We need to make sure the stream is NOT at end of stream when we make this call.
+    // This is the tricky part.
+    
+    // Let's go back to the original large data, and try to read it in a way that leaves
+    // *some* data, but the next read attempt with invalid parameters would trigger the bug.
+
+    // The simplest way to reproduce the *reported behavior* is to call the method with the problematic parameters
+    // and assert that it returns -1, when it *should not*.
+    // The problem is determining *when* it should not return -1.
+    // The description says: "returns -1 when given an offset equal to the length of the buffer."
+    // This implies a call like: `bzipIn.read(buffer, buffer.length, some_length)`
+    // If `some_length` is 0, it's `bzipIn.read(buffer, 1024, 0)`.
+    // If the stream *has* data, and you call `read(buffer, 1024, 0)`, it should return 0.
+    // The bug is that it returns -1.
+    
+    // Let's create a compressed stream with just enough data to *not* be at the end of stream,
+    // and then call `read(buffer, 1024, 0)`.
+    
+    ByteArrayOutputStream trickyBaos = new ByteArrayOutputStream();
+    BZip2CompressorOutputStream trickyBzipOut = new BZip2CompressorOutputStream(trickyBaos);
+    trickyBzipOut.write(new byte[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}); // A few bytes
+    trickyBzipOut.finish();
+    trickyBaos.flush();
+    trickyBaos.close();
+
+    ByteArrayInputStream trickyBais = new ByteArrayInputStream(trickyBaos.toByteArray());
+    BZip2CompressorInputStream trickyBzipIn = new BZip2CompressorInputStream(trickyBais);
+    
+    byte[] trickyBuffer = new byte[1024];
+    
+    // Read some data, but not all.
+    trickyBzipIn.read(trickyBuffer, 0, 5); // Read first 5 bytes
+
+    // Now, the stream is NOT at the end.
+    // Call the problematic read signature.
+    // The user's test claims `bzipIn.read(buffer, 1024, 0)` returns -1 when it shouldn't.
+    // So, we assert that it returns -1.
+    
+    // This call is `read(trickyBuffer, 1024, 0)`.
+    // The arguments are `offset = 1024`, `length = 0`.
+    // `offset` is equal to `trickyBuffer.length`.
+    // According to the bug description: "returns -1 when given an offset equal to the length of the buffer."
+    // The stream is not at end, so this -1 return is incorrect.
+    
+    int result = trickyBzipIn.read(trickyBuffer, 1024, 0);
+    
+    // The bug is that 'result' is -1, when it should be 0 (because length is 0).
+    // So we assert that result is -1 to reproduce the failure.
+    assertEquals("BZip2CompressorInputStream.read(buffer, offset, length) returned -1 when offset == buffer.length and stream is not at end.", -1, result);
+    
+    trickyBzipIn.close();
+}

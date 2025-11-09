@@ -1,0 +1,88 @@
+public void testAssignmentToObjectInConditionalCausesTypeError() {
+    // This test case is designed to reproduce the JavaScript type error described in the bug report.
+    // Since we are testing Java code, we will simulate the logic that leads to the type mismatch.
+    // The core issue is that in JavaScript, the 'results' object can be assigned different shapes
+    // within conditional blocks, leading to type inference problems when a specific return type is expected.
+
+    // In Java, we'll create a scenario where the return type is ambiguous due to conditional assignments.
+    // We'll use a Map to represent the flexible object structure.
+
+    Object result = null;
+
+    // Simulate the first conditional block (if a)
+    boolean conditionA = true; // Set to true to enter the block
+    if (conditionA) {
+        // In JS, this would be `results = {}; results.prop1 = {a: 3};`
+        // In Java, we'll use a Map to represent the object and add a property.
+        Map<String, Object> resultMap = new HashMap<>();
+        Map<String, Object> prop1Value = new HashMap<>();
+        prop1Value.put("a", 3);
+        resultMap.put("prop1", prop1Value);
+        result = resultMap;
+    }
+
+    // Simulate the second conditional block (if b)
+    boolean conditionB = false; // Set to false to enter the else block
+    if (conditionB) {
+        // In JS, this would be `results = results || {}; results.prop2 = 'prop2';`
+        // In Java, we ensure 'result' is a Map if it's null, then add 'prop2'.
+        if (result == null) {
+            result = new HashMap<String, Object>();
+        }
+        // This cast is where the potential type mismatch would occur if not handled carefully.
+        // In JS, the type inference would struggle here.
+        if (result instanceof Map) {
+            ((Map<String, Object>) result).put("prop2", "prop2");
+        }
+    } else {
+        // In JS, this would be `results = results || {}; results.prop3 = 'prop3';`
+        // In Java, we ensure 'result' is a Map if it's null, then add 'prop3'.
+        if (result == null) {
+            result = new HashMap<String, Object>();
+        }
+        // This cast is where the potential type mismatch would occur if not handled carefully.
+        if (result instanceof Map) {
+            ((Map<String, Object>) result).put("prop3", "prop3");
+        }
+    }
+
+    // The bug report indicates a type error because the return type is too specific
+    // and not all branches guarantee that specific type.
+    // In Java, we can assert that the resulting type is compatible with the expected,
+    // or if the bug implies a failure to compile or a runtime error due to strict typing,
+    // we'd structure the test to expose that.
+
+    // For this reproduction, we'll assert the expected content of the 'result' object
+    // based on the executed branches. The original JS error was about the *return type*
+    // not matching the *actual assigned type* across all paths.
+    // In Java, this would typically be caught at compile time if the return type was strictly defined.
+    // Since we're using Object and Map, we'll test the final state.
+
+    assertTrue(result instanceof Map, "Result should be a Map");
+    Map<String, Object> resultMap = (Map<String, Object>) result;
+
+    // Based on conditionA=true and conditionB=false, we expect:
+    // prop1: {a: 3}
+    // prop3: 'prop3'
+    // prop2: not present
+
+    assertTrue(resultMap.containsKey("prop1"), "Result map should contain 'prop1'");
+    Object prop1 = resultMap.get("prop1");
+    assertTrue(prop1 instanceof Map, "'prop1' should be a Map");
+    assertEquals(3, ((Map<String, Object>) prop1).get("a"), "'prop1.a' should be 3");
+
+    assertTrue(resultMap.containsKey("prop3"), "Result map should contain 'prop3'");
+    assertEquals("prop3", resultMap.get("prop3"), "'prop3' should be 'prop3'");
+
+    assertFalse(resultMap.containsKey("prop2"), "Result map should not contain 'prop2'");
+
+    // The core of the JS bug was that `return results;` would fail if `results` was
+    // potentially `{prop1: {a: 3}}` but the function signature required `{prop1: (Object|null|undefined), prop2: (string|undefined), prop3: (string|undefined)}`.
+    // The fix involved making the return type more flexible or ensuring all branches
+    // conform to the specified return type.
+    // In a Java context, if we were to define a return type like `Map<String, Object>`
+    // and one branch *only* returned a `Map` with `prop1`, while another returned
+    // a `Map` with `prop3`, and the compiler expected *both* `prop2` and `prop3` to be
+    // potentially present, it would flag a type mismatch. This test simulates the
+    // *scenario* that would lead to such a mismatch.
+}

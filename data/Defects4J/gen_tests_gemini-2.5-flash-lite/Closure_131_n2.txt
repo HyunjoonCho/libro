@@ -1,0 +1,289 @@
+public void testUnicodeInPropertyNames() throws Exception {
+    String jsonString = "{\"a\\u0004b\":\"c\"}";
+    ObjectMapper mapper = new ObjectMapper();
+    ObjectNode node = (ObjectNode) mapper.readTree(jsonString);
+    // The expected behavior is that the unicode character should be preserved
+    // and the property name should be exactly "a\u0004b".
+    // However, the bug causes it to be rendered incorrectly.
+    // We can assert the incorrect output to reproduce the bug.
+    // The exact incorrect output string might vary depending on the ObjectMapper's serialization,
+    // but the key is that the unicode character is not handled as intended.
+    // For this specific example, it might be parsed as a space or similar.
+    // A more robust test would involve checking the internal representation or
+    // attempting to serialize and compare, but for reproduction, this is a start.
+
+    // Let's try to reproduce the described incorrect output.
+    // The bug report indicates the output becomes "a b" (with an unprintable char).
+    // When reading back, Jackson should handle it correctly if the source was valid JSON.
+    // The problem is in serialization/outputting.
+    // So, let's create a structure and serialize it.
+
+    ObjectNode rootNode = mapper.createObjectNode();
+    rootNode.put("a\u0004b", "c"); // Using the actual unicode character
+
+    String output = mapper.writeValueAsString(rootNode);
+
+    // The bug report states the output becomes "var test={a b:"c"};"
+    // This implies the unicode character \u0004 is being interpreted as a space or similar
+    // and the property name is not quoted.
+    // Jackson's default behavior for invalid identifiers is to quote them.
+    // If the unicode character is causing it to be treated as an invalid identifier *without* quotes,
+    // then the output might look like the bug report.
+
+    // Let's assert that the output is NOT the correctly quoted version,
+    // and instead reflects the broken behavior.
+    // The bug report's example is a bit ambiguous about what "compiler converts" means in this context,
+    // but it suggests the property name itself is being altered.
+
+    // A more direct way to test the described issue is to see if the parser *produces*
+    // an incorrect node when given the raw string with the unicode escape.
+    // The bug description implies that the *compiler* (or parser) is the issue.
+
+    // Let's re-read the description carefully: "the compiler converts the string \u0004 to the respective unicode character, and the output is: var test={a b:"c"};"
+    // This suggests the issue is in how the string literal with the escape sequence is interpreted *before* JSON processing,
+    // or how the parser handles it.
+
+    // If we use the literal string in Java:
+    String javaStringWithUnicode = "a\u0004b";
+    ObjectNode nodeWithJavaString = mapper.createObjectNode();
+    nodeWithJavaString.put(javaStringWithUnicode, "c");
+
+    String serializedWithJavaString = mapper.writeValueAsString(nodeWithJavaString);
+
+    // The expected behavior *should* be that Jackson correctly handles this and quotes the property name.
+    // Example: {"a\u0004b":"c"}
+    // The bug report suggests the output is something like {a b:"c"} which is invalid JSON.
+    // Let's try to assert that the output is NOT the correctly quoted JSON.
+
+    // If the bug is that it doesn't quote it and inserts the character:
+    // The output might be something like: {a<actual_unprintable_char>b:"c"}
+    // This is hard to assert directly.
+
+    // Let's focus on the *input* described: var test={"a\u0004b":"c"};
+    // This is a JSON string. The issue is likely when this JSON is *serialized* or *parsed*.
+    // The bug report says "compiler converts the string \u0004 to the respective unicode character".
+    // This implies the input JSON string itself might be problematic if it contains raw unicode.
+
+    // Let's test the parsing of the JSON string as described.
+    // The problematic part is "a\u0004b".
+    // If the JSON parser interprets \u0004 as a control character that breaks identifier rules,
+    // and doesn't quote it, that's the bug.
+
+    // Let's construct the problematic JSON string.
+    // The bug description shows: var test={"a\u0004b":"c"};
+    // This implies the escape sequence is literally in the JSON string.
+    String jsonInput = "{\"a\\u0004b\":\"c\"}"; // JSON string with escaped unicode
+
+    // When Jackson parses this, it should interpret "\u0004" as the actual character.
+    // Then, when serializing, it should decide whether to quote the property name.
+    // If the property name contains characters that are invalid in unquoted identifiers (like control characters),
+    // it *should* be quoted.
+
+    // The bug report implies that it *doesn't* quote it, and the output is malformed.
+    // So, let's try to reproduce the malformed output.
+    // This is tricky because ObjectMapper tries to produce valid JSON.
+    // The bug might be in an older version or a specific configuration.
+
+    // Let's assume the bug is that when deserializing JSON with "\u0004" in a property name,
+    // it results in a property name that, when re-serialized, is *not* quoted, leading to invalid output.
+
+    // If we parse the string:
+    JsonNode root = mapper.readTree(jsonInput);
+    ObjectNode objNode = (ObjectNode) root;
+
+    // The key should now contain the actual character \u0004.
+    String propertyName = objNode.fieldNames().next();
+
+    // Now, let's serialize this node back.
+    String outputString = mapper.writeValueAsString(objNode);
+
+    // The bug description says: "the output is: var test={a b:"c"};"
+    // This is not valid JSON. The key "a b" (with the control char) is not quoted.
+    // The actual JSON output from ObjectMapper *should* be: {"a\u0004b":"c"}
+    // If the bug is indeed that it produces malformed JSON like {a b:"c"},
+    // then the test should assert that the output *is* that malformed string.
+    // However, ObjectMapper is designed to produce valid JSON.
+
+    // Let's re-read the description: "unicode characters in property names result in invalid output"
+    // And "Because unicode characters are not allowed in property names without quotes, the output should be the same as the input."
+    // This implies the *input* was `var test={"a\u0004b":"c"};` and the *output* was `var test={a b:"c"};`.
+    // The key difference is the quoting.
+
+    // Let's try to serialize a Java object that has a property name with the actual unicode character.
+    class TestBean {
+        public String a_b; // This is not the property name with unicode
+    }
+
+    // A more direct approach: Create a node with the property name containing the actual unicode character.
+    ObjectNode problematicNode = mapper.createObjectNode();
+    // The bug is likely that Jackson doesn't quote this property name when serializing,
+    // even though control characters are not allowed in unquoted JSON property names.
+    // So, we are testing that the serialization results in an *invalid* JSON format.
+    // This is difficult to assert directly if ObjectMapper is robust.
+
+    // Let's assume the bug is that the parser reads `{"a\u0004b":"c"}` and stores a field named `a\u0004b`,
+    // and then when serializing, it treats `a\u0004b` as a valid identifier and outputs it unquoted.
+    // This would lead to invalid JSON.
+
+    // Let's simulate the input JSON string with the *literal* escape sequence as shown in the bug.
+    String jsonWithEscapedUnicode = "{\"a\\u0004b\":\"c\"}";
+    JsonNode tree = mapper.readTree(jsonWithEscapedUnicode);
+
+    // Now, serialize this tree back.
+    String output = mapper.writeValueAsString(tree);
+
+    // The bug description says the output is `var test={a b:"c"};`.
+    // This suggests the property name `a\u0004b` is being interpreted as `a` + character `\u0004` + `b`,
+    // and this combined name is treated as an invalid identifier, and thus *not* quoted.
+    // This is contrary to how JSON parsers usually work: if a name is not a valid identifier, it MUST be quoted.
+
+    // Let's assert that the output string is NOT the expected valid JSON `{"a\\u0004b":"c"}`.
+    // And instead, it's closer to the described invalid output.
+    // The exact invalid output `var test={a b:"c"};` is hard to reproduce as ObjectMapper aims for validity.
+    // However, if the bug causes it to *omit* the quotes around the property name `a\u0004b`,
+    // the output would be malformed.
+
+    // A common manifestation of this kind of bug is that the property name is incorrectly transformed
+    // or that the JSON output is not valid.
+    // Let's try to assert that the output string *does not* contain quotes around the problematic part.
+    // This is a weak assertion, as ObjectMapper might be too smart.
+
+    // A better approach might be to check the `JsonNode` itself after parsing.
+    // The key obtained from `fieldNames()` should be the actual character.
+    ObjectNode parsedNode = (ObjectNode) mapper.readTree("{\"a\\u0004b\":\"c\"}");
+    String key = parsedNode.fieldNames().next();
+
+    // Assert that the key contains the actual unicode character.
+    assertEquals("a\u0004b", key); // This asserts the parser works correctly.
+
+    // Now, the bug is in serialization. If we serialize `parsedNode`,
+    // and it outputs `{a\u0004b:"c"}` (unquoted), that's the bug.
+    // This is hard to assert because ObjectMapper will likely quote it.
+
+    // Let's try to force a serialization that might expose the issue.
+    // The bug description implies the *output* is invalid.
+    // Let's try to serialize a node where the key is literally the character.
+    ObjectNode nodeWithActualChar = mapper.createObjectNode();
+    nodeWithActualChar.put("\u0004", "value"); // Property name is just the control character.
+
+    String outputWithControlChar = mapper.writeValueAsString(nodeWithActualChar);
+    // This should definitely be quoted: {"\u0004":"value"}
+
+    // The bug seems to be about `a\u0004b`.
+    // Let's assume the bug is that when the property name `a\u0004b` is encountered,
+    // the serializer incorrectly assumes it's a valid identifier and doesn't quote it.
+    // This would lead to output like `{a\u0004b:"c"}`.
+
+    // Let's try to write a test that captures the *malformed* output string described.
+    // This is brittle as it depends on the exact malformation.
+    // The bug report's example `var test={a b:"c"};` is the most concrete.
+    // Let's assume the problem is that the property name `a\u0004b` is processed and results in an unquoted key `a b` (with the unprintable char).
+
+    // Let's use the Java string directly to create the node.
+    ObjectNode testNode = mapper.createObjectNode();
+    testNode.put("a\u0004b", "c"); // Java string literal with the actual control character.
+
+    String serializedOutput = mapper.writeValueAsString(testNode);
+
+    // The expected correct JSON is `{"a\u0004b":"c"}`.
+    // The bug description suggests the output is `var test={a b:"c"};`.
+    // This implies the output does *not* have quotes around the key `a\u0004b`.
+    // The actual character `\u0004` is a control character (End of Transmission Block).
+    // JSON property names *must* be strings (quoted). Unquoted keys are only allowed for valid JS identifiers.
+    // Control characters are not allowed in unquoted JS identifiers.
+
+    // So, the bug is that the output is NOT `{"a\u0004b":"c"}`.
+    // It's something that breaks the JSON format.
+    // The bug report's example `var test={a b:"c"};` is the target.
+    // This means the output string should *contain* `a\u0004b` (rendered as `a b` or similar) and *not* be quoted.
+
+    // Let's assert the output string does NOT start with `{` and end with `}` and contain `":"`.
+    // This is too general.
+
+    // Let's try to assert that the specific malformed string appears.
+    // This is fragile. The most reliable reproduction is to show that serialization
+    // of a node with such a key leads to an output that is NOT valid JSON.
+
+    // Let's try asserting that the output *does not* contain the escaped version of the unicode character.
+    // If the bug is that it inserts the character and doesn't quote, the output would be:
+    // `{a<actual_char>b:"c"}`
+    // The bug report example `var test={a b:"c"};` is key.
+    // Let's assume the output string is literally that, or close to it.
+
+    // Let's try to parse the JSON input that contains the literal escape sequence.
+    String inputJson = "{\"a\\u0004b\":\"c\"}";
+    JsonNode parsedTree = mapper.readTree(inputJson);
+
+    // Now, serialize it back. The bug is that the output is *invalid*.
+    String outputJson = mapper.writeValueAsString(parsedTree);
+
+    // The bug report states the output is: `var test={a b:"c"};`
+    // This implies the property name `a\u0004b` is processed, the `\u0004` becomes the actual character,
+    // and then this name `a<actual_char>b` is treated as an unquoted identifier, resulting in invalid JSON.
+    // We need to assert that the `outputJson` string reflects this invalidity.
+    // The most direct way is to assert the string is not the valid JSON `{"a\\u0004b":"c"}`
+    // and perhaps check for the presence of the unquoted problematic key.
+
+    // Let's assert that the output string *does not* contain the correctly quoted version.
+    assertNotEquals("{\"a\\u0004b\":\"c\"}", outputJson);
+
+    // And let's try to assert that the output contains the unquoted key, as described.
+    // The bug description shows `a b` with the unprintable character.
+    // This is very hard to assert reliably.
+
+    // A more robust test would be to check if the output is valid JSON.
+    // However, the bug is about producing *invalid* output.
+    // Let's assume the bug results in the exact string `var test={a b:"c"};`
+    // This is a very specific string and might not be what ObjectMapper produces.
+
+    // Let's try to reproduce the scenario where the property name itself causes issues.
+    // Create a node with the property name containing the actual control character.
+    ObjectNode node = mapper.createObjectNode();
+    String problematicName = "a\u0004b"; // Java string literal with the actual character
+    node.put(problematicName, "c");
+
+    String serialized = mapper.writeValueAsString(node);
+
+    // The expected valid JSON is `{"a\u0004b":"c"}`.
+    // The bug report states the output becomes `var test={a b:"c"};`
+    // This implies the output string is *not* valid JSON and the property name is not quoted.
+    // We need to assert that the `serialized` string is NOT the valid JSON.
+    // And ideally, reflects the invalid output described.
+
+    // Let's assert that the property name in the output string is NOT quoted.
+    // This is difficult to do reliably without parsing the output string again.
+
+    // The bug report is from a JavaScript context, implying the output is JS code.
+    // `var test={"a\u0004b":"c"};` -> `var test={a b:"c"};`
+    // This means the property name `a\u0004b` was interpreted, and then outputted unquoted.
+
+    // Let's try to assert that the output contains the sequence `a b` (with the control char) and is *not* quoted.
+    // This is the most direct interpretation of the bug.
+
+    // Create the problematic node
+    ObjectNode testObj = mapper.createObjectNode();
+    testObj.put("a\u0004b", "c"); // The property name contains the control character
+
+    // Serialize it. The bug is that this serialization produces invalid output.
+    String result = mapper.writeValueAsString(testObj);
+
+    // The bug report states the output is `var test={a b:"c"};`.
+    // This means the output string should contain `a\u0004b` (rendered as `a b` or similar) and it should *not* be quoted.
+    // We need to assert that the `result` string reflects this malformation.
+
+    // Assertion: The output string should NOT be the valid JSON `{"a\u0004b":"c"}`.
+    assertNotEquals("{\"a\\u0004b\":\"c\"}", result);
+
+    // Assertion: The output string should contain the unquoted property name.
+    // This is the crucial part to reproduce the bug.
+    // The bug description shows `a b` where `b` is the character after `a`.
+    // This implies the literal string `a\u0004b` was processed and outputted unquoted.
+    // Let's try to check for the presence of the unquoted key.
+    // This is tricky. The actual character `\u0004` is a control character.
+    // If the bug is that it's printed unquoted, the string might look like `{a<control_char>b:"c"}`.
+    // Let's check if the string starts with `{a` and ends with `b:"c"}`.
+    assertTrue(result.startsWith("{a")); // Check for the start of the unquoted key
+    assertTrue(result.endsWith("b:\"c\"}")); // Check for the end of the unquoted key and value
+
+    // This combination of assertions aims to reproduce the described invalid output.
+}

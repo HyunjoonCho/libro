@@ -1,0 +1,174 @@
+public void testCovariancesAndErrorsWithBoundParameters() throws EstimationException {
+    // Setup a simple estimation problem with bound parameters
+    LocalUnivariateRealFunction f = new LocalUnivariateRealFunction() {
+        public double value(double x) {
+            return x * x;
+        }
+    };
+    UnivariateRealPointValuePair[] points = {
+            new UnivariateRealPointValuePair(1.0, 1.0),
+            new UnivariateRealPointValuePair(2.0, 4.0),
+            new UnivariateRealPointValuePair(3.0, 9.0)
+    };
+    // Create a problem with one unbound and one bound parameter
+    // The initial guess for the parameter is 2.0
+    // The parameter is bound to a value of 1.0
+    // The parameter is a scalar, so we need two parameters for the bound status and value
+    // Let's assume the parameter is 'a' in y = a*x^2. We want to estimate 'a'.
+    // We'll make the parameter 'a' bound.
+    // The problem statement implies a more complex setup with possibly multiple parameters
+    // and a Jacobian. For simplicity, let's simulate a scenario where the estimator
+    // expects a certain number of parameters but some are fixed.
+
+    // Let's simplify to a case where the estimator itself can handle parameters.
+    // We need a concrete implementation of Estimator and EstimationProblem.
+
+    // Using AbstractEstimator directly is not feasible as it's abstract.
+    // Let's mock or use a concrete implementation if available.
+    // Assuming a hypothetical Estimator implementation exists that uses AbstractEstimator.
+
+    // For the purpose of this test, we need to simulate the scenario that causes the bug.
+    // The bug is in AbstractEstimator.getCovariances() and guessParametersErrors().
+    // These methods access `problem.getAllParameters().length` and `problem.getUnboundParameters().length`.
+    // The issue arises when `problem.getAllParameters().length` is used to dimension arrays
+    // that should only contain results for unbound parameters.
+
+    // Let's create a scenario where `getAllParameters().length` is greater than
+    // `getUnboundParameters().length`, and the methods try to use the former for
+    // indexing into structures related to the latter.
+
+    // A more direct approach is to create a mock EstimationProblem that returns
+    // different lengths for getAllParameters and getUnboundParameters.
+    EstimationProblem mockProblem = createMockEstimationProblemWithBoundParameters();
+
+    // We need an instance of AbstractEstimator. Since it's abstract, we can create
+    // an anonymous inner class for testing purposes.
+    AbstractEstimator estimator = new AbstractEstimator() {
+        @Override
+        protected double[][] performEstimation(EstimationProblem problem) {
+            // This method is not directly called by getCovariances or guessParametersErrors
+            // but is required for a concrete Estimator. We can return a dummy value.
+            return new double[0][0];
+        }
+
+        @Override
+        protected void updateJacobian(double[][] jacobian,
+                                      EstimationProblem problem,
+                                      double[] params,
+                                      double[] errors) {
+            // This method is called by performEstimation, not directly relevant for this bug.
+        }
+    };
+
+    // Now, call the methods that are supposed to crash.
+    // We expect an ArrayIndexOutOfBoundsException if the bug is present.
+    // If the fix is applied, no exception should be thrown, and the results
+    // should be correctly sized for the *unbound* parameters.
+
+    // Test getCovariances
+    try {
+        estimator.getCovariances(mockProblem);
+        // If we reach here, it means no exception was thrown.
+        // We should assert the size of the returned covariance matrix.
+        // The size should correspond to the number of *unbound* parameters.
+        // In our mock, let's say there are 2 unbound parameters.
+        // The covariance matrix should be 2x2.
+        // The actual assertion depends on the mock implementation.
+        // For now, we'll just check that it doesn't crash.
+        fail("Expected ArrayIndexOutOfBoundsException for getCovariances");
+    } catch (ArrayIndexOutOfBoundsException e) {
+        // Expected exception, test passes for this part.
+        // Optionally, check the exception message or type if needed.
+        assertTrue(true);
+    } catch (EstimationException e) {
+        // This might be thrown if the problem itself is invalid, but not the bug we're targeting.
+        fail("Caught EstimationException instead of ArrayIndexOutOfBoundsException: " + e.getMessage());
+    }
+
+    // Test guessParametersErrors
+    try {
+        estimator.guessParametersErrors(mockProblem);
+        // If we reach here, it means no exception was thrown.
+        // We should assert the size of the returned errors array.
+        // The size should correspond to the number of *unbound* parameters.
+        // In our mock, let's say there are 2 unbound parameters.
+        // The errors array should have length 2.
+        fail("Expected ArrayIndexOutOfBoundsException for guessParametersErrors");
+    } catch (ArrayIndexOutOfBoundsException e) {
+        // Expected exception, test passes for this part.
+        assertTrue(true);
+    } catch (EstimationException e) {
+        fail("Caught EstimationException instead of ArrayIndexOutOfBoundsException: " + e.getMessage());
+    }
+}
+
+// Helper method to create a mock EstimationProblem that simulates bound parameters.
+private EstimationProblem createMockEstimationProblemWithBoundParameters() {
+    return new EstimationProblem() {
+        // Simulate having 3 total parameters, but 1 is bound. So 2 are unbound.
+        private final int totalParameters = 3;
+        private final int unboundParameters = 2;
+
+        @Override
+        public int getNbParameters() {
+            return totalParameters; // Total parameters
+        }
+
+        @Override
+        public int getNbObservables() {
+            return 0; // Not relevant for this test
+        }
+
+        @Override
+        public int getNbConstraints() {
+            return 0; // Not relevant for this test
+        }
+
+        @Override
+        public UnivariateRealFunction getModel() {
+            return null; // Not relevant for this test
+        }
+
+        @Override
+        public UnivariateRealPointValuePair[] getMeasurements() {
+            return null; // Not relevant for this test
+        }
+
+        @Override
+        public double[] guessParametersErrors(EstimationProblem problem) throws EstimationException {
+            // This method is part of the interface, but we are testing the AbstractEstimator's implementation.
+            // We need to ensure the AbstractEstimator calls the correct methods on this mock.
+            throw new UnsupportedOperationException("Not implemented for mock.");
+        }
+
+        @Override
+        public double[][] getCovariances(EstimationProblem problem) throws EstimationException {
+            // This method is part of the interface, but we are testing the AbstractEstimator's implementation.
+            throw new UnsupportedOperationException("Not implemented for mock.");
+        }
+
+        @Override
+        public boolean isBoundParameter(int index) {
+            // Simulate that parameter at index 2 (0-based) is bound.
+            return index == 2;
+        }
+
+        @Override
+        public double getBoundParameterValue(int index) {
+            // Simulate a bound value.
+            return 0.0;
+        }
+
+        @Override
+        public int[] getUnboundParameters() {
+            // Return indices of unbound parameters.
+            return new int[]{0, 1};
+        }
+
+        @Override
+        public int[] getAllParameters() {
+            // Return indices of all parameters.
+            return new int[]{0, 1, 2};
+        }
+    };
+}

@@ -1,0 +1,116 @@
+public void testParsePaxHeaders_EmptyLineAtEnd() throws IOException {
+    byte[] tarData = new byte[512]; // A basic tar header block
+    // Simulate an empty line in PAX headers (length 0, followed by newline)
+    // This is a simplified representation; a real PAX header would have more structure
+    // We are specifically targeting the parsing of the line length.
+    // Let's simulate a line like "\n" which would cause the length to be 10 ('\n') - '0' = -38
+    tarData[121] = (byte) '\n'; // Place a newline character where length parsing might occur
+
+    TarArchiveInputStream tarInput = null;
+    try {
+        tarInput = new TarArchiveInputStream(new ByteArrayInputStream(tarData));
+        // The parsePaxHeaders method is package-private, so we need to access it via reflection
+        // or ensure it's called indirectly by a public method like getNextTarEntry.
+        // For simplicity in this test, let's assume we can call it directly if it were public,
+        // or we'll try to trigger it by reading an entry.
+        // A more robust test might involve creating a specific TarArchiveEntry and calling parsePaxHeaders on it.
+
+        // Let's try to trigger it by reading an entry, which should internally call parsePaxHeaders
+        // if PAX headers are present. We need to construct a tar entry that *would* have PAX headers.
+        // This is tricky without a full TarArchiveEntry object setup.
+
+        // A more direct approach if the method were public:
+        // Method parsePaxHeaders = TarArchiveInputStream.class.getDeclaredMethod("parsePaxHeaders", TarArchiveEntry.class);
+        // parsePaxHeaders.setAccessible(true);
+        // TarArchiveEntry entry = new TarArchiveEntry("test.txt");
+        // entry.setFormat(TarConstants.FORMAT_PAX); // Indicate PAX format
+        // parsePaxHeaders.invoke(tarInput, entry);
+
+        // Since parsePaxHeaders is package-private, we'll rely on getNextTarEntry to call it.
+        // We need to craft input that *looks like* it has PAX headers.
+        // A minimal PAX header block starts with magic bytes "ustar\0" and then key=value pairs.
+        // The bug is triggered by an empty line *within* the headers.
+        // Let's simulate a tar file with a PAX header block ending in an empty line.
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        // Minimal valid PAX header block start
+        baos.write("ustar\0".getBytes()); // Magic
+        baos.write("0".getBytes()); // Version
+        baos.write(new byte[503]); // Pad to 512 bytes for the header record
+
+        // Now, let's inject the problematic part: an empty line after some headers.
+        // This is highly dependent on the internal implementation details of how parsePaxHeaders reads.
+        // The bug report suggests reading a length, getting a newline, and subtracting '0'.
+        // Let's craft input that forces this specific scenario.
+
+        // A more reliable way to trigger this is to create a tar file that *actually* has this issue.
+        // Since we can't easily create a tar file in memory that precisely triggers this internal parsing issue,
+        // let's simulate the input stream *after* the initial "ustar\0" magic.
+
+        // Let's assume the stream contains:
+        // "23\npath=some/long/path\n" - a valid header line
+        // "0\n\n" - an empty header line (length 0, followed by newline) - this is what triggers the bug.
+
+        ByteArrayOutputStream paxStream = new ByteArrayOutputStream();
+        // Simulate a header line that sets up the stream position correctly before the empty line
+        // A header line like "123\ncomment=this is a comment\n"
+        String headerLine1 = "23\ncomment=this is a comment\n";
+        paxStream.write(headerLine1.getBytes());
+
+        // Now, the problematic empty line: length 0, followed by newline.
+        // The parser should read '0', then '\n'.
+        // The bug occurs when it reads the *next* character after parsing the length,
+        // and if that character is a newline, it subtracts '0'.
+        String emptyHeaderLine = "0\n"; // This represents length 0, followed by the actual newline for the line.
+        paxStream.write(emptyHeaderLine.getBytes());
+
+        // We need to prepend the ustar magic and version to this.
+        ByteArrayOutputStream fullTarHeader = new ByteArrayOutputStream();
+        fullTarHeader.write("ustar\0".getBytes()); // Magic
+        fullTarHeader.write("0".getBytes()); // Version
+        // Pad the rest of the first 512-byte block
+        byte[] padding = new byte[512 - 2 - paxStream.size()];
+        fullTarHeader.write(paxStream.toByteArray());
+        fullTarHeader.write(padding);
+
+
+        tarInput = new TarArchiveInputStream(new ByteArrayInputStream(fullTarHeader.toByteArray()));
+
+        // Now, try to read an entry. This should trigger parsePaxHeaders.
+        // We need to ensure there's a file entry after the PAX headers.
+        // The standard tar header structure follows the PAX headers.
+        // Let's add a minimal, zero-filled file entry after the PAX header block.
+        byte[] fileEntry = new byte[512]; // Zero-filled for simplicity
+
+        // We need to concatenate the PAX header block and the file entry block.
+        ByteArrayOutputStream finalTarStream = new ByteArrayOutputStream();
+        finalTarStream.write(fullTarHeader.toByteArray());
+        finalTarStream.write(fileEntry);
+
+
+        tarInput = new TarArchiveInputStream(new ByteArrayInputStream(finalTarStream.toByteArray()));
+
+        // Attempt to read the next entry. This should call parsePaxHeaders internally.
+        // If parsePaxHeaders fails, getNextTarEntry might throw the exception, or the exception
+        // might occur during the internal processing of PAX headers.
+        tarInput.getNextEntry(); // This is expected to throw NegativeArraySizeException
+
+        // If we reach here, the exception was not thrown, so the test fails.
+        fail("Expected NegativeArraySizeException was not thrown.");
+
+    } catch (NegativeArraySizeException e) {
+        // Expected exception caught. Test passes.
+        // Optionally, assert something about the exception message or cause if needed.
+        assertTrue(true);
+    } catch (IOException e) {
+        fail("IOException occurred: " + e.getMessage());
+    } finally {
+        if (tarInput != null) {
+            try {
+                tarInput.close();
+            } catch (IOException e) {
+                // Ignore
+            }
+        }
+    }
+}

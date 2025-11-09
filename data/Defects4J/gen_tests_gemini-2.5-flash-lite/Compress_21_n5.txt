@@ -1,0 +1,50 @@
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.ArchiveInputStream;
+import org.apache.commons.compress.archivers.ArchiveOutputStream;
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
+import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
+import org.junit.jupiter.api.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+public class ArchiveTest {
+
+    @Test
+    public void test7zEmptyEntries() throws IOException {
+        // Reproducing Scenario 3: 8 empty files
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        try (ArchiveOutputStream<?> aos = new ZipArchiveOutputStream(bos)) {
+            for (int i = 0; i < 8; i++) {
+                ZipArchiveEntry entry = new ZipArchiveEntry("emptyFile" + i + ".txt");
+                aos.putArchiveEntry(entry);
+                aos.closeArchiveEntry();
+            }
+        }
+
+        // Attempting to read the archive, expecting it to be corrupt or unreadable
+        boolean thrown = false;
+        try (ArchiveInputStream<?> ais = new ZipArchiveInputStream(new ByteArrayInputStream(bos.toByteArray()))) {
+            ArchiveEntry entry;
+            while ((entry = ais.getNextEntry()) != null) {
+                // We expect this loop to not complete successfully or throw an exception
+                // depending on the exact corruption. The bug report indicates a crash or
+                // an inability to open.
+            }
+        } catch (Exception e) {
+            // Catching a general exception as the bug report mentions "cannot open" or "stops working"
+            thrown = true;
+        }
+
+        // Assert that some form of failure occurred during reading, indicating corruption.
+        // The exact exception type might vary, so we check if *any* exception was caught.
+        assertTrue(thrown, "Archive should be corrupt or unreadable with 8 empty files.");
+    }
+}

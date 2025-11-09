@@ -1,0 +1,31 @@
+public void testExtendedTimestamp() throws Exception {
+    // Create a temporary file with an extended timestamp
+    File tempFile = File.createTempFile("test", ".tmp");
+    tempFile.deleteOnExit();
+
+    long expectedTimestamp = System.currentTimeMillis();
+
+    // Set the last modified time using reflection to bypass potential limitations
+    Method setLastModifiedMethod = File.class.getDeclaredMethod("setLastModified", long.class);
+    setLastModifiedMethod.setAccessible(true);
+    setLastModifiedMethod.invoke(tempFile, expectedTimestamp);
+
+    // Get the ZipEntry for the temporary file
+    ZipFile zipFile = new ZipFile(tempFile.getParentFile()); // Zip over the directory containing the file
+    ZipEntry zipEntry = zipFile.getEntry(tempFile.getName());
+
+    // Check if the timestamp from ZipEntry matches the expected timestamp
+    // In JDK 9+, ZipEntry.getTime() might return a truncated or modified value due to JDK-8073497
+    // This test aims to expose that discrepancy if it exists and is not handled.
+    long actualTimestamp = zipEntry.getTime();
+
+    // The original bug report indicates a failure, implying the following assertion might fail.
+    // The exact behavior depends on how the library handles the potential discrepancy.
+    // For the purpose of reproducing the failure, we'll assert for inequality if the JDK behavior is problematic.
+    // If the library correctly handles the JDK changes, this test might pass, but it's designed
+    // to highlight the scenario where it doesn't.
+    assertNotEquals("Timestamp from ZipEntry should match the set timestamp", expectedTimestamp, actualTimestamp);
+
+    zipFile.close();
+    assertTrue(tempFile.delete());
+}

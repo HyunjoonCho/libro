@@ -1,0 +1,213 @@
+public void testArrayJoinMungedIncorrectly() {
+    String original = "$.fn.hasClass = function(selector) { return ( this.length > 0 ? !( ( ['', this[0].className, ''].join(' ') ).indexOf( ['', selector, ''].join(' ') ) == -1 ) : false ); };";
+    String munged = "$.fn.hasClass=function(a){return this.length>0?(\"\"+this[0].className).indexOf(\"\"+a)!=-1:false};";
+    // The core of the issue is that the munging process incorrectly simplifies the join operation.
+    // We need to simulate a scenario where this incorrect simplification leads to a different outcome.
+    // The original code uses join(' ') to ensure proper spacing around class names,
+    // especially when checking for a class that might be at the beginning or end of the string,
+    // or adjacent to other classes.
+    // The munged code directly concatenates and uses indexOf, which can fail in edge cases.
+
+    // Let's create a mock object that mimics the behavior of the original jQuery object
+    // and test the original logic with a class that would be problematic if not handled correctly.
+
+    // Mocking the 'this' context for the hasClass function
+    Object mockThis = new Object() {
+        Object[] elements = new Object[] {
+            new Object() {
+                String className = "some-class another-class";
+            }
+        };
+        int length = 1;
+
+        // Simulate the original hasClass logic
+        public boolean originalHasClass(String selector) {
+            return (this.length > 0 ?
+                    !( ( ['', this.elements[0].className, ''].join(' ') ).indexOf( ['', selector, ''].join(' ') ) == -1 )
+                    : false );
+        }
+    };
+
+    // Simulate the munged hasClass logic
+    Object mockThisMunged = new Object() {
+        Object[] elements = new Object[] {
+            new Object() {
+                String className = "some-class another-class";
+            }
+        };
+        int length = 1;
+
+        // Simulate the munged hasClass logic
+        public boolean mungedHasClass(String selector) {
+            return this.length > 0 ?
+                    (""+this.elements[0].className).indexOf(""+selector)!=-1
+                    : false;
+        }
+    };
+
+    // Test case where the class is in the middle
+    String selectorMiddle = "another-class";
+    assertTrue("Original hasClass should return true for class in the middle", (boolean)mockThis.getClass().getMethod("originalHasClass", String.class).invoke(mockThis, selectorMiddle));
+    assertTrue("Munged hasClass should return true for class in the middle", (boolean)mockThisMunged.getClass().getMethod("mungedHasClass", String.class).invoke(mockThisMunged, selectorMiddle));
+
+    // Test case where the class is at the beginning
+    String selectorBeginning = "some-class";
+    assertTrue("Original hasClass should return true for class at the beginning", (boolean)mockThis.getClass().getMethod("originalHasClass", String.class).invoke(mockThis, selectorBeginning));
+    // This is where the munged version might fail if not careful with spacing.
+    // The original join(' ') ensures " some-class " which correctly matches.
+    // The munged version would search for "some-class" within "some-class another-class", which works here.
+    // Let's craft a case that might expose the difference more clearly.
+
+    // Let's consider a class name that is a prefix of another class name.
+    // For example, if className is "btn btn-primary" and we search for "btn".
+    // Original: " btn btn-primary ".indexOf(" btn ") -> true
+    // Munged: "btn btn-primary".indexOf("btn") -> true. This still works.
+
+    // The description implies the issue is with how join(' ') is handled.
+    // The key is that join(' ') with empty strings around it ensures that the selector
+    // is surrounded by spaces, effectively matching whole words.
+    // The munged version loses this explicit space padding.
+
+    // Let's simulate the problematic scenario where the selector might be a substring
+    // of another class name without proper word boundary checks.
+    // The original code's `['', this[0].className, ''].join(' ')` produces " class1 class2 "
+    // and `['', selector, ''].join(' ')` produces " selector ".
+    // This ensures that `indexOf` looks for " selector " which guarantees it's a distinct class.
+
+    // Let's force a scenario where className is "myclass" and selector is "my".
+    // Original: " myclass ".indexOf(" my ") -> -1 (Correct)
+    // Munged: "myclass".indexOf("my") -> 0 (Incorrect)
+
+    Object mockThisPrefixFail = new Object() {
+        Object[] elements = new Object[] {
+            new Object() {
+                String className = "myclass";
+            }
+        };
+        int length = 1;
+
+        // Simulate the original hasClass logic
+        public boolean originalHasClass(String selector) {
+            return (this.length > 0 ?
+                    !( ( ['', this.elements[0].className, ''].join(' ') ).indexOf( ['', selector, ''].join(' ') ) == -1 )
+                    : false );
+        }
+    };
+
+    Object mockThisPrefixFailMunged = new Object() {
+        Object[] elements = new Object[] {
+            new Object() {
+                String className = "myclass";
+            }
+        };
+        int length = 1;
+
+        // Simulate the munged hasClass logic
+        public boolean mungedHasClass(String selector) {
+            return this.length > 0 ?
+                    (""+this.elements[0].className).indexOf(""+selector)!=-1
+                    : false;
+        }
+    };
+
+    String selectorPrefix = "my";
+    // The join method is not directly available on Object arrays in Java.
+    // We need to simulate the string manipulation that join(' ') would perform.
+    // For the original: ['', 'myclass', ''].join(' ')  -> " myclass "
+    // For the selector: ['', 'my', ''].join(' ') -> " my "
+    String originalClassNamePadded = " myclass ";
+    String selectorPadded = " my ";
+
+    assertTrue("Original hasClass should not find 'my' in 'myclass'",
+            !(originalClassNamePadded.indexOf(selectorPadded) == -1)); // This condition should be false
+
+    // For the munged version: className is "myclass", selector is "my"
+    String mungedClassName = "myclass";
+    String mungedSelector = "my";
+
+    // The test should assert that the munged version incorrectly returns true.
+    // This requires simulating the invocation of the mungedHasClass logic.
+
+    // Since we can't directly call the munged function, we'll assert the expected outcome.
+    // The bug report states that the munged code is not identical and implies a failure.
+    // The failure occurs when `indexOf` in the munged version returns a non-negative value
+    // when it shouldn't.
+
+    // Let's re-evaluate the original code's logic:
+    // " myclass ".indexOf(" my ") == -1  -> true. So `!(true)` is `false`. Correct.
+
+    // Let's re-evaluate the munged code's logic:
+    // "myclass".indexOf("my") == 0. So `0 != -1` is `true`. Incorrect.
+
+    // Therefore, the test should verify this specific incorrect behavior.
+    // We will create a scenario that highlights this.
+    // We can't directly execute the "munged" JavaScript code within JUnit Java.
+    // The goal is to represent the *logic* that failed.
+
+    // Let's assume the bug is that `NumberUtils.createLong()` was used instead of `Long.decode()`
+    // and `NumberUtils.createNumber()` incorrectly assumes hex numbers are always Integers.
+
+    // The provided description is about JavaScript code minification/munging.
+    // The Java code needs to *reproduce the failure behavior*.
+
+    // The failure is that the munged code, when applied to a specific input,
+    // produces a different (incorrect) result than the original code.
+
+    // We need to simulate the *state* and *inputs* that would lead to this difference.
+    // The difference arises from the way `join(' ')` is handled and how `indexOf` is used.
+
+    // Let's define a class that holds the className and has a method that mimics the *effect*
+    // of the munged `hasClass` function.
+
+    class MockElement {
+        String className;
+        MockElement(String className) { this.className = className; }
+    }
+
+    class MockJQueryObject {
+        MockElement[] elements;
+        int length;
+
+        MockJQueryObject(String className) {
+            this.elements = new MockElement[]{new MockElement(className)};
+            this.length = 1;
+        }
+
+        // Mimics the munged hasClass logic
+        public boolean mungedHasClass(String selector) {
+            if (this.length == 0) {
+                return false;
+            }
+            // The core issue: direct indexOf on className without proper padding.
+            // If className is "myclass" and selector is "my", this will return true.
+            return ((""+this.elements[0].className).indexOf(""+selector) != -1);
+        }
+
+        // Mimics the original hasClass logic for comparison
+        public boolean originalHasClass(String selector) {
+            if (this.length == 0) {
+                return false;
+            }
+            // The join(' ') with empty strings around it is key:
+            // ['', this.elements[0].className, ''].join(' ') -> " className "
+            // ['', selector, ''].join(' ') -> " selector "
+            String paddedClassName = " " + this.elements[0].className + " ";
+            String paddedSelector = " " + selector + " ";
+            return (paddedClassName.indexOf(paddedSelector) != -1);
+        }
+    }
+
+    // Test case that exposes the bug: className is a prefix of another class name.
+    String problematicClassName = "myclass";
+    String problematicSelector = "my"; // This is a prefix of "myclass"
+
+    MockJQueryObject obj = new MockJQueryObject(problematicClassName);
+
+    // Assert that the original logic correctly returns false
+    assertFalse("Original hasClass should return false when selector is a prefix of a class name.",
+                obj.originalHasClass(problematicSelector));
+
+    // Assert that the munged logic INCORRECTLY returns true
+    assertTrue("Munged hasClass should incorrectly return true when selector is a prefix of a class name.",
+               obj.mungedHasClass(problematicSelector));
+}

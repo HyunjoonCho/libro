@@ -1,0 +1,67 @@
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.junit.jupiter.api.Test;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.util.zip.GZIPInputStream;
+
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.fail;
+
+public class TarExtractionTest {
+
+    @Test
+    public void testExtractTgzWithInvalidHeader() {
+        // Craft a minimal .tgz byte array that mimics the problematic header
+        // This is a simplified representation and might need adjustment
+        // based on the exact structure expected by commons-compress.
+        // The key is to create a GZIP stream that contains a Tar stream
+        // with a header that causes the IllegalArgumentException.
+        // The original error message "Invalid byte 0 at offset 5 in '05412\u000011' len=8"
+        // suggests an issue with parsing octal values in the tar header.
+
+        // A very basic GZIP header
+        byte[] gzipHeader = new byte[]{(byte) 0x1f, (byte) 0x8b, (byte) 0x08, (byte) 0x00};
+        // A Tar header that might cause issues (e.g., invalid characters or lengths)
+        // This is a placeholder and needs to be a valid-enough structure to pass GZIP
+        // but trigger the Tar header parsing error.
+        byte[] tarHeader = new byte[]{
+                '0', '5', '4', '1', '2', // Potential start of octal field
+                (byte) 0x00, // Null byte, likely causing the issue at offset 5
+                '1', '1', // More data
+                // ... rest of a minimal tar header (e.g., file size, mod time, etc.)
+                // For simplicity, we'll pad with zeros to approximate a header size.
+                // A real tar header is 512 bytes. We'll create a short one to trigger the error.
+        };
+        // Pad the tar header to a multiple of 512 for basic structure
+        byte[] paddedTarHeader = new byte[512];
+        System.arraycopy(tarHeader, 0, paddedTarHeader, 0, tarHeader.length);
+
+        // Combine gzip header and tar data
+        byte[] tgzBytes = new byte[gzipHeader.length + paddedTarHeader.length];
+        System.arraycopy(gzipHeader, 0, tgzBytes, 0, gzipHeader.length);
+        System.arraycopy(paddedTarHeader, 0, tgzBytes, gzipHeader.length, paddedTarHeader.length);
+
+        try (ByteArrayInputStream bais = new ByteArrayInputStream(tgzBytes);
+             GZIPInputStream gis = new GZIPInputStream(bais);
+             TarArchiveInputStream tarIn = new TarArchiveInputStream(gis)) {
+
+            ArchiveEntry entry = tarIn.getNextTarEntry();
+            // The test should fail when getNextTarEntry() is called if the input is crafted correctly
+            // to reproduce the bug. We expect an IOException due to the invalid header.
+            fail("Expected IOException for invalid tar header, but no exception was thrown.");
+
+        } catch (IOException e) {
+            // Check if the exception message contains the expected error details
+            String errorMessage = e.getMessage();
+            assertNotNull(errorMessage, "IOException message should not be null");
+            if (!(errorMessage.contains("Error detected parsing the header") ||
+                  errorMessage.contains("Invalid byte 0 at offset 5"))) {
+                fail("Caught IOException, but with an unexpected message: " + errorMessage);
+            }
+            // Successfully reproduced the error
+        } catch (Exception e) {
+            fail("Caught unexpected exception type: " + e.getClass().getName() + " - " + e.getMessage());
+        }
+    }
+}

@@ -1,0 +1,76 @@
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.fail;
+
+public class ClosureCompilerStackOverflowTest {
+
+    @Test
+    public void testStackOverflowWithSpecificJavaScript() {
+        String javascriptCode = "var __extends = this.__extends || function (d, b) {\n" +
+                "    for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];\n" +
+                "    function __() { this.constructor = d; }\n" +
+                "    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());\n" +
+                "};\n" +
+                "var AdMedia;\n" +
+                "(function (AdMedia) {\n" +
+                "    var MediaManager = (function () {\n" +
+                "        function MediaManager(opts) {\n" +
+                "            this.options = opts;\n" +
+                "        }\n" +
+                "        MediaManager.prototype.add = function (media) {\n" +
+                "            this.options.medias.push(media);\n" +
+                "        };\n" +
+                "        return MediaManager;\n" +
+                "    })();\n" +
+                "    AdMedia.MediaManager = MediaManager;\n" +
+                "})(AdMedia || (AdMedia = {}));\n" +
+                "var adMediaManager = new AdMedia.MediaManager({\n" +
+                "    medias: []\n" +
+                "});\n" +
+                "var Media = (function (_super) {\n" +
+                "    __extends(Media, _super);\n" +
+                "    function Media(options) {\n" +
+                "        _super.call(this, options);\n" +
+                "    }\n" +
+                "    return Media;\n" +
+                "})(AdMedia.MediaManager);\n" +
+                "var media = new Media({\n" +
+                "    medias: []\n" +
+                "});\n" +
+                "adMediaManager.add(media);\n"; // This is a simplified version of the problematic JS. The original AdMedia.eam.js is too large to include here.
+
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        // Set options to a reasonable default, or specific ones that might trigger the bug.
+        // The original report doesn't specify options, so defaults might be sufficient.
+        options.setPrettyPrint(false);
+        options.setLineNumberCheck(false);
+
+        SourceFile externs = SourceFile.fromCode("externs.js", "function alert(s) {}");
+        SourceFile mainSource = SourceFile.fromCode("AdMedia.eam.js", javascriptCode);
+
+        try {
+            compiler.compile(externs, mainSource, options);
+            // If compile succeeds without exception, the test should fail.
+            // The bug is the StackOverflowError during compilation.
+            fail("Expected StackOverflowError, but compilation succeeded.");
+        } catch (RuntimeException e) {
+            // Check if the cause is indeed a StackOverflowError
+            Throwable cause = e.getCause();
+            boolean stackOverflowFound = false;
+            while (cause != null) {
+                if (cause instanceof StackOverflowError) {
+                    stackOverflowFound = true;
+                    break;
+                }
+                cause = cause.getCause();
+            }
+            if (!stackOverflowFound) {
+                fail("Expected StackOverflowError, but got a different RuntimeException: " + e.getMessage());
+            }
+            // If StackOverflowError is found, the test passes as it reproduces the bug.
+        }
+    }
+}

@@ -1,0 +1,34 @@
+public void testProcessRequireCall_invalidRequire() {
+    Node requireNode = new Node(Token.CALL).setLength(1);
+    Node invalidSymbol = new Node(Token.STRING, "invalid.symbol").setLength(1);
+    requireNode.addChildToBack(invalidSymbol);
+
+    Compiler compiler = new Compiler();
+    compiler.ப்புக்(new PassFactory("testPass", null, null) {
+        @Override
+        public CompilerPass get() {
+            return new ProcessClosurePrimitives(compiler) {
+                @Override
+                protected void processRequireCall(Node requireNode, Scope scope) {
+                    // Simulate the bug by forcing requiresLevel to be on
+                    // and ensuring the invalid symbol is not found (which is the default behavior)
+                    // The original bug removes the node even when it's invalid and requiresLevel is on
+                    // This test checks that the invalid node is NOT removed.
+                    super.processRequireCall(requireNode, scope);
+                }
+            };
+        }
+    });
+
+    // Mock a minimal environment for ProcessClosurePrimitives
+    Node root = new Node(Token.SCRIPT, requireNode).setLength(1);
+    compiler.parseInputs(new SourceFile("test.js", "goog.require('invalid.symbol');"));
+    compiler.ப்புக்(compiler.getPassConfig().getIntermediatePasses()).execute();
+
+    // Assert that the invalid require node is still present in the AST
+    // The bug would have removed it.
+    assertNotNull(root.getheasternNodes().stream()
+            .filter(n -> n.getType() == Token.CALL && n.getChildCount() > 0 && n.getFirstChild().getString().equals("invalid.symbol"))
+            .findFirst()
+            .orElse(null));
+}

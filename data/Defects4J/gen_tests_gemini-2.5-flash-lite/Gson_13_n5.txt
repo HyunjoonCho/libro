@@ -1,0 +1,73 @@
+import com.google.gson.Gson;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import org.junit.Test;
+
+import java.io.StringReader;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+
+public class GsonNegativeZeroTest {
+
+    @Test
+    public void testNegativeZeroLexicalPreservation() throws Exception {
+        Gson gson = new Gson();
+        String jsonInput = "-0";
+
+        JsonReader reader = new JsonReader(new StringReader(jsonInput));
+        reader.setLenient(false); // Ensure strict JSON parsing
+
+        // Manually parse to inspect the token type and value before Gson processes it
+        reader.peek(); // Advance to the first token
+        assertEquals(JsonToken.NUMBER, reader.peek());
+
+        // Gson's default behavior will parse -0 as a long 0
+        // We need to capture the string representation *before* Gson converts it to a Number
+        // This requires a bit of a workaround or a custom setup if we want to test Gson's internal handling.
+        // However, the bug report implies that -0 is treated as 0.
+        // A roundtrip test is the most direct way to show the issue as described.
+
+        // Test 1: Roundtrip -0 should ideally result in "-0" or "-0.0"
+        // The bug report states it currently results in "0"
+        Object obj = gson.fromJson(jsonInput, Object.class);
+        String result = gson.toJson(obj);
+
+        // The bug is that -0 parsed as a number becomes 0, and toJson(0) is "0", not "-0"
+        assertNotEquals("Negative zero lexical value was not preserved", "0", result);
+        // Depending on the exact interpretation, we might expect "-0" or "-0.0"
+        // The bug report implies it becomes "0" so we test for that incorrect outcome.
+        // If the fix is applied, the roundtrip should yield "-0" or "-0.0"
+        // Let's assert that it's not "0" which is the faulty behavior.
+        // A successful roundtrip for -0 should result in "-0" or "-0.0".
+        // The bug is that it's parsed as 0 and serialized as "0".
+
+        // Let's also explicitly check the string representation of the parsed number
+        // This requires accessing LazilyParsedNumber if the type is known, or using a custom type adapter.
+        // For simplicity and directness based on the bug report's description of the *outcome*,
+        // we focus on the roundtrip serialization.
+
+        // Re-parsing to explicitly check the string value if it were a LazilyParsedNumber
+        // This part is tricky without modifying Gson or using internal APIs.
+        // The core issue is that `JsonReader.nextLong()` on "-0" returns 0.
+        // A direct test of `JsonReader` behavior would be:
+        JsonReader readerForCheck = new JsonReader(new StringReader(jsonInput));
+        readerForCheck.peek(); // Advance to NUMBER
+        long longValue = readerForCheck.nextLong();
+        assertEquals("nextLong() should return 0 for '-0'", 0L, longValue);
+        // This confirms the internal parsing issue before it even gets to LazilyParsedNumber's toString.
+
+        // The fix described is to treat -0 as a PEEKED_NUMBER (string) instead of PEEKED_LONG.
+        // So, the roundtrip of "-0" should result in "-0".
+        // If the original code is used, gson.fromJson("-0", Object.class) will be 0 (Long),
+        // and gson.toJson(0L) is "0".
+        // With the fix, gson.fromJson("-0", Object.class) should be a LazilyParsedNumber
+        // whose toString() returns "-0".
+        // Therefore, the roundtrip should be "-0".
+
+        // Testing the *expected* behavior after the fix:
+        // If the fix is applied, the roundtrip should correctly produce "-0"
+        // This test will fail with the original code and pass with the fix.
+        assertEquals("Roundtrip of '-0' should result in '-0' after fix", "-0", result);
+    }
+}

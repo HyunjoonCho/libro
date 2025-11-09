@@ -1,0 +1,41 @@
+public void testBigUserId() throws Exception {
+    byte[] header = new byte[512];
+    // Set a user ID that is too large for a standard octal representation
+    // 62410554 in decimal is larger than the maximum value representable by 7 octal digits
+    // which is 7777777 (octal) = 4095 (decimal).
+    // The bug occurs when TarUtils.parseOctal tries to parse this value.
+    // We simulate the header bytes for a TarArchiveEntry.
+    // The user ID field is at offset 264 in the tar header.
+    // We need to fill the header with null bytes first, then set the user ID.
+    Arrays.fill(header, (byte) 0);
+    String userIdStr = "62410554"; // This is the problematic value from the description
+    byte[] userIdBytes = userIdStr.getBytes(StandardCharsets.US_ASCII);
+    System.arraycopy(userIdBytes, 0, header, 264, userIdBytes.length);
+    // Ensure the field is null-terminated if it's shorter than 8 bytes
+    if (userIdBytes.length < 8) {
+        header[264 + userIdBytes.length] = 0;
+    } else {
+        header[264 + 8] = 0; // Null terminate after 8 bytes if the string is exactly 8 bytes
+    }
+
+    // The TarArchiveEntry constructor expects an InputStream, but we can directly test
+    // the parsing logic by creating a mock TarArchiveInputStream and feeding it the header.
+    // However, the stack trace shows the error happens during TarArchiveEntry creation
+    // which takes the header bytes. Let's try to instantiate TarArchiveEntry directly
+    // if possible, or simulate the scenario.
+
+    // The TarArchiveEntry constructor used in the stack trace is:
+    // TarArchiveEntry(byte[] header) - this is not public.
+    // The entry is created within TarArchiveInputStream.getNextTarEntry.
+    // We need to mock TarArchiveInputStream to return our crafted header.
+
+    // Let's simplify and try to call the problematic TarUtils.parseOctal directly
+    // with the problematic string to confirm the failure.
+    // The TarUtils.parseOctal method is static.
+    try {
+        TarUtils.parseOctal(header, 264, 8); // Offset 264, length 8 for user ID
+        fail("Expected IllegalArgumentException for invalid byte in octal string");
+    } catch (IllegalArgumentException e) {
+        assertTrue(e.getMessage().contains("Invalid byte 52 at offset 7 in '62410554'"));
+    }
+}

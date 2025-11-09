@@ -1,0 +1,111 @@
+public void testNonJsDocCommentHandling() {
+    String code = "/* @preserve Foo License */\nalert('foo');";
+    CompilerOptions options = new CompilerOptions();
+    options.setWarningLevel(DiagnosticGroups.PARSE_ERROR, CheckLevel.WARNING);
+    // We expect a warning here, but the test framework doesn't directly expose compiler warnings.
+    // Instead, we'll check if the code is compiled successfully, implying the comment
+    // was either preserved or handled without fatal errors.
+    // If the bug was that it failed compilation, this test would fail.
+    // If the bug was that it gave a spurious warning, we can't assert that directly here.
+    // The description implies the *real* issue is inconsistent handling,
+    // and the example shows a warning that might be misleading.
+    // For the purpose of *reproducing the failure*, we'll assume the failure
+    // is that a non-JSDoc comment with annotations causes issues, and that
+    // a valid compilation *should* occur, possibly with warnings.
+
+    // A more direct reproduction would involve parsing the output for the specific warning message.
+    // However, without direct access to the compiler's warning output in a testable format,
+    // we'll focus on the compilation outcome.
+
+    // Let's try the '/\*!' variant mentioned in the description as a control.
+    String codeWithBang = "/*! @preserve Foo License */\nalert('foo');";
+
+    // The bug report states that "It spits out: ... WARNING - Parse error. Non-JSDoc comment has annotations. Did you mean to start it with '/**'?"
+    // This indicates that the original code *did* produce a warning during compilation.
+    // The test should attempt to compile the problematic code and assert that it *doesn't* fail catastrophically,
+    // and ideally, that the comment is preserved or handled as expected by the user's intent (even if the compiler warns).
+
+    // Since we can't easily assert specific warnings with the standard Compiler API in JUnit,
+    // let's focus on the fact that the original code *does* produce a warning.
+    // A test that *fails* because of this warning would be the most direct reproduction.
+    // However, the prompt asks to reproduce the *failure behavior*. The failure behavior described
+    // is the warning itself and the confusion it causes.
+
+    // Let's simulate the environment where the warning occurs.
+    // The key is that `/* @preserve ... */` *should not* be treated as an error or a fatal warning.
+    // The bug is that it *is* treated as such.
+
+    // We can try to compile the code and see if it produces any errors.
+    // If it produces the *specific* warning mentioned, that's the reproduction.
+    // If it produces a fatal error, that's also a reproduction of a failure.
+
+    // Given the prompt, the most direct interpretation is to test the specific input that triggers the described behavior.
+    // The behavior is:
+    // 1. Input: `/* @preserve Foo License */\nalert("foo");`
+    // 2. Expected: A warning about non-JSDoc comment annotations.
+    // 3. Actual: The warning is produced.
+
+    // To *reproduce* this in a JUnit test, we'd ideally check the compiler's diagnostics.
+    // The `com.google.javascript.jscomp.Compiler` class has a `compile` method that takes `SourceFile` and `CompilerOptions`,
+    // and returns a `JSError[]`. We can check these errors.
+
+    Compiler compiler = new Compiler();
+    SourceFile externs = SourceFile.fromCode("externs.js", "function alert(x) {}");
+    SourceFile input = SourceFile.fromCode("input.js", code);
+
+    CompilerOptions options = new CompilerOptions();
+    // Setting a specific warning level for parse errors can help ensure we catch them.
+    options.setWarningLevel(DiagnosticGroups.PARSE_ERROR, CheckLevel.WARNING);
+    options.setPrettyPrint(true); // Helps in debugging if needed
+
+    // The bug report implies that the code *compiles* but with a warning.
+    // So, we expect `compile()` to return non-null errors, but no fatal errors.
+    JSError[] errors = compiler.compile(externs, input, options);
+
+    // The bug report says: "0 error(s), 1 warning(s)".
+    // So, we expect the array of errors to contain exactly one warning.
+    // We also need to check the *type* of the warning.
+    assertNotNull("Compilation should produce diagnostics.", errors);
+    assertEquals("Expected exactly one warning.", 1, errors.length);
+
+    // Now, let's check the specific warning message or code.
+    // The message is: "Parse error. Non-JSDoc comment has annotations. Did you mean to start it with '/**'?"
+    // The diagnostic code for this is often `JSC_PARSE_ERROR`.
+    // Looking at Closure Compiler source, the specific code is `JSC_NON_JSDOC_ANNOTATION`.
+    // Let's try to find it by message content as it's more robust against minor changes.
+    boolean foundSpecificWarning = false;
+    for (JSError error : errors) {
+        // The exact message might change slightly, so check for key phrases.
+        if (error.getMessage().contains("Non-JSDoc comment has annotations") &&
+            error.getMessage().contains("Did you mean to start it with '/**'?")) {
+            foundSpecificWarning = true;
+            // Also check that it's indeed a warning, not an error.
+            // JSError itself doesn't store level, but the compiler.diagnostics map does.
+            // However, the compile method returns all diagnostics, so we rely on the count.
+            // The bug report explicitly states "1 warning(s)".
+            break;
+        }
+    }
+    assertTrue("The specific warning about non-JSDoc annotations was not found.", foundSpecificWarning);
+
+    // Additionally, the code should still be compilable and the comment *should* be preserved
+    // according to the user's expectation for `@preserve`.
+    // The bug is that the warning causes confusion or implies an error where there isn't one.
+    // The fact that the code compiles *with* the warning is the reproduction.
+    // If the code *failed* to compile, that would be a different bug.
+    // The user's expectation is that the comment is preserved, and the warning is confusing.
+    // So, the test passes if the warning occurs as described.
+
+    // Let's also test the '/\*!' case mentioned, which *should not* produce this warning.
+    Compiler compilerBang = new Compiler();
+    SourceFile inputBang = SourceFile.fromCode("input_bang.js", codeWithBang);
+    JSError[] errorsBang = compilerBang.compile(externs, inputBang, options);
+
+    // Expecting no errors or warnings for the '/*!' case, or at least not the specific parse error.
+    // The bug report implies '/*!' *removes* the warning, so this should be clean.
+    assertNotNull("Compilation of '/*!' variant should produce diagnostics (even if empty).", errorsBang);
+    // We expect no errors/warnings related to the comment itself for the '/*!' version.
+    // If there are other warnings unrelated to this specific issue, this assertion might fail.
+    // For simplicity, let's assume clean compilation for '/*!'.
+    assertTrue("Expected no warnings/errors for '/*!' variant.", errorsBang.length == 0);
+}

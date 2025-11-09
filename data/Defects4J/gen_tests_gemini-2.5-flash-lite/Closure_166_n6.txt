@@ -1,0 +1,125 @@
+public void testAnonymousObjectTypeInference() {
+    // This test case is a direct translation of the JavaScript example.
+    // The original issue highlights a type inference inconsistency in a specific JavaScript environment (likely Closure Compiler).
+    // Java's static typing and object-oriented nature do not directly map to this specific JavaScript behavior.
+    // Therefore, this test serves to document the reported issue conceptually rather than to reproduce a direct Java compilation error.
+
+    // To simulate the scenario, we'll create classes that mimic the described types.
+    // The core of the bug is about how the compiler handles unions and anonymous types.
+
+    // Anonymous object type for 'func'
+    class FuncRecord {
+        String prop;
+
+        FuncRecord(String prop) {
+            this.prop = prop;
+        }
+    }
+
+    // Anonymous object type for 'func2' (part of the union)
+    class Func2Record {
+        String prop;
+        String prop2; // Optional property in JS, represented as nullable String here
+
+        Func2Record(String prop) {
+            this.prop = prop;
+        }
+    }
+
+    // Method 'func' equivalent
+    Runnable func = (record) -> {
+        // In a real scenario, this would access record.prop
+        System.out.println(((FuncRecord) record).prop);
+    };
+
+    // Method 'func2' equivalent
+    // This method takes a union of String and Func2Record
+    // The bug described is that passing an object structurally identical to Func2Record
+    // but not explicitly typed as such, causes a type error.
+    // In Java, we would typically use a common interface or superclass, or rely on polymorphism.
+    // Here, we'll simulate the problematic call.
+
+    // The JavaScript error is:
+    // found : {prop: string}
+    // required: (string|{prop: string, prop2: (string|undefined)})
+
+    // This implies that the object literal {prop: 'a'} is not being correctly
+    // inferred as a subtype of the required type in the context of the union.
+
+    // To demonstrate the *concept* of the bug in Java, we'll try to call a method
+    // that expects a union type with a compatible anonymous-like object.
+    // Java's type system is stricter and less prone to this *exact* kind of inference issue
+    // with anonymous types in unions, but we can illustrate the spirit.
+
+    // Let's define a method that accepts the union type.
+    // We'll use Object and runtime checks to mimic the JS dynamic typing to some extent,
+    // although this is not idiomatic Java.
+    class Func2Method {
+        public void func2(Object record) {
+            if (record instanceof String) {
+                System.out.println((String) record);
+            } else if (record instanceof Func2Record) {
+                System.out.println(((Func2Record) record).prop);
+            } else {
+                // This branch would ideally not be reached if types were correctly inferred/handled.
+                // In the JS bug, passing {prop: 'a'} would hit an issue *before* this point.
+                throw new IllegalArgumentException("Unexpected type: " + record.getClass());
+            }
+        }
+    }
+
+    Func2Method func2Invoker = new Func2Method();
+
+    // The problematic call in JS: func2({prop: 'a'});
+    // In Java, we'd create an instance of a compatible type.
+    // If we create an instance that *looks like* Func2Record but isn't explicitly cast or typed,
+    // that's where the JS bug manifests.
+
+    // Simulating the JS object literal: {prop: 'a'}
+    // This object *should* be compatible with Func2Record's structure.
+    Func2Record compatibleRecord = new Func2Record("a");
+
+    // The core of the JS bug: the compiler *expects* a type that includes `prop2` (even if undefined)
+    // when it's part of the union, and it fails to recognize `compatibleRecord` as such.
+    // In Java, we would typically pass `compatibleRecord` directly if the method accepted `Func2Record`.
+    // The issue arises when the compiler gets confused about the *specific* anonymous type within a union.
+
+    // To "reproduce" the error, we need to force a situation where a type that *should* be
+    // assignable to the union type is rejected. This is hard to do directly in Java
+    // without a specific type system feature that mirrors the JS compiler's flaw.
+
+    // However, we can assert that passing a `Func2Record` to a method expecting
+    // `String | Func2Record` *should* work. The failure in the bug report is that
+    // it *doesn't* work for a structurally similar anonymous type.
+
+    // Let's assume for the sake of this test that `func2Invoker.func2` is the method
+    // with the problematic signature.
+    // The JS error implies that passing an object that *only* has `prop` is rejected,
+    // even though `prop2` is optional (`string|undefined`).
+
+    // We can test the *expected* correct behavior in Java:
+    // Passing a concrete type that matches one part of the union.
+    func2Invoker.func2("a string"); // Should work
+    func2Invoker.func2(compatibleRecord); // Should work in correct Java typing
+
+    // The JS bug is that `func2({prop: 'a'})` fails.
+    // This is equivalent to `func2Invoker.func2(new Object() { String prop = "a"; });` if we were truly using anonymous objects.
+    // But Java requires more explicit typing or a common interface for such scenarios.
+
+    // Since we cannot directly create the exact JS inference failure in Java,
+    // this test primarily serves as documentation of the bug's nature.
+    // A direct assertion of failure is not possible without replicating the faulty JS compiler logic.
+
+    // If we were to *force* a failure scenario conceptually, it would involve
+    // trying to pass an object that is structurally compatible but not recognized
+    // as such by the type checker due to the union context.
+
+    // For example, if the JS compiler was *extremely* strict and required the
+    // anonymous object to *explicitly* declare `prop2` as `undefined` or missing,
+    // and failed if it only declared `prop`.
+
+    // Given the limitations, the best we can do is acknowledge the bug and
+    // ensure that in Java, compatible types *are* handled correctly.
+    // The absence of a runtime exception here implies the *correct* Java behavior,
+    // contrasting with the reported JS *incorrect* behavior.
+}

@@ -1,0 +1,36 @@
+public void testDuplicateHeaderNames() throws IOException {
+    String csvData = "Col1,Col2,Col2,Col3,Col4\n1,2,3,4,5\n4,5,6,7,8";
+    CSVFormat myFormat = CSVFormat.RFC4180.withDelimiter(",").withQuoteChar('"').withQuotePolicy(Quote.MINIMAL)
+            .withIgnoreSurroundingSpaces(true).withHeader().withSkipHeaderRecord(true);
+
+    StringReader reader = new StringReader(csvData);
+    CSVParser parser = new CSVParser(reader, myFormat);
+
+    try {
+        List<CSVRecord> records = parser.getRecords();
+        assertThat(records, hasSize(2));
+
+        CSVRecord record1 = records.get(0);
+        // When duplicate header names exist, the HeaderMap will only contain the last occurrence.
+        // This assertion checks that the second 'Col2' overwrites the first.
+        assertEquals("3", record1.get("Col2"));
+        assertEquals("4", record1.get("Col3"));
+        assertEquals("5", record1.get("Col4"));
+
+        CSVRecord record2 = records.get(1);
+        assertEquals("6", record2.get("Col2"));
+        assertEquals("7", record2.get("Col3"));
+        assertEquals("8", record2.get("Col4"));
+
+        // This assertion demonstrates that accessing the first 'Col2' is not possible as expected.
+        assertThrows(IllegalArgumentException.class, () -> record1.get("Col1")); // This would be the expected behavior if no exception is thrown
+        // The actual behavior is that the second "Col2" overwrites the first, so we can only access the last one.
+        // The bug report implies that the parser should either handle this more gracefully or throw an error.
+        // For the purpose of reproducing the described behavior, we will assert that the last "Col2" is accessible.
+        assertEquals("3", record1.get("Col2"));
+
+
+    } finally {
+        parser.close();
+    }
+}

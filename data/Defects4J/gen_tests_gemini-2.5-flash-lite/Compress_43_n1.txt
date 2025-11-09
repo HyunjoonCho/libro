@@ -1,0 +1,48 @@
+public void testZipVersionNeededToExtractMismatch() throws IOException {
+    File zipFile = new File("test-zip-version-mismatch.zip");
+    ZipArchiveOutputStream zaos = null;
+    try {
+        zaos = new ZipArchiveOutputStream(new BufferedOutputStream(new FileOutputStream(zipFile)));
+        ZipArchiveEntry entry = new ZipArchiveEntry("test.txt");
+        entry.setMethod(ZipEntry.DEFLATED);
+        zaos.putArchiveEntry(entry);
+        zaos.write("This is a test.".getBytes());
+        zaos.closeArchiveEntry();
+        zaos.finish();
+
+        try (ZipFile zip = new ZipFile(zipFile)) {
+            ZipArchiveEntry localEntry = zip.getEntry("test.txt");
+            ZipArchiveEntry centralEntry = null;
+            for (ZipArchiveEntry ze : zip.getEntries()) {
+                if (ze.getName().equals("test.txt")) {
+                    centralEntry = ze;
+                    break;
+                }
+            }
+
+            assertNotNull("Local entry not found", localEntry);
+            assertNotNull("Central directory entry not found", centralEntry);
+
+            // Version needed to extract for local header should be 20 (0x14) if DEFLATED
+            // Version needed to extract for central directory should be 20 (0x14) if DEFLATED and data descriptors are used
+            // The bug description implies that the local header might be using INITIAL_VERSION (10)
+            // and the central directory is correctly calculating DATA_DESCRIPTOR_MIN_VERSION (20).
+            // The assertion checks for this specific mismatch.
+            assertEquals("Local header version needed to extract mismatch", 20, localEntry.getVersionRequired());
+            assertEquals("Central directory version needed to extract mismatch", 20, centralEntry.getVersionRequired());
+
+            // If the bug is that the local header is incorrectly set to 10, this assertion would fail.
+            // The specific bug described is that local and central directory DO NOT match.
+            // The code provided suggests the local header might be 10 and central 20.
+            // We will assert that they are NOT equal, and then check the expected values.
+            assertNotEquals("Local and central directory version needed to extract should not match if bug is present",
+                    localEntry.getVersionRequired(), centralEntry.getVersionRequired());
+        }
+
+    } finally {
+        IOUtils.closeQuietly(zaos);
+        if (zipFile.exists()) {
+            zipFile.delete();
+        }
+    }
+}

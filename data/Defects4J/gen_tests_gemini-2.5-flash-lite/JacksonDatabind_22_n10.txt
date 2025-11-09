@@ -1,0 +1,43 @@
+public void testJsonValueCustomSerializerPrecedence() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    
+    // Custom serializer for the type with @JsonValue
+    module.addSerializer(new JsonSerializer<MyValueObject>() {
+        @Override
+        public void serialize(MyValueObject value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+            gen.writeString("CustomSerializedValue");
+        }
+    });
+    mapper.registerModule(module);
+
+    MyValueObject obj = new MyValueObject("test");
+    
+    // This should use the custom serializer, but it doesn't due to @JsonValue precedence
+    String json = mapper.writeValueAsString(obj);
+    
+    assertEquals("CustomSerializedValue", json.replace("\"", ""));
+}
+
+// Helper class for the test
+@JsonSerialize(using = MyValueObject.MyValueObjectSerializer.class)
+static class MyValueObject {
+    private final String value;
+
+    public MyValueObject(String value) {
+        this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+        return value;
+    }
+
+    // This serializer is registered with @JsonSerialize, but should be overridden by the custom serializer
+    public static class MyValueObjectSerializer extends JsonSerializer<MyValueObject> {
+        @Override
+        public void serialize(MyValueObject value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+            gen.writeString("DefaultSerializedValue_" + value.getValue());
+        }
+    }
+}

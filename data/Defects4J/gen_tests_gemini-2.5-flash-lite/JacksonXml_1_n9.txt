@@ -1,0 +1,152 @@
+import org.junit.Test;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
+import java.util.List;
+import java.util.ArrayList;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+public class ListDeserializationTest {
+
+    public static class Field {
+        public String name;
+        public String value;
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Field field = (Field) o;
+            if (name != null ? !name.equals(field.name) : field.name != null) return false;
+            return value != null ? value.equals(field.value) : field.value == null;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = name != null ? name.hashCode() : 0;
+            result = 31 * result + (value != null ? value.hashCode() : 0);
+            return result;
+        }
+    }
+
+    public static class Record {
+        @JsonUnwrapped
+        public List<Field> fields;
+
+        public Record() {
+        }
+
+        public Record(List<Field> fields) {
+            this.fields = fields;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Record record = (Record) o;
+            return fields != null ? fields.equals(record.fields) : record.fields == null;
+        }
+
+        @Override
+        public int hashCode() {
+            return fields != null ? fields.hashCode() : 0;
+        }
+    }
+
+    public static class Definition {
+        @JsonUnwrapped
+        public List<Record> records;
+
+        public Definition() {
+        }
+
+        public Definition(List<Record> records) {
+            this.records = records;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Definition that = (Definition) o;
+            return records != null ? records.equals(that.records) : that.records == null;
+        }
+
+        @Override
+        public int hashCode() {
+            return records != null ? records.hashCode() : 0;
+        }
+    }
+
+    @Test
+    public void testNestedNonWrappedEmptyInnerList() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        // Case 1: Inner list is empty
+        String jsonEmptyInner = "{" +
+                "\"records\": [" +
+                "  {" +
+                "    \"fields\": []" +
+                "  }" +
+                "]" +
+                "}";
+        Definition definitionEmptyInner = mapper.readValue(jsonEmptyInner, Definition.class);
+        assertNotNull(definitionEmptyInner);
+        assertNotNull(definitionEmptyInner.records);
+        assertEquals(1, definitionEmptyInner.records.size());
+        assertNotNull(definitionEmptyInner.records.get(0).fields);
+        assertEquals(0, definitionEmptyInner.records.get(0).fields.size());
+
+        // Case 2: Inner list is null (should also be handled gracefully)
+        String jsonNullInner = "{" +
+                "\"records\": [" +
+                "  {" +
+                "    \"fields\": null" +
+                "  }" +
+                "]" +
+                "}";
+        Definition definitionNullInner = mapper.readValue(jsonNullInner, Definition.class);
+        assertNotNull(definitionNullInner);
+        assertNotNull(definitionNullInner.records);
+        assertEquals(1, definitionNullInner.records.size());
+        assertNotNull(definitionNullInner.records.get(0).fields); // Expecting null, Jackson might create an empty list depending on configuration
+        assertEquals(0, definitionNullInner.records.get(0).fields.size()); // Or assert that it's null if that's the expected behavior
+
+        // Case 3: More complex scenario with multiple records and empty inner lists
+        String jsonMultipleRecordsEmptyInner = "{" +
+                "\"records\": [" +
+                "  {" +
+                "    \"fields\": [{\"name\": \"field1\", \"value\": \"value1\"}]" +
+                "  }," +
+                "  {" +
+                "    \"fields\": []" +
+                "  }," +
+                "  {" +
+                "    \"fields\": [{\"name\": \"field2\", \"value\": \"value2\"}]" +
+                "  }" +
+                "]" +
+                "}";
+        Definition definitionMultipleRecordsEmptyInner = mapper.readValue(jsonMultipleRecordsEmptyInner, Definition.class);
+        assertNotNull(definitionMultipleRecordsEmptyInner);
+        assertNotNull(definitionMultipleRecordsEmptyInner.records);
+        assertEquals(3, definitionMultipleRecordsEmptyInner.records.size());
+
+        // Check first record
+        assertNotNull(definitionMultipleRecordsEmptyInner.records.get(0).fields);
+        assertEquals(1, definitionMultipleRecordsEmptyInner.records.get(0).fields.size());
+        assertEquals("field1", definitionMultipleRecordsEmptyInner.records.get(0).fields.get(0).name);
+        assertEquals("value1", definitionMultipleRecordsEmptyInner.records.get(0).fields.get(0).value);
+
+        // Check second record (empty fields)
+        assertNotNull(definitionMultipleRecordsEmptyInner.records.get(1).fields);
+        assertEquals(0, definitionMultipleRecordsEmptyInner.records.get(1).fields.size());
+
+        // Check third record
+        assertNotNull(definitionMultipleRecordsEmptyInner.records.get(2).fields);
+        assertEquals(1, definitionMultipleRecordsEmptyInner.records.get(2).fields.size());
+        assertEquals("field2", definitionMultipleRecordsEmptyInner.records.get(2).fields.get(0).name);
+        assertEquals("value2", definitionMultipleRecordsEmptyInner.records.get(2).fields.get(0).value);
+    }
+}

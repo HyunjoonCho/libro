@@ -1,0 +1,62 @@
+import com.fasterxml.jackson.core.JsonEncoding;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonFactory;
+import org.junit.Test;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+
+import static org.junit.Assert.fail;
+
+public class JsonGenerationExceptionTest {
+
+    @Test
+    public void testSplitSurrogateOnWriteRaw() {
+        JsonFactory jsonFactory = new JsonFactory();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try {
+            JsonGenerator generator = jsonFactory.createGenerator(out, JsonEncoding.UTF8);
+            generator.writeStartObject();
+            // Constructing a string that triggers the issue.
+            // The exact length and content might need tuning based on Jackson version.
+            // This example aims to create a scenario where a multi-byte character
+            // falls at a boundary that causes issues in buffering.
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < 1000; i++) { // Adjust loop count as needed
+                sb.append('x');
+            }
+            // Add a character that is part of a surrogate pair or a multi-byte character
+            sb.append('\uD800'); // High surrogate
+            sb.append('\uD800'); // High surrogate again to potentially cause split
+            generator.writeRawValue(sb.toString());
+            generator.writeEndObject();
+            generator.close();
+        } catch (IOException e) {
+            // The specific exception mentioned in the bug report is JsonGenerationException
+            // We are asserting that this exception (or a related one due to the same cause)
+            // should NOT be thrown in a corrected version.
+            // If the bug is present, an exception will be caught here, and we'll fail the test.
+            // If no exception is thrown, the test passes.
+            // However, to reproduce the *failure*, we expect an exception to be thrown.
+            // So, if the exception *is* thrown, the test should fail to indicate the bug.
+            // If the bug is fixed, no exception will be thrown and the test will pass.
+            // To *reproduce the failure*, we need to catch the specific exception and assert it happened.
+            // But the request is to *reproduce the failure behavior*, implying the test *should* fail.
+            // A better approach for a reproducer is to expect the exception.
+             if (e instanceof com.fasterxml.jackson.core.JsonGenerationException) {
+                 // This is the expected failure scenario.
+                 // To make the test *fail* when the bug exists, we can re-throw or assertFail.
+                 // For the purpose of this request, we'll assume the test *should* fail if the bug is present.
+                 // If the bug is fixed, this catch block won't be hit.
+                 fail("JsonGenerationException was thrown, reproducing the bug: " + e.getMessage());
+             } else {
+                 // Unexpected exception
+                 fail("An unexpected exception occurred: " + e.getMessage());
+             }
+        }
+        // If no exception is thrown, the test passes (meaning the bug is fixed or not triggered by this input)
+        // For a reproducer, we want to ensure the test *fails* if the bug is present.
+        // The current setup will pass if the bug is fixed and fail if it's not.
+        // To strictly reproduce the failure *as described*, the test should be designed to fail.
+        // The simplest way is to expect the exception.
+    }
+}

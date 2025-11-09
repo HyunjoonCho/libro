@@ -1,0 +1,33 @@
+public void testJsonStreamContexts() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    FilterProvider filters = new SimpleFilterProvider().addFilter("myFilter", SimpleBeanPropertyFilter.filterOutAllExcept("field1"));
+    mapper.setFilters(filters);
+
+    ObjectWriter writer = mapper.writer(filters);
+    ObjectReader reader = mapper.reader(filters);
+
+    String json = "{\"field1\": \"value1\", \"field2\": \"value2\"}";
+
+    // Test with writeContext
+    StringWriter sw = new StringWriter();
+    JsonGenerator gen = mapper.getFactory().createGenerator(sw);
+    gen.setFilterProvider(filters);
+    gen.writeStartObject();
+    gen.writeStringField("field1", "value1");
+    gen.writeStringField("field2", "value2");
+    gen.writeEndObject();
+    gen.close();
+    String writtenJson = sw.toString();
+    Object readObjectFromWritten = reader.readValue(writtenJson);
+    assertTrue(readObjectFromWritten.toString().contains("field1=value1"));
+    assertFalse(readObjectFromWritten.toString().contains("field2=value2"));
+
+
+    // Test with convert method
+    Object readObjectFromConvert = mapper.readValue(json, Object.class);
+    // This is where the problem is: the filtering is not applied
+    // and the object still contains field2
+    assertTrue(readObjectFromConvert.toString().contains("field1=value1"));
+    assertTrue(readObjectFromConvert.toString().contains("field2=value2"));
+
+}

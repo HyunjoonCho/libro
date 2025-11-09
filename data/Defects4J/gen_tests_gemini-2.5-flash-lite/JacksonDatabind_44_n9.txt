@@ -1,0 +1,44 @@
+public void testPolymorphicWithDefaultImpl() throws Exception {
+    // Define a base type with a property
+    abstract class BaseType {
+        public String baseProperty;
+    }
+
+    // Define a subtype that extends the base type and has its own property
+    class DerivedType extends BaseType {
+        public String derivedProperty;
+    }
+
+    // Define an interface with a default implementation
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
+    @JsonSubTypes({
+            @JsonSubTypes.Type(value = DerivedType.class, name = "derived")
+    })
+    @JsonDefault.Impl(DerivedType.class) // This is the key part causing the issue
+    interface PolymorphicInterface {
+        String getBaseProperty();
+        String getDerivedProperty();
+    }
+
+    ObjectMapper mapper = new ObjectMapper();
+
+    // Create an instance of the derived type
+    DerivedType derivedInstance = new DerivedType();
+    derivedInstance.baseProperty = "baseValue";
+    derivedInstance.derivedProperty = "derivedValue";
+
+    // Register the interface and its default implementation
+    mapper.registerModule(new SimpleModule().addAbstractTypeMapping(PolymorphicInterface.class, DerivedType.class));
+
+    // Serialize the instance
+    String json = mapper.writeValueAsString(derivedInstance);
+
+    // Deserialize the JSON back into the interface type
+    // The bug occurs here: the properties from the base type are lost
+    PolymorphicInterface deserializedInstance = mapper.readValue(json, PolymorphicInterface.class);
+
+    // Assert that the properties from the base type are present
+    assertNotNull(deserializedInstance);
+    assertEquals("baseValue", deserializedInstance.getBaseProperty());
+    assertEquals("derivedValue", deserializedInstance.getDerivedProperty());
+}

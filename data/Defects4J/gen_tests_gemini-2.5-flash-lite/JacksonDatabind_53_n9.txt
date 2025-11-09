@@ -1,0 +1,96 @@
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.deser.DeserializationProblemHandler;
+import com.fasterxml.jackson.databind.exc.InvalidDefinitionException;
+import org.junit.jupiter.api.Test;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+public class JsonDeserializeMapSubtypeTest {
+
+    interface MyCustomIdInterface {
+        UUID getId();
+    }
+
+    static class Foo implements MyCustomIdInterface {
+        private UUID id;
+        private String property;
+
+        @Override
+        public UUID getId() {
+            return id;
+        }
+
+        public void setId(UUID id) {
+            this.id = id;
+        }
+
+        public String getProperty() {
+            return property;
+        }
+
+        public void setProperty(String property) {
+            this.property = property;
+        }
+    }
+
+    // Custom HashMap that deserializes a list of objects into a map based on their 'id' property
+    static class MyHashMap<K extends UUID, V extends MyCustomIdInterface> extends HashMap<K, V> {
+        public void add(V value) {
+            put((K) value.getId(), value);
+        }
+    }
+
+    static class MyPojo {
+        private Map<UUID, Foo> something;
+
+        @JsonDeserialize(as = MyHashMap.class)
+        public void setSomething(Map<UUID, Foo> incomingValue) {
+            this.something = incomingValue;
+        }
+
+        public Map<UUID, Foo> getSomething() {
+            return something;
+        }
+    }
+
+    // Mocking Jackson's ObjectMapper for the test
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+
+    @Test
+    public void testMapSubtypeDeserialization() throws Exception {
+        String json = "{\n" +
+                "  \"something\": [\n" +
+                "        {\n" +
+                "           \"id\": \"a4a8a0e8-8f2a-4b0e-8e3a-0f2a8e0f2a8e\",\n" +
+                "           \"property\": \"value\"\n" +
+                "         }\n" +
+                "  ]\n" +
+                "}";
+
+        // In older versions (like 2.6.6), this would work.
+        // In newer versions (like 2.7.x+), it fails with AbstractDeserializer for MyCustomIdInterface.
+        // We are testing the failure case.
+        objectMapper.addHandler(new DeserializationProblemHandler() {
+            @Override
+            public boolean handleInstantiationProblem(com.fasterxml.jackson.databind.DeserializationContext ctxt, Class<?> instClass, com.fasterxml.jackson.core.JsonParser p, com.fasterxml.jackson.core.JsonToken valueType, String msg) throws java.io.IOException {
+                if (instClass.equals(MyCustomIdInterface.class) && msg.contains("abstract types either need to be mapped to concrete types")) {
+                    // Simulate the failure as described in the bug report
+                    throw InvalidDefinitionException.from(p, "Simulated instantiation problem for abstract type: " + instClass.getName() + ", " + msg, ctxt.getContextualType());
+                }
+                return super.handleInstantiationProblem(ctxt, instClass, p, valueType, msg);
+            }
+        });
+
+
+        // We expect an exception because Jackson in 2.7.x+ tries to deserialize MyCustomIdInterface directly
+        // instead of using the concrete implementation MyHashMap provided in @JsonDeserialize(as = MyHashMap.class)
+        // when the input is a list that needs to be converted to a Map.
+        assertThrows(InvalidDefinitionException.class, () -> {
+            objectMapper.readValue(json, MyPojo.class);
+        });
+    }
+}

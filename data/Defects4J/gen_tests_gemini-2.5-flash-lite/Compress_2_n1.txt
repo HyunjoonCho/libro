@@ -1,0 +1,43 @@
+public void testArDelete() throws Exception {
+    File archiveFile = File.createTempFile("test", ".ar");
+    archiveFile.deleteOnExit();
+
+    ArArchiveOutputStream out = new ArArchiveOutputStream(new FileOutputStream(archiveFile));
+    out.putArchiveEntry(new ArArchiveEntry("test1.xml", 10));
+    out.write(new byte[10]);
+    out.closeArchiveEntry();
+    out.putArchiveEntry(new ArArchiveEntry("test2.xml", 10));
+    out.write(new byte[10]);
+    out.closeArchiveEntry();
+    out.close();
+
+    ArArchiveInputStream verifyIn = new ArArchiveInputStream(new FileInputStream(archiveFile));
+    ArArchiveEntry entry;
+    while ((entry = verifyIn.getNextArEntry()) != null) {
+        if (entry.getName().equals("test2.xml")) {
+            // Found test2.xml, which should have been deleted
+            fail("test2.xml should have been deleted");
+        }
+    }
+    verifyIn.close();
+
+    // Now try to delete and add
+    out = new ArArchiveOutputStream(new FileOutputStream(archiveFile));
+    out.putArchiveEntry(new ArArchiveEntry("test.txt", 10));
+    out.write(new byte[10]);
+    out.closeArchiveEntry();
+    out.close();
+
+    verifyIn = new ArArchiveInputStream(new FileInputStream(archiveFile));
+    boolean foundTestTxt = false;
+    while ((entry = verifyIn.getNextArEntry()) != null) {
+        if (entry.getName().equals("test.txt")) {
+            foundTestTxt = true;
+        }
+        if (entry.getName().equals("test2.xml")) {
+            fail("test2.xml should have been deleted after adding test.txt");
+        }
+    }
+    verifyIn.close();
+    assertTrue("test.txt should be in the archive", foundTestTxt);
+}

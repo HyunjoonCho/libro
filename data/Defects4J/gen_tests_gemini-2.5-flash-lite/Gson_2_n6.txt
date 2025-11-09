@@ -1,0 +1,95 @@
+public void testTypeHierarchyAdapterRuntimeCheck() {
+    Gson gson = new GsonBuilder()
+            .registerTypeHierarchyAdapter(Vehicle.class, new VehicleAdapter())
+            .create();
+
+    // Assume Car is a subtype of Vehicle
+    // Assume Truck is a subtype of Vehicle
+    // Assume VehicleAdapter throws an exception if the actual runtime type
+    // is not assignable to the type being deserialized.
+
+    // This test case would need concrete implementations of Vehicle, Car, Truck,
+    // and VehicleAdapter to actually run and assert the expected exception.
+    // The following is a conceptual representation of how the test would be structured.
+
+    // Example: Attempt to deserialize a JSON string representing a Truck into a Car object.
+    // This should throw an exception because the runtime type (Truck) is not assignable to the
+    // target deserialization type (Car).
+    String truckJson = "{ \"type\": \"truck\", \"payload\": 10000 }"; // Example JSON for a Truck
+    try {
+        gson.fromJson(truckJson, Car.class);
+        fail("Expected an exception when deserializing a Truck as a Car.");
+    } catch (JsonParseException e) {
+        // Expected exception. You might want to assert specific details about the exception message.
+        assertTrue(e.getMessage().contains("Cannot deserialize")); // Or a more specific message
+    }
+
+    // Example: Attempt to deserialize a JSON string representing a Car into a Truck object.
+    // This should also throw an exception.
+    String carJson = "{ \"type\": \"car\", \"model\": \"Sedan\" }"; // Example JSON for a Car
+    try {
+        gson.fromJson(carJson, Truck.class);
+        fail("Expected an exception when deserializing a Car as a Truck.");
+    } catch (JsonParseException e) {
+        // Expected exception.
+        assertTrue(e.getMessage().contains("Cannot deserialize"));
+    }
+
+    // Example: Successful deserialization of a Car as a Vehicle
+    String carJsonForVehicle = "{ \"type\": \"car\", \"model\": \"Sedan\" }";
+    Vehicle vehicleFromCar = gson.fromJson(carJsonForVehicle, Vehicle.class);
+    assertTrue(vehicleFromCar instanceof Car);
+
+    // Example: Successful deserialization of a Truck as a Vehicle
+    String truckJsonForVehicle = "{ \"type\": \"truck\", \"payload\": 5000 }";
+    Vehicle vehicleFromTruck = gson.fromJson(truckJsonForVehicle, Vehicle.class);
+    assertTrue(vehicleFromTruck instanceof Truck);
+}
+
+// Dummy classes and adapter for demonstration purposes.
+// In a real scenario, these would be part of the tested code.
+abstract class Vehicle {
+    String type;
+}
+
+class Car extends Vehicle {
+    String model;
+}
+
+class Truck extends Vehicle {
+    int payload;
+}
+
+class VehicleAdapter implements JsonSerializer<Vehicle>, JsonDeserializer<Vehicle> {
+    @Override
+    public JsonElement serialize(Vehicle src, Type typeOfSrc, JsonSerializationContext context) {
+        // Implementation omitted for brevity
+        return null;
+    }
+
+    @Override
+    public Vehicle deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
+        JsonObject jsonObject = json.getAsJsonObject();
+        String type = jsonObject.get("type").getAsString();
+
+        // Runtime check: Ensure the actual type matches the expected hierarchy
+        if (type.equals("car")) {
+            if (!Car.class.isAssignableFrom(typeOfT)) {
+                throw new JsonParseException("Cannot deserialize a Car as a " + typeOfT.getTypeName());
+            }
+            Car car = new Car();
+            car.type = type;
+            car.model = jsonObject.get("model").getAsString();
+            return car;
+        } else if (type.equals("truck")) {
+            if (!Truck.class.isAssignableFrom(typeOfT)) {
+                throw new JsonParseException("Cannot deserialize a Truck as a " + typeOfT.getTypeName());
+            }
+            Truck truck = new Truck();
+            truck.type = type;
+            truck.payload = jsonObject.get("payload").getAsInt();
+            return truck;
+        }
+        throw new JsonParseException("Unknown vehicle type: " + type);
+    }
+}

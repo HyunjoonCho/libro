@@ -1,0 +1,77 @@
+public void testArrayIndexOutOfBoundsExceptionOnImpossibleNonStaticInnerClassConstructor() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    // The original code snippet is problematic because it tries to create an instance of Something
+    // which requires an InnerSomething instance, but passes null.
+    // The bug report indicates the issue arises during deserialization *after* serialization.
+    // Therefore, we need to simulate a scenario where deserialization occurs.
+    // The serialization part of the original snippet is not directly causing the exception,
+    // but it sets up the data that will be deserialized.
+
+    // Let's assume a valid serialized string that would trigger the issue during deserialization.
+    // The key issue is the non-static inner class and its @JsonCreator constructor.
+    // A minimal reproducible example for deserialization failure would involve a JSON
+    // that attempts to deserialize this structure.
+
+    // The bug report implies that even with a null value for 'a', it attempts to instantiate InnerSomething.
+    // Let's craft a JSON that would trigger this. The original serialization might not be the most direct way
+    // to trigger the deserialization error in a testable manner without the full context of how 'a' is handled.
+
+    // Based on the stack trace and description, the error happens when Jackson tries to
+    // resolve parameters for the @JsonCreator constructor of Something, and it encounters
+    // issues with the non-static InnerSomething.
+
+    // A more direct way to trigger the deserialization failure related to the non-static inner class
+    // is to attempt to deserialize a JSON that represents the outer class, which in turn
+    // requires deserializing the inner class.
+    // The error occurs within PropertyValueBuffer.assignParameter, suggesting an issue with parameter mapping.
+
+    // Let's simulate deserializing a JSON string that represents the 'Something' object.
+    // The actual content of the JSON might not matter as much as the structure that leads
+    // Jackson to try and instantiate the non-static inner class.
+    // The original bug report's serialization step `mapper.writeValueAsString(new Something(null))`
+    // would produce `{"a":null}`. Deserializing this into `Something.class` is where the problem occurs.
+
+    String json = "{\"a\": null}"; // This is what `mapper.writeValueAsString(new Something(null))` would produce
+
+    // The exception happens when Jackson tries to create the `Something` object,
+    // and its `@JsonCreator` constructor requires an `InnerSomething`.
+    // When it sees `null` for `"a"`, it might still try to instantiate `InnerSomething`
+    // or handle the null in a way that leads to the `ArrayIndexOutOfBoundsException`.
+    // The root cause is the non-static nature of `InnerSomething` which Jackson's deserializer
+    // might not handle correctly in certain scenarios, especially with `@JsonCreator`.
+
+    try {
+        mapper.readValue(json, Something.class);
+        fail("Expected ArrayIndexOutOfBoundsException due to non-static inner class constructor");
+    } catch (ArrayIndexOutOfBoundsException e) {
+        // This is the expected exception. We can optionally check the message or just confirm its type.
+        // The exact message might vary slightly between Jackson versions, so checking the type is more robust.
+        assertTrue(true); // Test passes if the expected exception is caught
+    } catch (Exception e) {
+        fail("Expected ArrayIndexOutOfBoundsException but got " + e.getClass().getName());
+    }
+}
+
+// Helper classes as defined in the bug report.
+// These need to be accessible for the test.
+// In a real test suite, these would likely be in separate files or inner classes of the test class.
+// For this context, we'll define them here to make the test self-contained.
+
+private static class Something {
+    public InnerSomething a;
+
+    @JsonCreator
+    public Something(@JsonProperty("a") InnerSomething a) {
+        this.a = a;
+    }
+
+    // Making InnerSomething static resolves the issue, so the bug occurs when it's non-static.
+    // The original bug report explicitly states the issue is with the non-static inner class.
+    // Therefore, we define it as non-static here to reproduce the bug.
+    class InnerSomething {
+        @JsonCreator
+        public InnerSomething() {
+        }
+    }
+
+}

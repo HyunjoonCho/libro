@@ -1,0 +1,73 @@
+public void testNullObjectId() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.enable(DeserializationFeature.FAIL_ON_NULL_ID); // or disable it depending on desired behavior
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
+    class MyObject {
+        public String id;
+        public String value;
+
+        public MyObject() {
+        }
+
+        public MyObject(String id, String value) {
+            this.id = id;
+            this.value = value;
+        }
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
+    class AnotherObject {
+        public String id;
+        public MyObject nested;
+
+        public AnotherObject() {
+        }
+
+        public AnotherObject(String id, MyObject nested) {
+            this.id = id;
+            this.nested = nested;
+        }
+    }
+
+    // Test case 1: Null ID for the primary object
+    String jsonWithNullId = "{\"id\": null, \"value\": \"test\"}";
+    try {
+        MyObject obj = mapper.readValue(jsonWithNullId, MyObject.class);
+        // Assert that it was deserialized without error if FAIL_ON_NULL_ID is disabled
+        assertNotNull(obj);
+        assertNull(obj.id);
+        assertEquals("test", obj.value);
+    } catch (MismatchedInputException e) {
+        // Assert that an exception is thrown if FAIL_ON_NULL_ID is enabled and null is not allowed
+        assertTrue(e.getMessage().contains("Null id is not allowed"));
+    }
+
+    // Test case 2: Null ID in a nested object
+    String jsonWithNestedNullId = "{\"id\": \"parent1\", \"nested\": {\"id\": null, \"value\": \"nestedTest\"}}";
+    try {
+        AnotherObject anotherObj = mapper.readValue(jsonWithNestedNullId, AnotherObject.class);
+        // Assert that it was deserialized without error if FAIL_ON_NULL_ID is disabled
+        assertNotNull(anotherObj);
+        assertEquals("parent1", anotherObj.id);
+        assertNotNull(anotherObj.nested);
+        assertNull(anotherObj.nested.id);
+        assertEquals("nestedTest", anotherObj.nested.value);
+    } catch (MismatchedInputException e) {
+        // Assert that an exception is thrown if FAIL_ON_NULL_ID is enabled and null is not allowed
+        assertTrue(e.getMessage().contains("Null id is not allowed"));
+    }
+
+    // Test case 3: Missing ID for the primary object (should behave like null if not explicitly handled)
+    String jsonWithMissingId = "{\"value\": \"testMissing\"}";
+    try {
+        MyObject obj = mapper.readValue(jsonWithMissingId, MyObject.class);
+        // Assert that it was deserialized without error if FAIL_ON_NULL_ID is disabled
+        assertNotNull(obj);
+        assertNull(obj.id);
+        assertEquals("testMissing", obj.value);
+    } catch (MismatchedInputException e) {
+        // Assert that an exception is thrown if FAIL_ON_NULL_ID is enabled and missing is not allowed
+        assertTrue(e.getMessage().contains("Null id is not allowed"));
+    }
+}

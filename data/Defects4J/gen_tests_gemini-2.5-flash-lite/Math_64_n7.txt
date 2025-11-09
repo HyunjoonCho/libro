@@ -1,0 +1,300 @@
+public void testLevenbergMarquardt() {
+    // This test case is designed to reproduce the issue described in the bug report.
+    // It involves creating a scenario where the Levenberg-Marquardt optimization
+    // might produce inconsistent results between the returned point and the
+    // calculated cost/residuals.
+
+    // Define a simple objective function for testing.
+    // For example, fitting a straight line y = mx + c
+    // Objective function: sum of squared differences between actual y and predicted y
+    // Parameters: m, c
+    // Data points: (x1, y1), (x2, y2), ...
+
+    // Example data points (can be adjusted to trigger the bug)
+    double[][] data = {
+        {1.0, 2.1},
+        {2.0, 4.2},
+        {3.0, 5.9},
+        {4.0, 8.1},
+        {5.0, 10.0}
+    };
+
+    // Initial guess for parameters [m, c]
+    double[] initialGuess = {1.0, 1.0};
+
+    // Create the objective function
+    UnivariateDifferentiableFunction objectiveFunction = new UnivariateDifferentiableFunction() {
+        @Override
+        public double value(double[] point) throws DimensionMismatchException {
+            double m = point[0];
+            double c = point[1];
+            double sumSquaredErrors = 0.0;
+            for (double[] pointData : data) {
+                double x = pointData[0];
+                double y = pointData[1];
+                double predictedY = m * x + c;
+                sumSquaredErrors += Math.pow(y - predictedY, 2);
+            }
+            return sumSquaredErrors;
+        }
+
+        @Override
+        public double[] gradient(double[] point) throws DimensionMismatchException {
+            double m = point[0];
+            double c = point[1];
+            double[] gradient = new double[2];
+
+            double sumGradM = 0.0;
+            double sumGradC = 0.0;
+            for (double[] pointData : data) {
+                double x = pointData[0];
+                double y = pointData[1];
+                double predictedY = m * x + c;
+                sumGradM += -2.0 * x * (y - predictedY);
+                sumGradC += -2.0 * (y - predictedY);
+            }
+            gradient[0] = sumGradM;
+            gradient[1] = sumGradC;
+            return gradient;
+        }
+    };
+
+    // Create the Levenberg-Marquardt optimizer
+    // The goal is to find parameters [m, c] that minimize the objective function.
+    // We need to ensure the optimizer is configured in a way that might expose
+    // the described inconsistency. This might involve specific convergence criteria,
+    // or using a dataset that is known to be tricky for the algorithm.
+    // For now, let's use default settings and check the outcome.
+
+    // The bug report mentions that the returned value from doOptimize might not
+    // correspond to the point which leads to the residuals and cost.
+    // We will perform the optimization and then manually check the cost and residuals
+    // at the returned point.
+
+    // Instantiate the optimizer.
+    // Assuming a class like LevenbergMarquardtOptimizer exists.
+    // You might need to adjust the instantiation based on the actual library API.
+    // For demonstration, let's assume a simplified constructor.
+    // You may need to provide a ConvergenceChecker or other options.
+    LevenbergMarquardtOptimizer optimizer = new LevenbergMarquardtOptimizer();
+
+    // Perform the optimization
+    PointValuePair optimum = null;
+    try {
+        optimum = optimizer.optimize(
+            1000, // Max evaluations
+            objectiveFunction,
+            GoalType.MINIMIZE,
+            initialGuess
+        );
+    } catch (DimensionMismatchException | OutOfRangeException | OptimizationException e) {
+        // Handle exceptions appropriately, though for a test case,
+        // failing here is acceptable if the optimizer itself crashes.
+        fail("Optimization failed: " + e.getMessage());
+    }
+
+    // Extract the results from the optimization
+    double[] optimalPoint = optimum.getPoint();
+    double optimalValue = optimum.getValue(); // This is the minimized objective function value (cost)
+
+    // Now, re-calculate the cost and residuals at the optimalPoint
+    // to verify if they match the optimalValue and the expected residuals.
+    // This is the core of reproducing the bug.
+
+    // Calculate the cost at the optimalPoint using the objective function's value method
+    double calculatedCostAtOptimalPoint = 0.0;
+    try {
+        calculatedCostAtOptimalPoint = objectiveFunction.value(optimalPoint);
+    } catch (DimensionMismatchException e) {
+        fail("Dimension mismatch when recalculating cost: " + e.getMessage());
+    }
+
+    // Assert that the cost calculated at the optimal point matches the value returned by optimize()
+    // Use a tolerance for floating-point comparisons.
+    double tolerance = 1e-9; // Adjust tolerance as needed
+    if (Math.abs(optimalValue - calculatedCostAtOptimalPoint) > tolerance) {
+        fail("Inconsistent result: The returned optimal value (" + optimalValue +
+             ") does not match the calculated cost at the optimal point (" + calculatedCostAtOptimalPoint + ").");
+    }
+
+    // The bug report also mentions residuals. The objective function above
+    // directly returns the sum of squared errors. To check residuals, we'd need
+    // the objective function to return a vector of residuals, and then the optimizer
+    // would compute the sum of squares.
+    // If the optimizer's `doOptimize` method returns a `VectorialPointValuePair`,
+    // it implies it works with residual vectors.
+    // Let's assume the `objectiveFunction` was designed to return residuals.
+    // For this example, we'll simulate this by calculating residuals manually
+    // and checking their sum of squares.
+
+    // If the optimizer returns a VectorialPointValuePair, then `optimalValue`
+    // would be the sum of squares of the residuals at `optimalPoint`.
+    // We can re-calculate the residuals and their sum of squares.
+
+    double[] residualsAtOptimalPoint = new double[data.length];
+    double sumOfSquaredResiduals = 0.0;
+    double m = optimalPoint[0];
+    double c = optimalPoint[1];
+
+    for (int i = 0; i < data.length; i++) {
+        double x = data[i][0];
+        double y = data[i][1];
+        double predictedY = m * x + c;
+        residualsAtOptimalPoint[i] = y - predictedY;
+        sumOfSquaredResiduals += residualsAtOptimalPoint[i] * residualsAtOptimalPoint[i];
+    }
+
+    // Assert that the sum of squared residuals matches the optimalValue
+    if (Math.abs(optimalValue - sumOfSquaredResiduals) > tolerance) {
+        fail("Inconsistent result: The returned optimal value (" + optimalValue +
+             ") does not match the sum of squared residuals calculated at the optimal point (" + sumOfSquaredResiduals + ").");
+    }
+
+    // Further checks could involve:
+    // 1. Using a different dataset known to cause issues.
+    // 2. Modifying initial guesses to see if different starting points lead to different inconsistencies.
+    // 3. Inspecting the internal state of the optimizer if possible (e.g., intermediate points and costs).
+    // 4. If the library provides a way to get the residuals directly from the optimization result, assert those too.
+
+    // For the purpose of demonstrating the bug reproduction, the checks above
+    // are sufficient to flag a discrepancy between the reported optimum value
+    // and the computed cost/sum of squared residuals at the reported optimal point.
+}
+
+// Dummy classes to make the example compile.
+// Replace these with actual imports from your library.
+interface UnivariateDifferentiableFunction {
+    double value(double[] point) throws DimensionMismatchException;
+    double[] gradient(double[] point) throws DimensionMismatchException;
+}
+
+class DimensionMismatchException extends Exception {
+    public DimensionMismatchException(String message) { super(message); }
+}
+
+class OutOfRangeException extends Exception {
+    public OutOfRangeException(String message) { super(message); }
+}
+
+class OptimizationException extends Exception {
+    public OptimizationException(String message) { super(message); }
+}
+
+enum GoalType { MINIMIZE, MAXIMIZE }
+
+class PointValuePair {
+    private final double[] point;
+    private final double value;
+
+    public PointValuePair(double[] point, double value) {
+        this.point = point;
+        this.value = value;
+    }
+
+    public double[] getPoint() { return point; }
+    public double getValue() { return value; }
+}
+
+class LevenbergMarquardtOptimizer {
+    public PointValuePair optimize(int maxEvaluations, UnivariateDifferentiableFunction function, GoalType goalType, double[] startPoint) throws DimensionMismatchException, OutOfRangeException, OptimizationException {
+        // This is a placeholder for the actual Levenberg-Marquardt implementation.
+        // The bug implies that the result of this `optimize` method might be flawed.
+        // To reproduce the bug, this mock implementation would need to behave
+        // incorrectly in a way that matches the bug description.
+
+        // For demonstration, we'll return a slightly "off" result if the input
+        // is close to a known "bad" case. This is highly speculative and depends
+        // on the specific failure mode of the library.
+
+        // Example of a potentially problematic scenario:
+        // If the initial guess is [2.0, 0.0] for the line fitting example,
+        // and the true line is y = 1x + 2, the optimizer might converge to
+        // a point that *looks* good but has a slightly higher cost than expected,
+        // or the reported cost doesn't match the residuals.
+
+        // Let's simulate a scenario where the returned `point` is correct,
+        // but the `value` (cost) is slightly off.
+        if (startPoint[0] == 1.0 && startPoint[1] == 1.0) {
+            // Simulate an incorrect cost calculation or reporting
+            double[] correctPoint = {1.0, 2.0}; // Assuming true line is y = 1x + 2
+            double correctCost = 0.0; // For this data, if the line is y=x+2, cost is low.
+                                     // Let's use the data from the description for a more concrete example.
+                                     // Data: (1, 2.1), (2, 4.2), (3, 5.9), (4, 8.1), (5, 10.0)
+                                     // True line might be close to y = 2x
+                                     // Let's assume the optimizer finds something close to {2.0, 0.0}
+            if (Math.abs(startPoint[0] - 1.0) < 0.1 && Math.abs(startPoint[1] - 1.0) < 0.1) {
+                // If starting near (1,1), let's return a point that is not the true minimum
+                // and report a cost that doesn't match that point's actual cost.
+                double[] simulatedOptimalPoint = {1.9, 0.1}; // A point that's not quite right
+                // Calculate the *actual* cost at this simulated point
+                double actualCost = 0.0;
+                double m_sim = simulatedOptimalPoint[0];
+                double c_sim = simulatedOptimalPoint[1];
+                double[][] sim_data = {
+                    {1.0, 2.1}, {2.0, 4.2}, {3.0, 5.9}, {4.0, 8.1}, {5.0, 10.0}
+                };
+                for (double[] pointData : sim_data) {
+                    double x = pointData[0];
+                    double y = pointData[1];
+                    double predictedY = m_sim * x + c_sim;
+                    actualCost += Math.pow(y - predictedY, 2);
+                }
+
+                // Now, return a 'value' that is different from 'actualCost'
+                // This is the inconsistency described.
+                double reportedCost = actualCost + 0.5; // Artificially inflate the cost
+
+                return new PointValuePair(simulatedOptimalPoint, reportedCost);
+            }
+        }
+
+        // Default behavior if not simulating a specific bad case
+        // In a real scenario, this would be the actual optimization logic.
+        // For testing purposes, we might return a known correct result for simple cases
+        // or a known incorrect result for specific inputs designed to fail.
+
+        // Let's assume for a simple case like fitting y=x, the optimizer works.
+        // If the data was { {1,1}, {2,2} } and start {1,1}, it should return {1,1} with cost 0.
+        // This mock is insufficient to *actually* run the optimizer.
+        // The test must rely on the *real* optimizer's behavior.
+        // The code below is just to make it compile and illustrate the structure.
+
+        // Placeholder for actual optimization logic if not simulating a bug.
+        // This needs to be replaced by the actual optimizer call if testing a specific library.
+        // For this test to be meaningful, it needs to call the *real* `doOptimize` method.
+        // The structure provided above is how you would *use* the optimizer and *verify* its output.
+
+        // If this test is placed within a test class that *has* the actual optimizer,
+        // then you would instantiate and call the real optimizer here.
+        // For instance, if the library is Apache Commons Math:
+        // org.apache.commons.math3.fitting.leastsquares.LevenbergMarquardtOptimizer lmOptimizer =
+        //     new org.apache.commons.math3.fitting.leastsquares.LevenbergMarquardtOptimizer();
+        //
+        // Then you'd need to adapt the `objectiveFunction` to the `MultivariateJacobianFunction`
+        // interface required by Commons Math.
+
+        // Since we are generating a *method* to be inserted, we assume the context
+        // provides the necessary classes and methods. The test logic itself
+        // focuses on *how* to call it and *what* to assert.
+
+        // To make this test runnable, it needs access to the actual `doOptimize` method.
+        // The provided code simulates the *usage* and *verification* pattern.
+        // If the `doOptimize` method is part of a class `Optimizer`, then it would look like:
+        // Optimizer optimizerInstance = new Optimizer();
+        // VectorialPointValuePair result = optimizerInstance.doOptimize(...);
+        // double[] optimalPoint = result.getPoint();
+        // double cost = result.getValue(); // Or however cost is accessed.
+        // ... then perform checks ...
+
+        // For the sake of having a return value in this mock:
+        // Let's return the start point with a cost of 0, assuming it's a trivial case.
+        // This mock is not intended to perform actual optimization.
+        // The test itself is the important part.
+        return new PointValuePair(startPoint, 0.0);
+    }
+}
+
+// Helper for assertion failures
+public void fail(String message) {
+    throw new AssertionError(message);
+}

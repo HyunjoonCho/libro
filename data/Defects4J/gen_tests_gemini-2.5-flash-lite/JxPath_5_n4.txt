@@ -1,0 +1,37 @@
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.Variables;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class JXPathBugReproducer {
+
+    @Test
+    public void testCannotComparePointers() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><MAIN><A>1</A></MAIN>";
+        JXPathContext context = JXPathContext.newContext(new Object());
+        Variables variables = context.getVariables();
+        variables.declareVariable("var", "some value");
+
+        // The original code seems to be a test case itself, so we'll replicate the problematic XPath
+        // and the setup that would lead to the exception.
+        // The exception occurs when comparing pointers from different trees.
+        // In this case, "$var" is a variable and "/MAIN/A" is a node in the XML document.
+        // The JXPath library expects them to be comparable, which they are not directly.
+        // The fix likely involves ensuring that variables are treated correctly in union operations
+        // or that the comparison logic is adapted.
+        try {
+            context.selectNodes("$var | /MAIN/A");
+            // If selectNodes does not throw an exception, the test fails.
+            // However, the bug report explicitly states an exception is thrown.
+            // So, we expect an exception.
+            org.junit.Assert.fail("Expected JXPathException was not thrown.");
+        } catch (org.apache.commons.jxpath.JXPathException e) {
+            // Verify that the exception message is as described in the bug report.
+            // The exact message might vary slightly based on JXPath version,
+            // but the core "Cannot compare pointers that do not belong to the same tree"
+            // should be present.
+            String expectedMessagePart = "Cannot compare pointers that do not belong to the same tree";
+            assertEquals(true, e.getMessage().contains(expectedMessagePart));
+        }
+    }
+}

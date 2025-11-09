@@ -1,0 +1,46 @@
+public void testHandleNullTypeId() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(new SimpleModule() {
+        {
+            addDeserializer(MyAbstractType.class, new MyAbstractType.MyAbstractTypeDeserializer());
+        }
+    });
+
+    // Simulate a JSON where the type id is null
+    String jsonWithNullTypeId = "{\"@type\": null, \"value\": \"someValue\"}";
+
+    try {
+        mapper.readValue(jsonWithNullTypeId, MyAbstractType.class);
+        fail("Expected an exception when type id is null");
+    } catch (JsonMappingException e) {
+        // Expected exception, verify it's related to missing type id
+        assertTrue(e.getMessage().contains("Cannot resolve Type Id. Type id was null"));
+    }
+}
+
+// Dummy classes to simulate the scenario
+abstract class MyAbstractType {
+    public String value;
+
+    public static class MyConcreteType extends MyAbstractType {
+        public String anotherValue;
+    }
+
+    public static class MyAbstractTypeDeserializer extends JsonDeserializer<MyAbstractType> {
+        @Override
+        public MyAbstractType deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+            JsonNode node = p.getCodec().readTree(p);
+            String typeId = node.get("@type").asText(); // This is where the null would be problematic
+
+            if ("MyConcreteType".equals(typeId)) {
+                MyConcreteType instance = new MyConcreteType();
+                instance.value = node.get("value").asText();
+                instance.anotherValue = node.get("anotherValue").asText();
+                return instance;
+            } else {
+                // Handle other types or throw an error
+                throw ctxt.mappingException("Unknown type id: " + typeId);
+            }
+        }
+    }
+}

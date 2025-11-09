@@ -1,0 +1,54 @@
+public void testIssue120() {
+    // This test case aims to reproduce the IE runtime error described in the bug report.
+    // The issue arises when the 'threshold' variable is large enough (around 250 on the reporter's machine),
+    // causing Internet Explorer to pass arrays into the sort method by reference,
+    // while other browsers pass them by value. This difference in behavior leads to
+    // Google Closure's compiled code breaking due to modifications of arguments passed
+    // into the sort comparator.
+
+    // We will simulate this scenario by creating a large array of arrays and attempting
+    // to sort it using a custom comparator that modifies the elements of the inner arrays.
+    // The expected behavior is that the sort should complete without error and produce
+    // a correctly sorted array. If an IE-like runtime error occurs, this test will fail.
+
+    // Setting a threshold that is likely to trigger the IE-specific behavior.
+    int threshold = 300; 
+    int[][] data = new int[threshold][2];
+
+    // Initialize the data with values that will be affected by the sort.
+    for (int i = 0; i < threshold; i++) {
+        data[i][0] = threshold - i;
+        data[i][1] = i;
+    }
+
+    // Define a custom comparator that modifies the elements of the inner arrays.
+    // This is the behavior that causes issues in IE when arrays are passed by reference.
+    Comparator<int[]> comparator = new Comparator<int[]>() {
+        @Override
+        public int compare(int[] a, int[] b) {
+            // Modify the elements to simulate the problematic behavior
+            a[0] = a[0] + 1; 
+            b[0] = b[0] - 1;
+            return Integer.compare(a[0], b[0]);
+        }
+    };
+
+    // Attempt to sort the array of arrays.
+    // If the bug is present, this operation might throw an IE-like runtime error
+    // (which in a Java JUnit test would manifest as an unexpected exception).
+    try {
+        Arrays.sort(data, comparator);
+    } catch (Exception e) {
+        // If any exception occurs during sorting, it indicates a potential issue
+        // similar to the described IE runtime error.
+        fail("Sorting failed with an unexpected exception: " + e.getMessage());
+    }
+
+    // After sorting, verify that the array is sorted correctly according to the comparator's logic.
+    // The comparator's modification of array elements means the final sorted order
+    // will be based on these modified values.
+    // We expect the first element of each inner array to be in ascending order.
+    for (int i = 0; i < threshold - 1; i++) {
+        assertTrue("Array not sorted correctly. Expected " + (data[i][0]) + " <= " + (data[i+1][0]), data[i][0] <= data[i+1][0]);
+    }
+}

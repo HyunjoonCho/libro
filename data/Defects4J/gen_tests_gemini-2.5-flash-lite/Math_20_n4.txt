@@ -1,0 +1,80 @@
+import org.apache.commons.math3.optim.PointValuePair;
+import org.apache.commons.math3.optim.nonlinear.scalar.GoalType;
+import org.apache.commons.math3.optim.nonlinear.scalar.ObjectiveFunction;
+import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.CMAESOptimizer;
+import org.apache.commons.math3.random.MersenneTwister;
+import org.apache.commons.math3.optim.InitialGuess;
+import org.apache.commons.math3.optim.SimpleBounds;
+import org.apache.commons.math3.exception.MathIllegalStateException;
+import org.junit.Test;
+import static org.junit.Assert.fail;
+
+public class CMAESOptimizerTest {
+
+    @Test
+    public void testBoundsEnforcement() {
+        // Define an objective function that is minimized.
+        // We'll use a simple quadratic function for demonstration.
+        org.apache.commons.math3.analysis.MultivariateFunction objectiveFunction =
+            new org.apache.commons.math3.analysis.MultivariateFunction() {
+            @Override
+            public double value(double[] point) {
+                // Simple quadratic: (x-5)^2 + (y-5)^2
+                return (point[0] - 5) * (point[0] - 5) + (point[1] - 5) * (point[1] - 5);
+            }
+        };
+
+        // Define the bounds. We want to search within [0, 10] for both dimensions.
+        double[] lower = {0.0, 0.0};
+        double[] upper = {10.0, 10.0};
+        SimpleBounds bounds = new SimpleBounds(lower, upper);
+
+        // Initial guess. Let's start outside the bounds to see if it corrects.
+        double[] startPoint = {15.0, 15.0};
+        InitialGuess initialGuess = new InitialGuess(startPoint);
+
+        // Configure CMAESOptimizer.
+        // Set a relatively small population size and number of generations
+        // to make the test run faster and potentially expose the issue.
+        // The key is to ensure it's *possible* to generate points outside bounds.
+        CMAESOptimizer optimizer = new CMAESOptimizer(
+            1000, // maximum iterations without improvement
+            0.0,  // sigma (initial standard deviation)
+            true, // active CMA
+            0,    // check Feasible count (set to 0 to trigger the bug)
+            10,   // random generator seed
+            new MersenneTwister(10L) // random generator
+        );
+
+        try {
+            // Optimize.
+            PointValuePair result = optimizer.optimize(
+                new ObjectiveFunction(objectiveFunction),
+                GoalType.MINIMIZE,
+                initialGuess,
+                bounds // Pass the bounds
+            );
+
+            // If we reach here, the optimizer did not throw an exception,
+            // which might indicate it found an in-bounds solution or
+            // it failed to enforce bounds and returned an out-of-bounds solution.
+            // We need to check the result.
+            double[] optimizedPoint = result.getPoint();
+            if (optimizedPoint[0] < lower[0] || optimizedPoint[0] > upper[0] ||
+                optimizedPoint[1] < lower[1] || optimizedPoint[1] > upper[1]) {
+                // If the result is outside the bounds, the test fails.
+                fail("CMAESOptimizer returned a point outside the specified bounds.");
+            }
+        } catch (MathIllegalStateException e) {
+            // If an exception is thrown, it might be related to the bounds,
+            // but we expect it to produce an out-of-bounds result or fail to converge.
+            // For this specific bug, the failure is *not* throwing an exception,
+            // but returning an invalid point.
+            // We can add a specific check if the exception type is known to be related to bounds.
+            // For now, we'll assume any exception here isn't the specific bug we're testing.
+        } catch (Exception e) {
+            // Catch any other unexpected exceptions.
+            fail("An unexpected exception occurred: " + e.getMessage());
+        }
+    }
+}

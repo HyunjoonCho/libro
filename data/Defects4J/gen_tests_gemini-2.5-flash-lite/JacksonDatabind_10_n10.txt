@@ -1,0 +1,139 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.NonTypedScalarSerializer;
+import com.fasterxml.jackson.databind.ser.std.StringSerializer;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+import com.fasterxml.jackson.databind.util.StdConverter;
+import org.junit.Test;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+
+public class JsonAnyGetterAndSerializeTest {
+
+    // Dummy Serializer and Converter for demonstration
+    public static class MySerializer extends ToStringSerializer {
+    }
+
+    public static class MyConverter extends StdConverter<Map<String, String>, Map<String, String>> {
+        @Override
+        public Map<String, String> convert(Map<String, String> value) {
+            Map<String, String> converted = new HashMap<>();
+            for (Map.Entry<String, String> entry : value.entrySet()) {
+                converted.put(entry.getKey(), entry.getValue().toUpperCase());
+            }
+            return converted;
+        }
+    }
+
+    public static class MyKeySerializer extends StringSerializer {
+    }
+
+    // Class with JsonAnyGetter and JsonSerialize (converter)
+    public static class MyObjectWithConverter {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public MyObjectWithConverter() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(converter = MyConverter.class)
+        @com.fasterxml.jackson.annotation.JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+    // Class with JsonAnyGetter and JsonSerialize (using)
+    public static class MyObjectWithUsing {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public MyObjectWithUsing() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(using = MySerializer.class)
+        @com.fasterxml.jackson.annotation.JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+    // Class with JsonAnyGetter and JsonSerialize (keyUsing)
+    public static class MyObjectWithKeyUsing {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public MyObjectWithKeyUsing() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(keyUsing = MyKeySerializer.class)
+        @com.fasterxml.jackson.annotation.JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+    @Test
+    public void testJsonAnyGetterWithConverter() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        MyObjectWithConverter obj = new MyObjectWithConverter();
+        String json = mapper.writeValueAsString(obj);
+        // The converter should have uppercased the values
+        // If the bug exists, it will likely not be uppercased
+        // This assertion assumes the bug is NOT present. If the test fails, it means the bug IS present.
+        // The expected behavior with the converter applied is: {"key1":"VALUE1","key2":"VALUE2"}
+        // If the bug is present, the output would be: {"key1":"value1","key2":"value2"}
+        assertEquals("{\"key1\":\"VALUE1\",\"key2\":\"VALUE2\"}", json);
+    }
+
+    @Test
+    public void testJsonAnyGetterWithUsing() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        MyObjectWithUsing obj = new MyObjectWithUsing();
+        String json = mapper.writeValueAsString(obj);
+        // The MySerializer is a ToStringSerializer. For a Map<String, String>,
+        // this might not behave as expected or might be ignored.
+        // The bug report implies that @JsonSerialize(using = ...) is ignored.
+        // If the bug exists, the output will be the default serialization of the map.
+        // If the bug does not exist, the custom serializer should be applied.
+        // Given the bug report, we expect the default serialization, not the one from MySerializer.
+        // The assertion below checks for the behavior *without* the bug. If this fails, the bug might be present.
+        // However, the exact output of ToStringSerializer on a Map<String, String> is not straightforwardly defined
+        // without deeper inspection of Jackson's internal handling.
+        // A more reliable test would be to ensure the custom serializer *is not* used,
+        // but that requires inspecting the serialization process itself, not just the output string.
+        // For the purpose of reproducing the bug, we'll assume the default serialization is different from what 'using' would do.
+        // Let's assume the default serialization for Map<String, String> is what we'd get if 'using' is ignored.
+        // If MySerializer were applied, it might try to call toString() on each entry or the map itself.
+        // The bug report states it's ignored, so we expect the default behavior.
+        // The default behavior for Map<String, String> is to serialize its entries.
+        // If MySerializer was effective, it would likely try to apply it to the values or the map itself.
+        // The bug is that it's ignored. So the output should be the standard map serialization.
+        // The assertion here is tricky because the exact output of an ignored @JsonSerialize(using=...) needs to be known.
+        // Let's assume the standard JSON output for the map is what we expect if the annotation is ignored.
+        // If the annotation *was* effective, the output might be different.
+        // Based on the bug report, the expected output is the one *without* the custom serializer being applied.
+        // This means the values would remain "value1", "value2" and not be transformed by MySerializer (which is ToStringSerializer in this case).
+        // So, if the bug is present, the output is: {"key1":"value1","key2":"value2"}
+        assertEquals("{\"key1\":\"value1\",\"key2\":\"value2\"}", json);
+    }
+
+    @Test
+    public void testJsonAnyGetterWithKeyUsing() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        MyObjectWithKeyUsing obj = new MyObjectWithKeyUsing();
+        String json = mapper.writeValueAsString(obj);
+        // The bug report states that keyUsing works.
+        // This test verifies that it works as expected, and that the combination
+        // of JsonAnyGetter and JsonSerialize(keyUsing=...) doesn't break anything.
+        // MyKeySerializer is a StringSerializer, so it shouldn't change the keys.
+        // The output should be the standard serialization of the map with its keys and values.
+        assertEquals("{\"key1\":\"value1\",\"key2\":\"value2\"}", json);
+    }
+}

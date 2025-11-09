@@ -1,0 +1,50 @@
+public void testPolymorphicWithDefaultImpl() throws Exception {
+    // Define a base type with a property
+    abstract class BaseType {
+        public String baseProperty;
+    }
+
+    // Define a subtype that inherits from the base type
+    @JsonTypeName("subtype")
+    class SubType extends BaseType {
+        public String subProperty;
+    }
+
+    // Define a configuration with a polymorphic type and a default implementation
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type", defaultImpl = SubType.class)
+    @JsonSubTypes(@JsonSubTypes.Type(value = SubType.class, name = "subtype"))
+    interface PolymorphicConfig {
+        // This method should return an instance of the default implementation
+        // or a subtype that has properties from the base type.
+        BaseType getConfig();
+    }
+
+    // Test case: Serialize an object with a subtype that has properties from the base type
+    ObjectMapper mapper = new ObjectMapper();
+    PolymorphicConfig config = new PolymorphicConfig() {
+        @Override
+        public BaseType getConfig() {
+            SubType sub = new SubType();
+            sub.baseProperty = "base";
+            sub.subProperty = "sub";
+            return sub;
+        }
+    };
+
+    // The serialization should include properties from the base type
+    String json = mapper.writeValueAsString(config);
+    assertTrue(json.contains("\"baseProperty\":\"base\""));
+    assertTrue(json.contains("\"subProperty\":\"sub\""));
+
+    // Test case: Deserialize JSON with a subtype, ensuring base properties are populated
+    String jsonToDeserialize = "{\"type\":\"subtype\", \"baseProperty\":\"base\", \"subProperty\":\"sub\"}";
+    PolymorphicConfig deserializedConfig = mapper.readValue("{\"config\":" + jsonToDeserialize + "}",
+            new TypeReference<Map<String, PolymorphicConfig>>() {}).get("config"); // This is a workaround to deserialize into the interface
+
+    // Check if the deserialized object has properties from the base type
+    BaseType deserializedBaseType = deserializedConfig.getConfig();
+    assertNotNull(deserializedBaseType);
+    assertEquals("base", deserializedBaseType.baseProperty);
+    assertTrue(deserializedBaseType instanceof SubType);
+    assertEquals("sub", ((SubType) deserializedBaseType).subProperty);
+}

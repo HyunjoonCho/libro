@@ -1,0 +1,55 @@
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.DependencyOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import java.util.Collections;
+
+public class ClosureCompilerTest {
+
+    @Test
+    public void testDependencySortingWithClosurePassFalse() {
+        Compiler compiler = new Compiler();
+        CompilerOptions compilerOptions = new CompilerOptions();
+        compilerOptions.setClosurePass(false); // Prevent goog.require/goog.provide removal
+
+        DependencyOptions dependencyOptions = new DependencyOptions();
+        dependencyOptions.setDependencySorting(true);
+        compilerOptions.setDependencyOptions(dependencyOptions);
+
+        // Example JavaScript code with dependencies
+        SourceFile file1 = SourceFile.fromCode("file1.js", "var a = 1;");
+        SourceFile file2 = SourceFile.fromCode("file2.js", "goog.require('file1'); var b = a + 1;");
+        SourceFile file3 = SourceFile.fromCode("file3.js", "goog.require('file2'); var c = b + 1;");
+
+        // Compile the code
+        compiler.compile(Collections.emptyList(),
+                java.util.Arrays.asList(file1, file2, file3),
+                compilerOptions);
+
+        // The actual compiled code will be in compiler.toSource()
+        // The test here is to check if the order of compilation (and thus output)
+        // reflects the dependency sorting.
+        // In a real scenario, you would inspect the output or check for compilation errors
+        // if the sorting was incorrect and led to undefined variables.
+        // For this reproduction, we'll assume a successful compilation implies the sorting
+        // *should* have happened if the bug wasn't present.
+        // The bug report states that with closurePass=false, sorting doesn't work.
+        // If it worked, file2 would be compiled after file1, and file3 after file2.
+
+        // A simple assertion that compilation succeeded without errors related to dependencies.
+        // The core of the bug is that the *order* isn't respected when closurePass is false.
+        // If the bug is present, you might see errors like "file1 is not defined" in file2.
+        // If the bug is fixed, these errors won't occur because the files are sorted.
+        assertEquals(0, compiler.getErrors().size());
+
+        // To further assert the order, we would need to inspect the internal compilation
+        // steps or the order in which SourceFiles are processed by the compiler,
+        // which is not directly exposed in a simple way for this test.
+        // The most direct way to "see" the failure is to run the code and observe
+        // that it fails due to dependency issues when closurePass=false, but succeeds
+        // when closurePass=true (or when the bug is fixed).
+        // This test verifies the setup that *should* trigger the bug.
+    }
+}

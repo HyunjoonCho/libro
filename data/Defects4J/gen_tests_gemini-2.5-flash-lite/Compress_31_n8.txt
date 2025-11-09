@@ -1,0 +1,81 @@
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.ArchiveInputStream;
+import org.apache.commons.compress.archivers.ArchiveStreamFactory;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+
+import static org.junit.Assert.assertNotNull;
+
+public class TarFileTest {
+
+    @Test
+    public void testTgzExtraction() throws IOException {
+        // Create a minimal valid .tgz file in memory
+        // This is a simple tar archive containing a single empty file named "test.txt"
+        // The tar header is manually constructed to be valid.
+        // The total size of the header is 512 bytes.
+        // The file name "test.txt" is null-padded to 100 bytes.
+        // The mode (0100644) is for a regular file.
+        // The size (0) is for an empty file.
+        // The mtime (1678886400) is a sample timestamp.
+        // The checksum (0) is for an empty file.
+        // The typeflag ('0') is for a regular file.
+        // The magic ('ustar') and version (' ') are standard.
+        byte[] tarHeader = new byte[512];
+        // Name
+        System.arraycopy("test.txt".getBytes(), 0, tarHeader, 0, "test.txt".getBytes().length);
+        // Mode (0100644) - regular file
+        setOctalField(tarHeader, 100, 0100644);
+        // UID (0)
+        setOctalField(tarHeader, 108, 0);
+        // GID (0)
+        setOctalField(tarHeader, 116, 0);
+        // Size (0)
+        setOctalField(tarHeader, 124, 0);
+        // Mtime (sample timestamp)
+        setOctalField(tarHeader, 136, 1678886400);
+        // Checksum (0 for empty file, will be recalculated by library)
+        setOctalField(tarHeader, 148, 0);
+        // Typeflag ('0' for regular file)
+        tarHeader[156] = '0';
+        // Magic ('ustar')
+        System.arraycopy("ustar".getBytes(), 0, tarHeader, 257, "ustar".getBytes().length);
+        // Version (' ')
+        tarHeader[262] = ' ';
+        // Padding with nulls
+        // The rest of the header is already null-padded from byte array initialization
+
+        ByteArrayInputStream tarInputStream = new ByteArrayInputStream(tarHeader);
+        GzipCompressorInputStream gzipInputStream = new GzipCompressorInputStream(tarInputStream);
+        TarArchiveInputStream tarArchiveInputStream = new TarArchiveInputStream(gzipInputStream);
+
+        ArchiveEntry entry = tarArchiveInputStream.getNextTarEntry();
+        assertNotNull("Should have at least one entry", entry);
+
+        // The original code tried to read content, but for this test,
+        // we only need to ensure getNextTarEntry() doesn't throw an exception.
+        // The actual content reading logic is not tested here as it's not the focus of the bug.
+
+        tarArchiveInputStream.close();
+        gzipInputStream.close();
+        tarInputStream.close();
+    }
+
+    // Helper method to set an octal field in the tar header
+    private void setOctalField(byte[] header, int offset, int value) {
+        String octalString = Integer.toString(value, 8);
+        byte[] octalBytes = octalString.getBytes();
+        System.arraycopy(octalBytes, 0, header, offset, octalBytes.length);
+        // Pad with nulls
+        for (int i = octalBytes.length; i < 8; i++) {
+            header[offset + i] = 0;
+        }
+    }
+}

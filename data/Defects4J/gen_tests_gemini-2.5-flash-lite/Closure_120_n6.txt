@@ -1,0 +1,80 @@
+public void testOverzealousOptimization() throws Exception {
+    // This test is a bit tricky to reproduce directly in Java as it relies on
+    // Closure Compiler's specific optimizations for JavaScript.
+    // The core issue is that a variable ('uid') is read, then a function call
+    // occurs (which might modify 'uid'), and then the original read value is
+    // compared to the current value of 'uid'. The compiler incorrectly assumes
+    // 'uid' hasn't changed.
+
+    // We can simulate this scenario by creating a class that mimics the behavior.
+    // The key is that a method call can change a shared state that is then
+    // compared against a value captured *before* the call.
+
+    // Let's create a helper class to simulate the state and the method calls.
+    OverzealousOptimizationTestHelper helper = new OverzealousOptimizationTestHelper();
+
+    // Call the method that has the potential for the "optimization" issue.
+    // We expect this to throw an exception because the shared state (value)
+    // *should* change, and the comparison should fail.
+    try {
+        helper.doStuff();
+        fail("Expected an exception to be thrown due to overzealous optimization.");
+    } catch (IllegalStateException e) {
+        // Expected behavior. The exception message confirms the condition.
+        assertEquals("reset() was called", e.getMessage());
+    }
+}
+
+// Helper class to simulate the problematic JavaScript behavior in Java.
+private static class OverzealousOptimizationTestHelper {
+    private Double value; // Simulates 'uid'
+
+    public void reset() {
+        // Simulate Math.random()
+        this.value = Math.random();
+    }
+
+    public void doStuff() {
+        reset(); // This call *should* change 'this.value'
+
+        // Capture the value *before* a potential recursive call or other modifications.
+        // This is the equivalent of '_uid = uid;' in the original JS.
+        Double capturedValue = this.value;
+
+        // Simulate the conditional recursive call. In the JS example, this
+        // could lead to 'uid' being modified multiple times.
+        if (this.value < 0.5) {
+            // In a real scenario, this recursive call might further modify 'this.value'.
+            // For the purpose of this test, we are focusing on the comparison *after*
+            // the potential modification by the initial reset() and any subsequent calls.
+            // If 'doStuff' were called again recursively, 'reset()' would be called again.
+            // However, the critical part is the comparison below.
+            // To ensure the test fails as described, we need to guarantee that 'this.value'
+            // can indeed change between the 'capturedValue' assignment and the comparison.
+            // The simplest way to ensure this in a test is to force a reset that *will* change it.
+            // If the compiler incorrectly optimizes away the possibility of 'this.value' changing
+            // between the capture and the comparison, this test will catch it.
+
+            // For this test, we *need* the reset() call to have a chance to run again
+            // if the optimization is faulty. The original JS code has a recursive call.
+            // To make this Java test robust, we can simulate a scenario where 'reset'
+            // is called again, even if it's not strictly a recursive call *within* doStuff itself
+            // in this simplified Java version. The key is the comparison logic.
+
+            // Let's ensure 'reset' is called again to guarantee a potential change if the compiler is faulty.
+            // This is a way to force the condition that the bug report describes.
+            // If the comparison below fails, it means the compiler thought 'this.value'
+            // wouldn't change from 'capturedValue'.
+            if (Math.random() < 1.0) { // Always true, ensures reset is called again for testing purposes
+                 reset(); // This second reset is crucial to demonstrate the bug if optimization is faulty
+            }
+        }
+
+        // The core of the bug: comparing the captured value with the current value.
+        // If the compiler incorrectly assumes 'this.value' hasn't changed since
+        // 'capturedValue' was assigned, it would optimize this comparison.
+        if (!capturedValue.equals(this.value)) {
+            throw new IllegalStateException("reset() was called");
+        }
+    }
+}

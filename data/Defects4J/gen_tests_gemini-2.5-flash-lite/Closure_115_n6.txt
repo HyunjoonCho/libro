@@ -1,0 +1,71 @@
+public void testAdvancedOptimizationOptimization() throws Exception {
+    String inputJs = "window[\"anchor\"] = function (obj, modifiesProp) {\n" +
+                     " return (function (saved) {\n" +
+                     " return modifiesProp(obj) + saved;\n" +
+                     " })(obj[\"prop\"]);\n" +
+                     " }";
+    String externsJs = "var window; window.prop;";
+
+    CompilationLevel level = CompilationLevel.ADVANCED_OPTIMIZATIONS;
+    CheckLevel warningLevel = CheckLevel.VERBOSE;
+
+    CompilerOptions options = new CompilerOptions();
+    level.setOptionsForCompilationLevel(options);
+    options.setPrettyPrint(true);
+    options.setCodingConvention(new ClosureCodingConvention());
+
+    List<SourceFile> externs = ImmutableList.of(SourceFile.fromCode("externs.js", externsJs));
+    List<SourceFile> sources = ImmutableList.of(SourceFile.fromCode("input.js", inputJs));
+
+    Compiler compiler = new Compiler();
+    compiler.compile(externs, sources, options);
+
+    String outputJs = compiler.toSource();
+
+    // The expected output is a simplified version of the input,
+    // but the bug causes a more aggressive (and incorrect) simplification.
+    // The bug is that 'saved' is not preserved correctly.
+    // We expect the output to preserve the original structure more closely.
+    // A truly correct output might be something like:
+    // window.anchor = function(obj, modifiesProp) {
+    //   var saved = obj.prop;
+    //   return modifiesProp(obj) + saved;
+    // };
+    // However, the bug report shows a different expected output which implies
+    // a specific transformation. Let's try to match the description's expected output
+    // as a baseline for what *should* happen, and then assert that the actual output
+    // is different and incorrect.
+
+    // The bug report states the *expected* output is different from the actual.
+    // Let's assert that the actual output is NOT the buggy version.
+    // The buggy version removes the intermediate 'saved' variable.
+    String buggyOutputPattern = "window.anchor=function(a,b){return b(a)+a.prop}";
+    assertFalse("Output should not be the buggy version", outputJs.contains(buggyOutputPattern));
+
+    // Let's also check for a more correct structure, although this might be
+    // subject to further compiler optimizations. The key is that obj.prop
+    // should be captured *before* modifiesProp is called if it might be modified.
+    // The bug is that it's evaluated *after* or in a way that doesn't preserve
+    // the original value.
+    // A more robust test would involve actually running the JS, but for
+    // reproducing the compilation failure, checking the source is sufficient.
+
+    // The original bug description implies that `saved` should be used.
+    // Let's check if the output still contains the variable `saved` which
+    // was intended to hold `obj.prop`. If `saved` is gone, it's likely the bug.
+    // This is a bit heuristic but captures the essence of the described problem.
+    // The bug is that the compiler thinks `obj.prop` is safe to re-evaluate.
+    // The fix involves preserving `saved`.
+    assertTrue("Output should still reference the saved property", outputJs.contains("saved"));
+
+    // Further check: the bug is specifically about the addition happening
+    // with a potentially modified `obj.prop`. The original code structure
+    // `(function(saved){ return modifiesProp(obj) + saved })(obj["prop"]);`
+    // correctly captures `obj.prop` into `saved` *before* `modifiesProp` is called.
+    // The buggy output `b(a)+a.prop` evaluates `a.prop` potentially *after* `b(a)`
+    // has modified `a`.
+    // We will assert that the output is NOT the version that evaluates `a.prop`
+    // directly in the return statement of the outer function.
+    String incorrectReturnPattern = "return modifiesProp(obj) + obj[\"prop\"]";
+    assertFalse("Output should not have modified prop in the return statement", outputJs.contains(incorrectReturnPattern));
+}

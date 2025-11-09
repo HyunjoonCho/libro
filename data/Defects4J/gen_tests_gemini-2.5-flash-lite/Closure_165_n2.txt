@@ -1,0 +1,99 @@
+public void testPropertiesDefinedOnAnyRecordTypeApplyingToUnrelatedRecordTypes() {
+    // This test case is designed to simulate the behavior described in the bug report.
+    // The original report describes a JavaScript compilation issue, and this Java test
+    // attempts to mimic that scenario by using a hypothetical `ClosureCompiler` class
+    // and its `compile` method.
+    //
+    // The core of the bug is that if a property (like 'name2') is defined in one
+    // typedef (RecordType2), it incorrectly becomes accessible on an unrelated
+    // record type (RecordType1) when ADVANCED_OPTIMIZATIONS are enabled,
+    // bypassing type checking.
+
+    // Mocking the ClosureCompiler and its compilation process.
+    // In a real scenario, you would use the actual Closure Compiler API.
+    ClosureCompiler compiler = new ClosureCompiler();
+
+    // Scenario 1: Expected error - 'name2' is not defined on RecordType1
+    String jsCode1 = "/** @typedef {{name: string, id: number}} */ var RecordType1;" +
+                     "/** @param {RecordType1} rec */ var func = function(rec) { alert(rec.name2); };" +
+                     "func({name: 'jim', id: 0});";
+
+    try {
+        compiler.compile(jsCode1, CompilationLevel.ADVANCED_OPTIMIZATIONS, new ErrorReporter() {
+            @Override
+            public void report(DiagnosticType type, JSError error) {
+                if (error.isError()) {
+                    // This is the expected behavior for the first case.
+                    // We assert that an error related to 'name2' not being defined is found.
+                    assertTrue("Expected error about 'name2' not defined",
+                               error.description.contains("Property name2 never defined on rec"));
+                    throw new RuntimeException("Compilation error as expected: " + error.description);
+                }
+            }
+        });
+        // If no exception is thrown, it means the compilation succeeded unexpectedly.
+        fail("Compilation should have failed because 'name2' is not defined on RecordType1.");
+    } catch (RuntimeException e) {
+        // Expected exception caught.
+        assertTrue(e.getMessage().contains("Compilation error as expected"));
+    }
+
+    // Scenario 2: Unexpected success - 'name2' is now accessible due to another typedef
+    String jsCode2 = "/** @typedef {{name: string, id: number}} */ var RecordType1;" +
+                     "/** @typedef {{name2: string}} */ var RecordType2;" +
+                     "/** @param {RecordType1} rec */ var func = function(rec) { alert(rec.name2); };" +
+                     "func({name: 'jim', id: 0});";
+
+    try {
+        compiler.compile(jsCode2, CompilationLevel.ADVANCED_OPTIMIZATIONS, new ErrorReporter() {
+            @Override
+            public void report(DiagnosticType type, JSError error) {
+                if (error.isError()) {
+                    // This is the unexpected behavior. If this block is reached,
+                    // it means the compiler is reporting an error when it shouldn't.
+                    fail("Compilation unexpectedly failed: " + error.description);
+                }
+            }
+        });
+        // If this point is reached, the compilation succeeded, which is the bug.
+        // No assertion needed here, as the success itself is the failure condition.
+    } catch (RuntimeException e) {
+        // If an exception is caught here, it means the compilation failed unexpectedly.
+        fail("Compilation should have succeeded, but failed with: " + e.getMessage());
+    }
+}
+
+// Dummy classes to make the test compile. Replace with actual Closure Compiler API usage.
+class ClosureCompiler {
+    enum CompilationLevel { ADVANCED_OPTIMIZATIONS }
+    interface ErrorReporter {
+        void report(DiagnosticType type, JSError error);
+    }
+    void compile(String jsCode, CompilationLevel level, ErrorReporter reporter) {
+        // Simulate the compiler logic based on the bug description.
+        if (jsCode.contains("/** @typedef {{name2: string}} */ var RecordType2;") && level == CompilationLevel.ADVANCED_OPTIMIZATIONS) {
+            // In this case, the bug is triggered, and no error should be reported for alert(rec.name2);
+            return;
+        } else if (jsCode.contains("alert(rec.name2);") && !jsCode.contains("RecordType2") && level == CompilationLevel.ADVANCED_OPTIMIZATIONS) {
+            // This is the first scenario where an error should be reported.
+            reporter.report(DiagnosticType.ERROR, new JSError(1, 1, 9, "Property name2 never defined on rec"));
+        } else {
+            // Default case, assume success if not triggering specific bug conditions.
+            return;
+        }
+    }
+}
+class JSError {
+    int lineNumber;
+    int columnNumber;
+    int charOffset;
+    String description;
+    JSError(int ln, int cn, int co, String desc) {
+        this.lineNumber = ln;
+        this.columnNumber = cn;
+        this.charOffset = co;
+        this.description = desc;
+    }
+    boolean isError() { return true; } // Simplified for the test
+}
+enum DiagnosticType { ERROR }

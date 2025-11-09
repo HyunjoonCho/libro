@@ -1,0 +1,203 @@
+public void testDateUtilsTruncateDST() {
+    // 2004-10-31 01:00:00 MDT (Mountain Daylight Time)
+    // This is the hour that is skipped during the DST to Standard Time transition in North America.
+    // MDT is UTC-6. MST is UTC-7.
+    // The transition happened at 2:00 AM local time on Oct 31, 2004.
+    // So, 1:00 AM MDT becomes 1:00 AM MST, effectively skipping an hour.
+    // The timestamp 1099206000000L corresponds to:
+    // Date: Sun Oct 31 07:00:00 GMT 2004
+    // In a timezone observing MDT (UTC-6), this would be 2004-10-31 01:00:00 AM MDT.
+    // In a timezone observing MST (UTC-7), this would be 2004-10-31 12:00:00 AM MST.
+    // The issue is that DateUtils.truncate might not correctly handle the timezone shift
+    // happening within the truncated unit (hour).
+
+    // Let's create a date object that represents 2004-10-31 01:00:00 in a timezone that
+    // observes the MDT -> MST transition.
+    // We'll use a specific timezone for testing.
+    TimeZone mdtTz = TimeZone.getTimeZone("America/Denver"); // Denver observes MDT/MST transition
+
+    // The epoch time 1099206000000L represents Sun Oct 31 07:00:00 GMT 2004.
+    // In America/Denver, this is Sat Oct 30 2004 13:00:00 MDT. This is not what we want.
+    // We need to construct the date *at* the DST transition hour.
+
+    // Let's manually construct the date.
+    // We want 2004-10-31 01:00:00 AM MDT.
+    // This hour is skipped. The clock goes from 01:59:59 AM MDT to 01:00:00 AM MST.
+    // So, the *instant* that would be 01:00:00 AM MDT is actually 00:00:00 AM MST on Oct 31.
+    // Let's verify the epoch time for 2004-10-31 01:00:00 MDT.
+    // 2004-10-31 01:00:00 MDT is equivalent to 2004-10-31 07:00:00 GMT.
+    // The epoch time for 2004-10-31 07:00:00 GMT is indeed 1099206000000L.
+
+    Date oct31_01MDT = new Date(1099206000000L);
+
+    // The expected result after truncating to the hour:
+    // The original time is 2004-10-31 01:00:00 MDT.
+    // Since this hour is skipped due to DST, the *next* hour locally will be 1:00:00 AM MST.
+    // The Date object itself represents an instant in time, independent of timezone interpretation.
+    // However, DateUtils.truncate likely uses Calendar which is timezone-aware.
+    // When truncating 01:00:00 MDT to the hour, it should remain 01:00:00.
+    // The bug description implies that it might become 02:00:00 MST, which is an hour *later* locally.
+    // The assertion in the bug report is `assertEquals(oct31_01MDT, result);`
+    // This implies that the result of the truncate operation *should* be the same date object.
+    // Let's re-read the bug: "you'll actually get 2004-10-31 01:00:00 MST, which is one hour after the input hour."
+    // This statement is confusing. If the input is 01:00:00 MDT, and the output is 01:00:00 MST,
+    // then the output is *not* one hour after the input hour locally.
+    // The transition is 2 AM MDT -> 1 AM MST.
+    // So, an instant that *was* 1:30 AM MDT becomes 12:30 AM MST.
+    // An instant that *was* 01:00:00 MDT (the skipped hour) is problematic.
+    // Let's assume the bug means that the resulting Date object, when interpreted in the *same* timezone,
+    // might represent a different local time due to the DST shift being mishandled.
+
+    // Let's use a Calendar object to represent the date and timezone explicitly.
+    Calendar cal = Calendar.getInstance(mdtTz);
+    cal.setTimeInMillis(1099206000000L); // This is 2004-10-31 01:00:00 MDT
+
+    // The DateUtils.truncate method likely uses Calendar internally.
+    // Let's simulate what DateUtils.truncate might do.
+    // It should set minutes, seconds, milliseconds to 0.
+    // If the DST transition occurs *within* the hour being truncated, it might cause issues.
+    // In this case, the hour 01:00:00 MDT is the hour that gets "skipped" and becomes 01:00:00 MST.
+    // So, the instant 1099206000000L should remain the same instant.
+    // The problem might arise if DateUtils.truncate recalculates the time based on the new day/hour
+    // without considering that the DST transition has altered the local time representation.
+
+    // Let's create the expected result.
+    // If DateUtils.truncate correctly handles the DST transition, the truncated hour
+    // should still represent the same instant in time.
+    // The epoch time 1099206000000L is Sun Oct 31 07:00:00 GMT 2004.
+    // In America/Denver, this is 2004-10-31 01:00:00 MDT.
+    // After the transition, the *next* local time is 2004-10-31 01:00:00 MST.
+    // The bug implies that `DateUtils.truncate(oct31_01MDT, Calendar.HOUR_OF_DAY)`
+    // might return a Date object that represents 2004-10-31 02:00:00 MST (or similar).
+    // The assertion in the bug report is `assertEquals(oct31_01MDT, result);`.
+    // This means the expected behavior is that the Date object should remain unchanged.
+    // The failure is that it *doesn't* remain unchanged, likely due to misinterpretation of timezones.
+
+    // Let's set up a specific test case that highlights the DST issue.
+    // We are testing the `truncate` method.
+    // The input Date object `oct31_01MDT` represents the instant Sun Oct 31 07:00:00 GMT 2004.
+    // When interpreted in `America/Denver` timezone, this instant is 2004-10-31 01:00:00 MDT.
+    // The DST transition occurs at 2:00 AM local time on Oct 31, 2004.
+    // The clock moves from 1:59:59 AM MDT to 1:00:00 AM MST.
+    // The hour from 1:00:00 AM to 1:59:59 AM MDT is effectively skipped in local time.
+    // If `DateUtils.truncate` is called with `oct31_01MDT` and `Calendar.HOUR_OF_DAY`,
+    // it should conceptually set the minutes, seconds, and milliseconds to zero.
+    // Since the input is already at 01:00:00, the truncated date should represent the same instant.
+    // The bug description suggests that the `result` Date object, when interpreted,
+    // might show a different local time, potentially shifted by an hour due to incorrect DST handling.
+    // The assertion `assertEquals(oct31_01MDT, result);` implies that the Date object should be identical.
+    // The failure occurs if `result` is not equal to `oct31_01MDT`.
+
+    // To reproduce the failure, we need to ensure DateUtils.truncate is called.
+    // We will assume DateUtils.truncate internally uses Calendar.
+    // The problematic part is how Calendar handles timezones and DST transitions when setting fields.
+
+    // Let's try to construct a scenario where the truncation might cause a timezone shift.
+    // The bug description uses `Date oct31_01MDT = new Date(1099206000000L);`
+    // and expects `assertEquals(oct31_01MDT, result);`.
+    // This means the `truncate` method, when given this specific Date object, should return the *exact same* Date object.
+    // The failure is when it returns a *different* Date object.
+
+    // We need to simulate the behavior of DateUtils.truncate.
+    // A common implementation might involve:
+    // 1. Getting a Calendar instance.
+    // 2. Setting its time to the input Date.
+    // 3. Modifying the Calendar fields (e.g., setting minutes, seconds, milliseconds to 0).
+    // 4. Getting the time in milliseconds from the modified Calendar.
+    // 5. Creating a new Date object from these milliseconds.
+
+    // The crucial part is step 3 and how Calendar.getInstance(tz) behaves with DST.
+    // Let's create a Calendar for the specific timezone and set the time.
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("America/Denver"));
+    calendar.setTimeInMillis(1099206000000L); // This is 2004-10-31 01:00:00 MDT
+
+    // Now, let's simulate the truncation by setting hour, minute, second, millisecond to 0.
+    // The input is already 01:00:00.000.
+    // If we call `calendar.set(Calendar.HOUR_OF_DAY, 0); calendar.set(Calendar.MINUTE, 0); ...`
+    // this would be wrong. Truncate to hour means keeping the hour and zeroing out lower fields.
+    // So, it should be:
+    calendar.set(Calendar.MINUTE, 0);
+    calendar.set(Calendar.SECOND, 0);
+    calendar.set(Calendar.MILLISECOND, 0);
+
+    // Now, let's get the time in milliseconds from this potentially modified calendar.
+    long truncatedMillis = calendar.getTimeInMillis();
+    Date result = new Date(truncatedMillis);
+
+    // The original Date object `oct31_01MDT` represents the instant Sun Oct 31 07:00:00 GMT 2004.
+    // The `calendar.getTimeInMillis()` *should* return the same value if the DST transition
+    // is handled correctly by the Calendar object when setting the time.
+    // The bug implies that `calendar.getTimeInMillis()` might return a different value,
+    // effectively representing a different instant in time, likely due to misinterpreting the DST change.
+
+    // Let's verify the expected behavior of Calendar for this specific instant and timezone.
+    // The instant is 2004-10-31 07:00:00 GMT.
+    // In America/Denver, this is 2004-10-31 01:00:00 MDT.
+    // The DST transition from MDT (UTC-6) to MST (UTC-7) happens at 2 AM local time.
+    // So, the hour from 1:00:00 to 1:59:59 MDT is skipped.
+    // The instant 2004-10-31 01:00:00 MDT is equivalent to 2004-10-31 07:00:00 GMT.
+    // If we set a Calendar instance for America/Denver to this GMT time (1099206000000L),
+    // it should correctly represent 2004-10-31 01:00:00 MDT.
+    // Then, if we truncate to the hour by setting minutes, seconds, milliseconds to 0,
+    // the calendar should still represent 2004-10-31 01:00:00 MDT.
+    // The epoch time should remain 1099206000000L.
+
+    // The bug description states: "you'll actually get 2004-10-31 01:00:00 MST, which is one hour after the input hour."
+    // This statement is confusing. If the input is 01:00:00 MDT, and the output is 01:00:00 MST,
+    // the output is *not* one hour after the input hour locally. The hour 1 AM locally is skipped.
+    // The instant that *was* 1:30 AM MDT becomes 12:30 AM MST.
+    // The instant that *was* 1:00:00 AM MDT (the skipped hour) is the critical one.
+    // If DateUtils.truncate results in 2004-10-31 01:00:00 MST, this means the resulting Date object,
+    // when interpreted in MST, would be 01:00:00. This is equivalent to 08:00:00 GMT.
+    // This is different from the original 07:00:00 GMT.
+    // So the failure is that the Date object's millisecond value changes.
+
+    // We need to use a DateUtils class that is available in the test environment.
+    // Assuming `org.apache.commons.lang3.time.DateUtils` is available.
+    // The test should call the actual method.
+
+    Date originalDate = new Date(1099206000000L); // 2004-10-31 01:00:00 MDT
+
+    // The expected result is the original date, meaning the truncate operation
+    // should not change the underlying instant in time.
+    Date expectedDate = originalDate;
+
+    // Call the method under test.
+    // The bug description implies `DateUtils.truncate(oct31_01MDT, Calendar.HOUR_OF_DAY);`
+    // will return a different Date object.
+    // We need to make sure the test environment has a DateUtils class.
+    // For the purpose of generating the *method*, we will assume `DateUtils` exists.
+
+    // Let's create a Date object that represents the time *after* the DST transition,
+    // so we can compare.
+    // The instant 2004-10-31 07:00:00 GMT is 2004-10-31 01:00:00 MDT.
+    // After the transition, the clock shows 2004-10-31 01:00:00 MST.
+    // This MST time is equivalent to 2004-10-31 08:00:00 GMT.
+    // So, if the truncate results in 01:00:00 MST, the epoch time would be 1099209600000L.
+    // This is the value we'd expect if the bug is present.
+
+    // The original code snippet from the bug report:
+    // Date oct31_01MDT = new Date(1099206000000L);
+    // Date result = DateUtils.truncate(oct31_01MDT, Calendar.HOUR_OF_DAY);
+    // assertEquals(oct31_01MDT, result);
+
+    // This assertion expects the returned Date object to be identical to the input.
+    // The failure occurs if they are not identical.
+    // We will replicate this assertion directly.
+
+    // Ensure the test runs in a context where DateUtils is available.
+    // The key is to use the exact date and the Calendar field for hour.
+    Date inputDate = new Date(1099206000000L); // Represents 2004-10-31 01:00:00 MDT
+
+    // The expected outcome, according to the bug, is that `DateUtils.truncate`
+    // does *not* return the same Date object.
+    // The assertion `assertEquals(inputDate, result)` *fails* when the bug is present.
+    // Therefore, to reproduce the failure, we write the test as if the expected outcome is `inputDate`.
+    // The test runner will show this as a failure if the bug is present.
+
+    Date resultDate = DateUtils.truncate(inputDate, Calendar.HOUR_OF_DAY);
+
+    // The assertion that *fails* when the bug is present.
+    // This is how we reproduce the failure.
+    assertEquals("DateUtils.truncate should not alter the date when truncating to hour during DST transition.", inputDate, resultDate);
+}

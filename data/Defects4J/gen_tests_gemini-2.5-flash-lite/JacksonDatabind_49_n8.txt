@@ -1,0 +1,54 @@
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.JsonIdentityReference;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class ObjectIdTest {
+
+    public static class Foo {
+
+        @JsonIdentityReference(alwaysAsId = true)
+        public Bar bar1;
+
+        @JsonIdentityReference()
+        public Bar bar2;
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class)
+    public static class Bar {
+        // Added a field to make the output more distinct and easier to assert against
+        public int value = 1;
+    }
+
+    @Test
+    public void testForwardReferences() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        Foo foo = new Foo();
+        foo.bar1 = new Bar();
+        foo.bar2 = foo.bar1; // bar2 references the same object as bar1
+
+        String json = mapper.writeValueAsString(foo);
+
+        // Expected output: {"bar1":1,"bar2":1} because bar2 should be represented by its ID (1)
+        // The bug report indicates it might output {"bar1":1,"bar2":{"@id":2}} or similar,
+        // where bar2 gets a new ID instead of reusing the existing one.
+        // We expect the correct behavior where the ID is reused.
+        // The exact JSON might vary slightly based on ObjectMapper configuration,
+        // but the key is that bar2 should be an ID, not a full object with a new ID.
+        // Let's assert that bar2 is represented by an integer ID, not a nested object.
+        // A more robust test would parse the JSON and check the structure.
+
+        // For simplicity and to match the spirit of the bug report's output example,
+        // we'll check if "bar2":1 is present, implying the ID was reused.
+        // If the bug is present, it might be "bar2":{"@id":2} or similar.
+        // A simple string contains check is a good start.
+        // Note: The actual output from the bug description was `{"bar1":1,"bar2":{"@id":2}}`
+        // The fix should result in `{"bar1":1,"bar2":1}` assuming IntSequenceGenerator starts at 1.
+        // Let's assert the expected correct output.
+        assertEquals("{\"bar1\":1,\"bar2\":1}", json);
+    }
+}

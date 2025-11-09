@@ -1,0 +1,23 @@
+public void testVarCheckCrashWhenUsingModules() {
+    String code = "var jQuery = function(selector) { return { length: 1 }; };\n" +
+                  "var core = {};\n" +
+                  "core.jquery = jQuery;\n" +
+                  "equal( jQuery(' <div/> ').length, 1, 'Make sure whitespace is trimmed.' );";
+    CompilerOptions options = new CompilerOptions();
+    options.setLanguage(CompilerOptions.LanguageMode.ECMASCRIPT5);
+    options.setClosurePass(true);
+    options.setPrettyPrint(true);
+    options.setDebug(true);
+    options.setModuleActivationStreams(new ModuleActivationStreams("mod_", "jquery", "core"));
+    ModuleProblemHandler handler = new ModuleProblemHandler() {
+        @Override
+        public void handle(String message, DiagnosticType type, String... arguments) {
+            if (message.contains("Unexpected variable jQuery$$2")) {
+                throw new RuntimeException("Caught expected error: " + message);
+            }
+        }
+    };
+    options.setModuleProblemHandler(handler);
+    Compiler compiler = new Compiler();
+    compiler.compile(CodePrinter.getAwaitingCompilationInput(), Collections.singletonList(new JSModule("jquery", "jquery.js", Collections.emptyList())), Collections.singletonList(new JSModule("core", "core.js", Collections.singletonList("jquery"))), options);
+}

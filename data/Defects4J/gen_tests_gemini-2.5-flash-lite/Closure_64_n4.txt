@@ -1,0 +1,34 @@
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.assertTrue;
+
+public class CompilerTest {
+
+    @Test
+    public void testEs5StrictDoubleUseStrict() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setLanguage(CompilerOptions.LanguageMode.ECMASCRIPT5_STRICT);
+        options.setPrettyPrint(true);
+
+        SourceFile getNumJs = SourceFile.fromCode("get_num.js", "var getNum = function() { return 5; };");
+        SourceFile alertJs = SourceFile.fromCode("alert.js", "alert(getNum());");
+
+        compiler.compile(null, new SourceFile[]{getNumJs, alertJs}, options);
+
+        String output = compiler.toSource();
+
+        // The bug is that the output contains two 'use strict'; statements
+        // when it should contain only one, or none if it's not needed.
+        // This assertion checks for the presence of more than one 'use strict';
+        int useStrictCount = 0;
+        int index = output.indexOf("'use strict';");
+        while (index != -1) {
+            useStrictCount++;
+            index = output.indexOf("'use strict';", index + 1);
+        }
+        assertTrue("Expected only one 'use strict'; directive, but found " + useStrictCount, useStrictCount <= 1);
+    }
+}

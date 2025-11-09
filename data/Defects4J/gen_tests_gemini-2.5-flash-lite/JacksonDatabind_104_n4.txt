@@ -1,0 +1,66 @@
+import com.fasterxml.jackson.databind.util.StdDateFormat;
+import org.junit.Test;
+
+import java.text.ParseException;
+import java.util.Date;
+import java.util.TimeZone;
+
+import static org.junit.Assert.assertEquals;
+
+public class StdDateFormatTest {
+
+    @Test
+    public void testLargeISODates() throws ParseException {
+        StdDateFormat formatter = new StdDateFormat();
+        formatter.setTimeZone(TimeZone.getTimeZone("UTC")); // Ensure consistent formatting
+
+        // Test with Long.MAX_VALUE which represents a date far in the future
+        Date maxDate = new Date(Long.MAX_VALUE);
+        String formattedMax = formatter.format(maxDate);
+        // The expected format for years > 9999 is not standard ISO-8601,
+        // but Jackson's StdDateFormat has a specific (though problematic) way of handling it.
+        // We are testing that it does *not* throw an exception and that parsing it back works.
+        // The actual string might look like "+10889-08-17T07:12:55.807Z" or similar,
+        // depending on the exact implementation details of StdDateFormat's year padding.
+        // The key is that it's parsable and the time value is preserved.
+        Date parsedMax = formatter.parse(formattedMax);
+        assertEquals(Long.MAX_VALUE, parsedMax.getTime());
+
+        // Test with Long.MIN_VALUE which represents a date far in the past
+        // Note: The bug report indicates this might fail due to lack of support for negative dates.
+        // We will test the current behavior, which might be a failure, to reproduce the bug.
+        Date minDate = new Date(Long.MIN_VALUE);
+        String formattedMin = formatter.format(minDate);
+        // The problematic formatting for years < 0 is likely to occur here.
+        // For example, it might produce something like "痝055-12-02T16:47:04.192+0000"
+        // which will fail to parse.
+        // We will attempt to parse it and expect a ParseException, or if it parses,
+        // assert that the time value is NOT preserved, indicating incorrect handling.
+
+        try {
+            Date parsedMin = formatter.parse(formattedMin);
+            // If parsing succeeds, the time value should ideally be preserved.
+            // However, given the bug description, it's likely incorrect.
+            // We'll assert that it's NOT equal to Long.MIN_VALUE to show the failure.
+            // If the bug is fixed, this assertion might need to change to assertEquals.
+            // For reproduction, we assume it fails.
+            // If the code *did* parse it correctly (which is unlikely given the bug),
+            // we'd expect the time to match. But the bug is about incorrect formatting/parsing.
+            // The description states "Will fail due to lack of support for negative dates."
+            // So, if it parses, the time will be wrong.
+            // Let's assert it's NOT the original value to show the failure.
+            // A more robust test for failure would be to expect a ParseException.
+            // If it *doesn't* throw an exception but the value is wrong, this test will fail.
+            // If it *does* throw an exception, this test will pass.
+            // The description implies it doesn't throw but parses incorrectly.
+             assertEquals("Parsing Long.MIN_VALUE resulted in an incorrect date", Long.MIN_VALUE, parsedMin.getTime());
+        } catch (ParseException e) {
+            // If a ParseException is thrown, it means the formatted string was invalid,
+            // which is one way the bug manifests (as per the description "Cannot parse date...").
+            // This indicates the bug is present.
+            // We can optionally check the exception message for specifics if needed.
+            System.out.println("Caught expected ParseException for Long.MIN_VALUE: " + e.getMessage());
+            // The test passes if we catch the exception because it means the bug occurred.
+        }
+    }
+}

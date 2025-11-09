@@ -1,0 +1,58 @@
+public void testArDeleteAndAdd() throws Exception {
+    File archiveFile = new File("bla.ar");
+    Archive archive = new Archive(archiveFile);
+
+    // Create initial archive with test1.xml and test2.xml
+    try (OutputStream os1 = archive.add("test1.xml");
+         OutputStream os2 = archive.add("test2.xml")) {
+        os1.write("content1".getBytes());
+        os2.write("content2".getBytes());
+    }
+
+    // Delete test2.xml
+    assertTrue(archive.delete("test2.xml"));
+
+    // Verify that test2.xml is no longer returned by getNextEntry
+    ArchiveEntry entry;
+    List<String> entries = new ArrayList<>();
+    while ((entry = archive.getNextEntry()) != null) {
+        entries.add(entry.getName());
+    }
+    assertFalse(entries.contains("test2.xml"));
+    assertTrue(entries.contains("test1.xml"));
+
+    // Add test.txt
+    try (OutputStream os3 = archive.add("test.txt")) {
+        os3.write("content3".getBytes());
+    }
+
+    // Attempt to list entries again, expecting an error or incorrect listing
+    // The original bug report indicates an "Inappropriate file type or format" error
+    // or that test2.xml might still be present.
+    // We'll try to list and assert based on the observed behavior.
+    List<String> finalEntries = new ArrayList<>();
+    try {
+        // Resetting the archive to read from the beginning for listing
+        archive = new Archive(archiveFile);
+        while ((entry = archive.getNextEntry()) != null) {
+            finalEntries.add(entry.getName());
+        }
+    } catch (IOException e) {
+        // If an IOException occurs, it might be the "Inappropriate file type or format"
+        // We'll check if the exception message indicates this.
+        assertTrue(e.getMessage().contains("Inappropriate file type or format") ||
+                   e.getMessage().contains("Invalid internal file header"));
+        // If an exception is thrown, we can't check finalEntries, which is expected behavior for the bug.
+        return;
+    }
+
+    // If no exception was thrown, we check the entries. The bug implies test2.xml might still be there.
+    // However, the example shows test.txt and then an error.
+    // Let's assert that test.txt is present and test2.xml is NOT present if no error.
+    assertTrue(finalEntries.contains("test.txt"));
+    assertFalse(finalEntries.contains("test2.xml")); // Ideally, it should be gone.
+    assertTrue(finalEntries.contains("test1.xml")); // It should still be there.
+
+    // Clean up
+    archiveFile.delete();
+}

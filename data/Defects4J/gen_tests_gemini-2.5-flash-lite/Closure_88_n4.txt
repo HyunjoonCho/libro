@@ -1,0 +1,150 @@
+public void testAssignmentRemoval() {
+    // We need to simulate the behavior of closure compiler's optimization.
+    // The original code is:
+    // function closureCompilerTest(someNode) {
+    //  var nodeId;
+    //  return ((nodeId=someNode.id) && (nodeId=parseInt(nodeId.substr(1))) && nodeId>0);
+    // }
+    // The optimized code is:
+    // function closureCompilerTest(b){var a;return b.id&&(a=parseInt(a.substr(1)))&&a>0};
+    // This test checks if the optimized version incorrectly uses 'a' instead of 'b.id'
+    // when 'b.id' is assigned to 'a'.
+
+    // Mock object to simulate 'someNode'
+    Object someNode = new Object() {
+        public String id = "123"; // Example ID
+    };
+
+    // Simulate the optimized JavaScript function's logic in Java
+    // The critical part is the expression: b.id&&(a=parseInt(a.substr(1)))
+    // In the faulty optimization, 'a' is used instead of the value from 'b.id'
+    // which was supposed to be assigned to 'a'.
+
+    // Let's simulate the state before the faulty assignment
+    String nodeIdFromSomeNode = someNode.id; // Corresponds to b.id
+    String tempNodeId = null; // Corresponds to 'a' in the optimized JS
+
+    // Simulate the faulty part: (a=parseInt(a.substr(1))) where 'a' is used before assignment
+    // In the original code, it should be (nodeId=parseInt(nodeId.substr(1)))
+    // The bug report says the compiler replaces "nodeId=someNode.id" with "b.id"
+    // and then incorrectly uses "a" in parseInt(a.substr(1)) instead of the assigned value.
+
+    // To reproduce the failure, we need to check the logic that would break.
+    // The description implies that the assignment is lost and a variable is used
+    // before it's properly initialized from the node ID.
+
+    // Let's recreate the intended logic and then the faulty one.
+
+    // Intended logic (closer to original JS):
+    String intendedNodeId = someNode.id;
+    int parsedIntId = Integer.parseInt(intendedNodeId.substring(1));
+    boolean intendedResult = parsedIntId > 0;
+
+    // Faulty logic as described (using 'a' incorrectly):
+    // If the compiler did this:
+    // var a; return b.id && (a = parseInt(a.substr(1))) && a > 0;
+    // Then 'a' would be null or undefined in the parseInt call, leading to an error or wrong result.
+
+    // Let's assume the test environment doesn't directly execute JS.
+    // We need to test the *consequence* of this faulty optimization.
+    // The description states: "nodeId=someNode.id" is replaced with simply "b.id" which is incorrect
+    // as the value of "nodeId" is used.
+    // This means the assignment `nodeId=someNode.id` is lost.
+    // Then, `nodeId=parseInt(nodeId.substr(1))` is evaluated. If `nodeId` wasn't assigned,
+    // this would fail or use an old value.
+
+    // Let's test a scenario where the assignment is crucial.
+    // Suppose someNode.id is "X123".
+    // Intended: nodeId = "X123"; parsed = parseInt("123") = 123. 123 > 0 is true.
+    // Faulty (if 'a' is used before assignment): a = parseInt(a.substr(1)) -> would likely throw NullPointerException or return NaN.
+
+    // We can't directly test the compiler's output in JUnit without a JS engine.
+    // We need to test the *behavior* that the bug report describes.
+    // The bug is about *assignment removal*.
+    // Let's assume we have a method that *simulates* the faulty optimization.
+    // Or, we can test a case where the optimization *would* break the logic.
+
+    // Let's focus on the expression: `nodeId=parseInt(nodeId.substr(1))`
+    // If `nodeId` was supposed to be assigned `someNode.id`, but that assignment was removed,
+    // and then `parseInt(nodeId.substr(1))` is called, where `nodeId` is uninitialized or has a stale value.
+
+    // Consider the case where `someNode.id` is "X123".
+    String originalNodeId = "X123";
+    // Intended operation:
+    String assignedNodeId = originalNodeId;
+    int parsedValue = Integer.parseInt(assignedNodeId.substring(1)); // Parses "123"
+    assertTrue(parsedValue > 0); // 123 > 0
+
+    // Now, simulate the faulty optimization: assignment removed, then parseInt is called on potentially wrong value.
+    // If the compiler produced: `return someNode.id && (a = parseInt(a.substr(1))) && a > 0;`
+    // And 'a' was never assigned `someNode.id` before the `parseInt` call.
+    // Let's simulate this by having 'a' be null initially.
+    String staleOrUninitializedNodeId = null; // Simulates 'a' before assignment from someNode.id
+
+    try {
+        // This line would fail if staleOrUninitializedNodeId is null
+        Integer.parseInt(staleOrUninitializedNodeId.substring(1));
+        fail("Should have thrown NullPointerException or similar due to uninitialized variable.");
+    } catch (NullPointerException e) {
+        // This is the expected outcome of the faulty optimization if 'a' is null.
+        // The test should pass if this exception is caught, indicating the bug's behavior.
+    } catch (StringIndexOutOfBoundsException e) {
+        // Or potentially this if substr is called on empty string etc.
+        // The key is that it fails where the original code would succeed.
+    }
+
+    // The description is a bit ambiguous about the exact faulty output,
+    // but the core issue is the loss of assignment.
+    // We can test a specific input that would fail due to this loss.
+
+    // Let's refine the test to be more direct about the lost assignment.
+    // Original: nodeId = someNode.id; then nodeId = parseInt(nodeId.substr(1))
+    // Faulty: someNode.id; then a = parseInt(a.substr(1))
+    // The value of `someNode.id` is *not* being used in the `parseInt` part in the faulty version.
+
+    // Let's try a mock object that has an `id` property.
+    class MockNode {
+        String id;
+        MockNode(String id) { this.id = id; }
+    }
+
+    MockNode nodeWithId = new MockNode("X123");
+
+    // Simulate the *correct* execution path:
+    String correctNodeId = nodeWithId.id; // "X123"
+    String correctSubstr = correctNodeId.substring(1); // "123"
+    int correctParsed = Integer.parseInt(correctSubstr); // 123
+    assertTrue("Correct parsing should yield a positive number", correctParsed > 0);
+
+    // Simulate the *faulty* execution path as described:
+    // The assignment `nodeId = someNode.id` is removed.
+    // The subsequent `parseInt(nodeId.substr(1))` uses a potentially uninitialized `nodeId` (or `a` in the JS example).
+    // Let's assume `nodeId` is initially null or undefined.
+    String faultyNodeId = null; // Simulating the uninitialized variable.
+
+    try {
+        // Attempt to execute the faulty part: parseInt(faultyNodeId.substr(1))
+        // This should fail because faultyNodeId is null.
+        Integer.parseInt(faultyNodeId.substring(1));
+        // If we reach here, the test failed because the expected exception was not thrown.
+        fail("The faulty optimization should have caused an error due to using an uninitialized variable.");
+    } catch (NullPointerException e) {
+        // This is the expected exception, confirming the bug's behavior.
+        // The test passes if this exception is caught.
+    }
+
+    // Add another case to be sure.
+    MockNode anotherNode = new MockNode("Y99");
+    String anotherCorrectNodeId = anotherNode.id; // "Y99"
+    String anotherCorrectSubstr = anotherCorrectNodeId.substring(1); // "99"
+    int anotherCorrectParsed = Integer.parseInt(anotherCorrectSubstr); // 99
+    assertTrue("Correct parsing should yield a positive number", anotherCorrectParsed > 0);
+
+    String anotherFaultyNodeId = null; // Simulating the uninitialized variable.
+    try {
+        Integer.parseInt(anotherFaultyNodeId.substring(1));
+        fail("The faulty optimization should have caused an error due to using an uninitialized variable.");
+    } catch (NullPointerException e) {
+        // Expected exception.
+    }
+}

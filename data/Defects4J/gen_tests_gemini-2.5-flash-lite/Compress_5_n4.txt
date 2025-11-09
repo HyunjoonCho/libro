@@ -1,0 +1,234 @@
+public void testTruncatedArchive() throws IOException {
+    byte[] zipData = new byte[100]; // Simulate truncated zip data
+    ByteArrayInputStream bis = new ByteArrayInputStream(zipData);
+    ZipArchiveInputStream zipInputStream = new ZipArchiveInputStream(bis);
+    try {
+        byte[] buffer = new byte[1024];
+        int bytesRead;
+        while ((bytesRead = zipInputStream.read(buffer)) != -1) {
+            // Keep reading, expecting it to eventually return -1 or throw an exception
+            // The bug is that it will keep returning 0 bytes read indefinitely
+            if (bytesRead == 0) {
+                // In a real test, we might want to add a counter here to prevent infinite loops
+                // and fail if it exceeds a certain threshold, indicating the bug.
+                // For this example, we'll rely on the fact that a correct implementation
+                // should eventually return -1 or throw.
+            }
+        }
+        // If we reach here without an exception and without bytesRead ever being -1,
+        // it indicates the truncation was not detected.
+        // However, the original bug description implies read() returns 0 indefinitely.
+        // To reproduce the described failure, we need to check if the stream *didn't*
+        // signal end-of-stream or throw.
+        // A simple way to test the *absence* of the fix is to see if it gets stuck
+        // in a loop of returning 0.
+        // Let's try to read a few times and assert that it doesn't immediately return -1
+        // and also doesn't throw the expected exception if it were truncated.
+
+        // Resetting the stream for a more targeted test
+        bis.reset();
+        zipInputStream = new ZipArchiveInputStream(bis);
+        int readCount = 0;
+        int result = 0;
+        while(readCount < 5) { // Try reading a few times
+            result = zipInputStream.read();
+            if (result == -1) {
+                break; // End of stream detected (correct behavior if archive was valid and short)
+            }
+            if (result == 0) {
+                // This is the problematic behavior for a truncated archive.
+                // We expect this to happen if the archive is truncated.
+                // The fix is supposed to throw an exception in this scenario after a few tries.
+                // If it continues to return 0 and never throws/returns -1, the bug exists.
+            }
+            readCount++;
+        }
+        // The core of the bug is that read() returns 0 indefinitely.
+        // A test that *fails* due to the bug would hang or continue reading 0s.
+        // To make a test pass when the bug is present, we'd need to simulate
+        // the condition where it *should* throw or return -1, but doesn't.
+
+        // Let's simulate a scenario where it *should* signal end of stream but doesn't.
+        // For a truncated archive, we expect it to eventually signal an error or -1.
+        // The bug is that it keeps returning 0.
+        // We'll construct a minimal "truncated" zip that doesn't even have a central directory.
+        // A single entry with no data and no central directory would be very small.
+        // If we create a zip with just a local file header and no data, and then truncate it,
+        // the read method should ideally detect this.
+
+        // A simpler approach for testing the described behavior:
+        // Create a ZipArchiveInputStream with insufficient data to form a complete entry.
+        // Then, repeatedly call read(). The bug is that it will return 0 bytes read
+        // indefinitely instead of -1 or throwing an exception.
+
+        byte[] incompleteZip = new byte[] {
+            // A minimal zip local file header (e.g., for a zero-byte file)
+            // This is a simplified representation and might not be a valid zip header on its own,
+            // but it's enough to trick the stream into thinking there's data to read.
+            // A proper test would involve creating a valid zip and then truncating it.
+
+            // Example: A zip file with a single entry that is truncated mid-header
+            // or mid-data. The key is that `inf.finished()` will be false, but `read()`
+            // will return 0.
+
+            // Let's simulate the condition where `read` returns 0 but `inf.finished()` is false.
+            // This is hard to directly mock without access to the internal `inf` object.
+            // Instead, we rely on the *behavior* described: `read()` returns 0 indefinitely.
+
+            // To make this test runnable and pass if the bug is fixed, and fail if it's present,
+            // we need to assert something about the behavior.
+            // The bug report states: "All calls to read() will return 0 bytes read. They will not return -1... nor will they throw any exception."
+
+            // We can test this by trying to read and checking that it *doesn't* return -1
+            // immediately, and then perhaps asserting that if we read multiple times,
+            // we don't get an exception, which implies it's stuck returning 0.
+
+            // Let's create a byte array that represents a zip file that is clearly truncated.
+            // A zip file requires at least a local file header, file data, and a data descriptor/central directory.
+            // If we provide only a partial local file header, the stream might read 0 bytes
+            // but not finish.
+
+            // A more robust way is to create a valid zip file in memory, then truncate its byte representation.
+            // However, for this specific bug, the description is clear: `read()` returns 0.
+            // So, we need a test that *expects* `read()` to return 0, but under conditions
+            // where it *should* have detected the truncation and returned -1 or thrown.
+
+            // Let's provide a minimal input that *might* cause the stream to read 0 bytes
+            // without finishing, simulating a truncated archive.
+            byte[] minimalInput = new byte[10]; // Very small input, likely truncated
+            ByteArrayInputStream truncatedBis = new ByteArrayInputStream(minimalInput);
+            ZipArchiveInputStream truncatedZipInputStream = new ZipArchiveInputStream(truncatedBis);
+
+            int readResult;
+            int zeroReadCount = 0;
+            int maxAttempts = 5; // Limit attempts to avoid infinite loop in test
+
+            while (zeroReadCount < maxAttempts) {
+                readResult = truncatedZipInputStream.read();
+                if (readResult == -1) {
+                    // This would be the *correct* behavior if the truncated archive
+                    // was interpreted as an empty or fully read archive.
+                    // The bug is that it returns 0, not -1.
+                    fail("Expected read() to return 0 for a truncated archive, but got -1.");
+                    break;
+                }
+                if (readResult == 0) {
+                    // This is the behavior described in the bug.
+                    // We expect this to happen for a truncated archive.
+                    zeroReadCount++;
+                    // If this happens repeatedly, it's the bug.
+                    // The fix should throw an exception.
+                } else {
+                    // If we ever read a non-zero byte, it means the stream is processing
+                    // data, which might not be the intended truncated scenario.
+                    // However, for a truly truncated archive, we expect 0s.
+                }
+            }
+
+            // If the loop completes `maxAttempts` times and `zeroReadCount` is equal to `maxAttempts`,
+            // it means `read()` consistently returned 0.
+            // If the bug is present, this test *should not* throw an exception here.
+            // The fix introduces an exception. So, if the fix is applied, the test
+            // should *fail* at this point if an exception is expected but not thrown.
+            // The current test structure doesn't explicitly assert an exception is thrown.
+
+            // To assert the bug, we need to verify that it *doesn't* throw an exception
+            // when it *should* have detected truncation and thrown one.
+            // Or, more directly, that it keeps returning 0.
+
+            // Let's re-attempt with a slightly different perspective:
+            // We know the bug is that read() returns 0 indefinitely.
+            // The fix is to throw an IOException.
+            // So, a test that *reproduces the failure* should *not* throw an exception.
+            // However, a test that *fails because of the bug* should be designed
+            // to expect an exception or -1, and not get it.
+
+            // Let's try to trigger the condition described: read returns 0, inf.finished() is false.
+            // This is simulated by providing very little data.
+
+            byte[] veryShortZip = new byte[]{0x50, 0x4b, 0x03, 0x04}; // PK.. - start of a local file header, but incomplete.
+            ByteArrayInputStream shortBis = new ByteArrayInputStream(veryShortZip);
+            ZipArchiveInputStream shortZipInputStream = new ZipArchiveInputStream(shortBis);
+
+            int bytesRead;
+            byte[] buffer = new byte[10];
+            int readAttempts = 0;
+            final int maxReadAttempts = 10; // Limit attempts for the test
+
+            while (readAttempts < maxReadAttempts) {
+                bytesRead = shortZipInputStream.read(buffer);
+                if (bytesRead == -1) {
+                    // If it returns -1, it means the stream thinks it's done, which is not the bug.
+                    fail("Expected read() to return 0 for truncated archive, not -1.");
+                    break;
+                }
+                if (bytesRead == 0) {
+                    // This is the bug's behavior. We are expecting this.
+                    // If the fix is applied, an IOException should be thrown *after* some of these 0 reads.
+                    // If this test passes without throwing an exception, it means the bug is present.
+                    readAttempts++;
+                    // We don't break here, we continue to see if it keeps returning 0.
+                } else {
+                    // If we read actual data, this input wasn't sufficient to trigger the specific bug.
+                    fail("Expected read() to return 0 for truncated archive, but got " + bytesRead + " bytes.");
+                    break;
+                }
+            }
+
+            // If the loop finishes and `readAttempts` reached `maxReadAttempts`, it means
+            // `read()` consistently returned 0, which is the bug.
+            // A test that *reproduces the failure* implies that the test *passes* when the bug is present.
+            // So, if we reach this point without an exception, the bug is reproduced.
+
+            // The original bug description implies that `read()` will *always* return 0,
+            // never -1, and never throw.
+            // To reproduce this failure, the test should *not* throw an exception.
+            // So, the structure above, where we loop and check for 0 reads,
+            // and don't assert an exception, is a way to reproduce the *condition*
+            // of the bug.
+
+            // If the fix is applied, the `ZipArchiveInputStream` would throw an `IOException`
+            // within that loop. So, to make this test *fail* when the bug is fixed,
+            // we would wrap the loop in `assertThrows`.
+
+            // For reproducing the *failure*, we want the test to pass if the bug is present.
+            // So, the loop that checks for `bytesRead == 0` and continues is the core.
+
+            // Let's refine the test to be explicit about what we expect *if the bug is present*.
+            // If the bug is present, `read()` will return 0 repeatedly.
+            // If the bug is fixed, `read()` will eventually throw an `IOException`.
+
+            // This test aims to show that `read()` returns 0 for truncated input.
+            // If the test passes (i.e., doesn't throw an exception and `read()` returns 0),
+            // it reproduces the *behavior* of the bug.
+
+            // To make this a *failing test* that *passes when fixed*, we'd use `assertThrows`.
+            // But the request is to "reproduce the failure behavior". This means the test
+            // should pass if the bug is present.
+
+            // Therefore, the loop that consumes 0-byte reads without error is the reproduction.
+
+            // Final check on the logic:
+            // Bug: `read()` returns 0 indefinitely for truncated archives.
+            // Fix: `read()` throws `IOException` after detecting truncation.
+            // Test for failure: A test that *doesn't* throw an exception when `read()` returns 0.
+            // Test for success (of the fix): A test that *does* throw an exception.
+
+            // The following code will pass if the bug is present, and fail if the fix is applied.
+            // This "passes when bug is present" is what "reproduces the failure behavior" implies.
+        } catch (IOException e) {
+            // If an IOException is thrown, it means the fix is likely applied,
+            // and the truncation was detected correctly. This test is designed
+            // to *fail* if the fix is applied, so we should fail here.
+            fail("IOException thrown, indicating truncation was detected. This test expects the bug where no exception is thrown for truncated archives.");
+        } finally {
+            // Clean up resources
+            if (zipInputStream != null) {
+                try {
+                    zipInputStream.close();
+                } catch (IOException e) {
+                    // Ignore
+                }
+            }
+        }
+    }

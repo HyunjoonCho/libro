@@ -1,0 +1,25 @@
+public void testUtf16BomHandling() throws IOException {
+    // UTF-16 Big Endian BOM: 0xFE 0xFF
+    byte[] utf16Bom = {(byte) 0xFE, (byte) 0xFF};
+    // Content that would be interpreted differently by UTF-8
+    // "Hello" in UTF-16BE: 0x0048 0x0065 0x006c 0x006c 0x006f
+    byte[] utf16Content = {(byte) 0x00, (byte) 0x48, (byte) 0x00, (byte) 0x65, (byte) 0x00, (byte) 0x6c, (byte) 0x00, (byte) 0x6c, (byte) 0x00, (byte) 0x6f};
+
+    byte[] inputBytes = new byte[utf16Bom.length + utf16Content.length];
+    System.arraycopy(utf16Bom, 0, inputBytes, 0, utf16Bom.length);
+    System.arraycopy(utf16Content, 0, inputBytes, utf16Bom.length, utf16Content.length);
+
+    InputStream inputStream = new ByteArrayInputStream(inputBytes);
+    DataUtil.BomCharset charset = DataUtil.detectCharsetFromBom(inputStream);
+
+    // The bug is that it incorrectly detects UTF-8 or fails to detect UTF-16
+    // If it correctly detects UTF-16, charset will be Charset.forName("UTF-16BE") or similar.
+    // If it incorrectly detects UTF-8, it might return Charset.forName("UTF-8") or null.
+    // The test should assert that it *does not* return UTF-8 and *does* return a UTF-16 charset.
+
+    // Expected behavior: detect UTF-16 Big Endian
+    assertEquals("Should detect UTF-16BE", Charset.forName("UTF-16BE"), charset);
+
+    // If the implementation incorrectly assumes UTF-8
+    assertNotEquals("Should not detect UTF-8", Charset.forName("UTF-8"), charset);
+}

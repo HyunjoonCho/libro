@@ -1,0 +1,31 @@
+public void testHandleUnknownTypeIdReturningVoidCausesNPE() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.enableDefaultTyping();
+
+    SimpleModule module = new SimpleModule();
+    module.addDeserializer(Object.class, new JsonDeserializer<Object>() {
+        @Override
+        public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+            // Simulate the scenario where handleUnknownTypeId returns Void.class
+            // This is a simplified representation; the actual issue occurs deeper in Jackson's logic
+            throw new UnrecognizedPropertyException(p, "Simulated unknown type", null, Void.class, Collections.emptyList(), null);
+        }
+    });
+    mapper.registerModule(module);
+
+    String json = "[\"com.example.MyUnknownClass\", {\"field\": \"value\"}]";
+
+    try {
+        mapper.readValue(json, Object.class);
+        fail("Expected NullPointerException or similar error due to handling Void.class");
+    } catch (JsonMappingException e) {
+        // Check if the exception indicates an issue related to the problematic type handling
+        // The exact exception message or type might vary slightly depending on Jackson version and internal changes.
+        // We are looking for an indication that the deserialization failed due to the unknown type.
+        assertTrue(e.getMessage().contains("Cannot construct instance of `java.lang.Void`") ||
+                   e.getMessage().contains("Unrecognized type id") ||
+                   e.getMessage().contains("Could not resolve type id"));
+    } catch (Exception e) {
+        fail("Expected JsonMappingException, but got " + e.getClass().getName() + ": " + e.getMessage());
+    }
+}

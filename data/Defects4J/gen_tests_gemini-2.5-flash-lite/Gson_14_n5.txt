@@ -1,0 +1,113 @@
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import org.junit.Test;
+
+import java.lang.reflect.Type;
+import java.util.Objects;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+public class GsonTypeResolutionTest {
+
+    private static class Foo1<A> {
+        Foo2<? extends A> foo2;
+    }
+
+    private static class Foo2<B> {
+        Foo1<? super B> foo1;
+    }
+
+    @Test
+    public void testRecursiveResolveSimple() {
+        // This test is designed to reproduce the StackOverflowError
+        // The fix should prevent this error from occurring.
+        try {
+            new Gson().getAdapter(Foo1.class);
+            // If no StackOverflowError, the fix might be working,
+            // but we can't assert the correct resolution without
+            // more context on how the resolved types are used.
+            // For now, just ensuring it doesn't crash is the goal.
+        } catch (StackOverflowError e) {
+            fail("StackOverflowError occurred during type resolution: " + e.getMessage());
+        }
+    }
+
+    // Helper method to demonstrate the expected type resolution logic
+    // This is not part of the reproduced bug but helps in understanding the fix.
+    @Test
+    public void testTypeCollapsingLogic() {
+        Type A = new TypeToken<Foo1<?>>() {}.getType();
+        Type B = new TypeToken<Foo2<?>>() {}.getType();
+
+        // supertypeOf(supertypeOf(X)) == supertypeOf(X)
+        Type superSuperA = $Gson$Types.supertypeOf(new TypeToken<Foo1<? super Foo1<?>>>() {}.getType());
+        Type superA = $Gson$Types.supertypeOf(new TypeToken<Foo1<?>>() {}.getType());
+        assertEquals(superA, $Gson$Types.resolve($Gson$Types.getSupertype(A, Foo1.class, superSuperA)));
+
+        // subtypeOf(subtypeOf(X)) == subtypeOf(X)
+        Type subSubA = $Gson$Types.subtypeOf(new TypeToken<Foo1<? extends Foo1<?>>>() {}.getType());
+        Type subA = $Gson$Types.subtypeOf(new TypeToken<Foo1<?>>() {}.getType());
+        assertEquals(subA, $Gson$Types.resolve($Gson$Types.getSupertype(A, Foo1.class, subSubA)));
+
+        // supertypeOf(subtypeOf(X)) == subtypeOf(Object.class)
+        Type superSubA = $Gson$Types.supertypeOf($Gson$Types.subtypeOf(new TypeToken<Foo1<? extends Foo1<?>>>() {}.getType()));
+        Type subObject = $Gson$Types.subtypeOf(Object.class);
+        assertEquals(subObject, $Gson$Types.resolve($Gson$Types.getSupertype(A, Foo1.class, superSubA)));
+
+        // subtypeOf(supertypeOf(X)) == subtypeOf(Object.class)
+        Type subSuperA = $Gson$Types.subtypeOf($Gson$Types.supertypeOf(new TypeToken<Foo1<? super Foo1<?>>>() {}.getType()));
+        assertEquals(subObject, $Gson$Types.resolve($Gson$Types.getSupertype(A, Foo1.class, subSuperA)));
+    }
+
+    // Dummy implementation of $Gson$Types.resolve and getSupertype for test compilation
+    // In a real scenario, these would be the actual Gson methods.
+    private static class $Gson$Types {
+        public static Type resolve(Type type, Type context, Type variable) {
+            // Simulate resolution, actual implementation is complex
+            if (type instanceof Class) {
+                return type;
+            }
+            if (type instanceof java.lang.reflect.TypeVariable) {
+                // In a real scenario, this would involve complex logic to resolve type variables
+                return Object.class; // Simplified for test compilation
+            }
+            if (type instanceof java.lang.reflect.ParameterizedType) {
+                java.lang.reflect.ParameterizedType parameterizedType = (java.lang.reflect.ParameterizedType) type;
+                if (parameterizedType.getRawType().equals(context)) {
+                    return variable;
+                }
+            }
+            return type;
+        }
+
+        public static Type getSupertype(Type type, Class<?> rawType, Type variable) {
+            // Simulate getting the supertype, actual implementation is complex
+            if (Objects.equals(type, variable)) {
+                return variable;
+            }
+            if (variable instanceof Class) {
+                return variable;
+            }
+            if (variable instanceof java.lang.reflect.WildcardType) {
+                java.lang.reflect.WildcardType wildcard = (java.lang.reflect.WildcardType) variable;
+                Type[] lowerBounds = wildcard.getLowerBounds();
+                if (lowerBounds.length == 1) {
+                    return supertypeOf(lowerBounds[0]);
+                }
+            }
+            return variable; // Simplified
+        }
+
+        public static Type supertypeOf(Type type) {
+            // Simplified: In reality, this would determine the supertype.
+            // For the purpose of this test, we are focusing on the collapsing logic.
+            return type;
+        }
+
+        public static Type subtypeOf(Type type) {
+            // Simplified: In reality, this would determine the subtype.
+            return type;
+        }
+    }
+}

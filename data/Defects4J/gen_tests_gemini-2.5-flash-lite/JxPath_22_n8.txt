@@ -1,0 +1,39 @@
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.NodeSet;
+import org.apache.commons.jxpath.xml.DOMReader;
+import org.junit.Test;
+import org.w3c.dom.Document;
+
+import java.io.StringReader;
+
+import static org.junit.Assert.assertEquals;
+
+public class NamespaceTest {
+
+    @Test
+    public void testResetDefaultNamespace() throws Exception {
+        String xml = "<foo xmlns:b=\"bla\" xmlns=\"test111\"><b:bar xmlns:b=\"bla\">a</b:bar><test xmlns=\"\"></test></foo>";
+        DOMReader reader = new DOMReader();
+        Document document = reader.read(new StringReader(xml));
+        JXPathContext context = JXPathContext.newContext(document);
+
+        // Select the 'test' node which has an empty namespace
+        NodeSet nodes = context.selectNodeSet("//test");
+        assertEquals(1, nodes.getLength());
+
+        Object testNode = nodes.getNode(0);
+
+        // This should not cause an infinite loop and should produce the correct xpath
+        String path = context.asPath(testNode);
+
+        // Assert that the path is as expected, considering the fix
+        // The original bug would produce something like '//b:fo/null:test' or loop indefinitely.
+        // The corrected version should correctly identify the lack of namespace for 'test'.
+        // The exact expected path might depend on how JXPath resolves parent namespaces,
+        // but it should not contain 'null:' for the 'test' element itself.
+        // A reasonable expectation for the path to the 'test' node is '//test' or similar
+        // if parent namespaces are correctly ignored for elements with explicitly empty namespaces.
+        // Given the example, '//test' seems most likely.
+        assertEquals("//test", path);
+    }
+}

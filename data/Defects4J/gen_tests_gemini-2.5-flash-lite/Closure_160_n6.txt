@@ -1,0 +1,49 @@
+public void testCheckVarsAndUndefinedVarsCommandLine() {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setClosurePass(true);
+    options.setCheckJsDocInfo(true);
+    options.addSpecificWarningCompilerOption(
+        "checkVars", CompilerOptions.WarningLevel.VERBOSE);
+    options.addSpecificWarningCompilerOption(
+        "undefinedVars", CompilerOptions.WarningLevel.VERBOSE);
+
+    String source = "foo = {}; foo.bar = function() { alert(this.baz); };";
+    Result result = compiler.compile(
+        SourceFile.fromCode("test.js", source),
+        SourceFile.fromCode("test.js", source), // Duplicate to test both JS and Externs processing
+        options);
+
+    assertTrue("Should have errors/warnings related to checkVars and undefinedVars",
+               result.errors.length > 0 || result.warnings.length > 0);
+
+    // The exact error/warning messages might vary, but we expect some diagnostics
+    // when these options are explicitly set.
+    boolean foundCheckVarsWarning = false;
+    boolean foundUndefinedVarsError = false;
+    for (DiagnosticType diagnostic : result.getErrorsAndWarnings().keySet()) {
+        if (diagnostic.getKey().equals("JSC_UNDEFINED_VAR_ERROR")) {
+            foundUndefinedVarsError = true;
+        }
+        if (diagnostic.getKey().equals("JSC_THIS_DEBUGGER_STATEMENT") ||
+            diagnostic.getKey().equals("JSC_BAD_VAR_ASSIGN")) {
+            foundCheckVarsWarning = true;
+        }
+    }
+
+    // Depending on the exact compiler version and configuration,
+    // checkVars might manifest as a "BAD_VAR_ASSIGN" or "THIS_DEBUGGER_STATEMENT" warning.
+    // For the purpose of this test, we'll check if *any* relevant diagnostic is present.
+    // A more robust test might check for specific diagnostic types if they are stable.
+
+    // Since the bug report states they *don't* work from the command line,
+    // and the example shows no output, this test *should* fail if the bug is present.
+    // If the bug is fixed, this test should pass.
+    // The assertion below is designed to fail if the bug is present and the options are ignored.
+    // If the options *do* work, then there will be diagnostics, and the test will pass.
+
+    // Let's assert that we found *some* kind of diagnostic related to these checks.
+    // If the bug is present, this assertion will likely fail because no diagnostics will be found.
+    assertTrue("Expected diagnostics for checkVars or undefinedVars when explicitly enabled.",
+               foundCheckVarsWarning || foundUndefinedVarsError);
+}

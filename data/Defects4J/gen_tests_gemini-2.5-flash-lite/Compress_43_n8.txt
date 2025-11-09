@@ -1,0 +1,37 @@
+public void testZipLocalVersionNeededToExtractDoesNotMatchCentralDirectory() throws IOException {
+    File zipFile = File.createTempFile("test", ".zip");
+    zipFile.deleteOnExit();
+
+    ZipArchiveOutputStream zip = new ZipArchiveOutputStream(zipFile);
+    zip.setMethod(ZipEntry.DEFLATED);
+
+    ZipArchiveEntry entry = new ZipArchiveEntry("test.txt");
+    entry.setSize(10);
+    entry.setCompressedSize(5);
+
+    zip.putArchiveEntry(entry);
+    zip.write("Hello World".getBytes());
+    zip.closeArchiveEntry();
+    zip.close();
+
+    ZipFile zipFileObj = new ZipFile(zipFile);
+    ZipArchiveEntry localEntry = zipFileObj.getEntry("test.txt");
+    ZipArchiveEntry centralEntry = zipFileObj.getEntries()
+            .stream()
+            .filter(e -> e.getName().equals("test.txt"))
+            .findFirst()
+            .orElse(null);
+
+    assertNotNull(localEntry);
+    assertNotNull(centralEntry);
+
+    // The bug is that the local header version needed to extract is 10 (0x000A)
+    // when DEFLATED is used, but the central directory version is 20 (0x0014)
+    // because data descriptors are used.
+    // We expect the local header version to also be 20.
+    assertEquals(20, localEntry.getVersionRequired());
+    assertEquals(20, centralEntry.getVersionRequired());
+
+    zipFileObj.close();
+    zipFile.delete();
+}

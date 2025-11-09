@@ -1,0 +1,74 @@
+public void testObjectIdAndTypeIdWrapperRegression() throws Exception {
+    // Test setup for combining type and object ids with wrapper-object type id inclusion.
+    // This test should reproduce the regression found in jackson-databind 2.5.1.
+
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.enable(MapperFeature.USE_WRAPPER_TYPE_IDS_AS_PROPERTY);
+
+    // Define a simple class with an object id and type id.
+    // The actual implementation details of the class and its annotations
+    // would be specific to the scenario that triggered the bug.
+    // For demonstration, let's assume a structure like this:
+
+    class MyWrapper {
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_OBJECT, property = "type")
+        @JsonSubTypes({
+                @JsonSubTypes.Type(value = ActualObject.class, name = "actual")
+        })
+        Object data;
+
+        // Getters and setters for data
+        public Object getData() {
+            return data;
+        }
+
+        public void setData(Object data) {
+            this.data = data;
+        }
+    }
+
+    class ActualObject {
+        @ObjectIdGenerators.IntSequenceGenerator
+        @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class, property = "id")
+        public int value;
+
+        // Getters and setters for value
+        public int getValue() {
+            return value;
+        }
+
+        public void setValue(int value) {
+            this.value = value;
+        }
+    }
+
+    // Create an instance of the object to serialize
+    ActualObject actual = new ActualObject();
+    actual.value = 123;
+
+    MyWrapper wrapper = new MyWrapper();
+    wrapper.data = actual;
+
+    // Serialize the object
+    String json = mapper.writeValueAsString(wrapper);
+
+    // Deserialize the object
+    // The deserialization step is where the regression is expected to manifest.
+    // The test should assert that the deserialized object is correct and
+    // that no exceptions related to the regression are thrown.
+    MyWrapper deserializedWrapper = mapper.readValue(json, MyWrapper.class);
+
+    // Assertions to verify correct deserialization
+    assertNotNull(deserializedWrapper);
+    assertNotNull(deserializedWrapper.data);
+    assertTrue(deserializedWrapper.data instanceof ActualObject);
+    ActualObject deserializedActual = (ActualObject) deserializedWrapper.data;
+    assertEquals(123, deserializedActual.value);
+
+    // Further assertions might be needed depending on the exact nature of the bug,
+    // e.g., checking the generated JSON structure if it was incorrect.
+    // For this general reproduction, the successful serialization and deserialization
+    // without errors indicates that the specific regression is not occurring.
+    // If the bug was present, this test would likely throw an exception during
+    // deserialization or result in incorrect data.
+}

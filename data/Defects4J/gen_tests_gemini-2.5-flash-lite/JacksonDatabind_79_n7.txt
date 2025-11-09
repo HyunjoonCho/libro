@@ -1,0 +1,45 @@
+public void testJsonIdentityReferenceClassLevel() throws Exception {
+    ObjectMapper MAPPER = new ObjectMapper();
+    JsonIdentityInfoGeneratorConfig config = new JsonIdentityInfoGeneratorConfig();
+    config.setGenerator(ObjectIdGenerators.IntSequenceGenerator.class);
+    config.setProperty("id");
+    MAPPER.setAnnotationIntrospector(new JacksonAnnotationIntrospector() {
+        @Override
+        public ObjectIdInfo findObjectIdInfo(Annotated a) {
+            if (a.getRawType() == ReallyAlwaysAsId.class) {
+                return new ObjectIdInfo(config.getProperty(), config.getGenerator(), null, null);
+            }
+            return super.findObjectIdInfo(a);
+        }
+
+        @Override
+        public ObjectIdInfo findObjectReferenceInfo(Annotated accessor, ObjectIdInfo defaultImpl) {
+            if (accessor.getRawType() == ReallyAlwaysAsId.class) {
+                return new ObjectIdInfo(config.getProperty(), config.getGenerator(), null, true); // alwaysAsId = true
+            }
+            return super.findObjectReferenceInfo(accessor, defaultImpl);
+        }
+    });
+
+
+    @JsonIdentityInfo(generator=ObjectIdGenerators.IntSequenceGenerator.class, property="id")
+    @JsonIdentityReference(alwaysAsId=true)
+    static class ReallyAlwaysAsId {
+        public int value;
+
+        public ReallyAlwaysAsId() { this(0); }
+        public ReallyAlwaysAsId(int v) {
+            value = v;
+        }
+    }
+
+    @JsonPropertyOrder(alphabetic=true)
+    static class ReallyAlwaysContainer {
+        public ReallyAlwaysAsId b = new ReallyAlwaysAsId(13);
+    }
+
+    String json = MAPPER.writeValueAsString(new ReallyAlwaysContainer());
+    // The expected output changed because the class-level annotation on ReallyAlwaysAsId
+    // should now be respected for property 'b'.
+    assertEquals("{\"b\":1}", json);
+}

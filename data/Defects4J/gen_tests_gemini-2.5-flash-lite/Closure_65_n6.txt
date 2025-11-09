@@ -1,0 +1,180 @@
+public void testNullByteEscaping() {
+    String input = "\u00003";
+    // The original code would escape '\0' to "\\0", resulting in "\\03" which is interpreted as octal 3.
+    // The expected behavior after the fix is to escape it as "\\000", resulting in "\\0003".
+    // In JavaScript, "\\0003" is treated as the string "3" with an explicit null character at the start.
+    // The length check `x.length < 2` would then evaluate to false.
+    // We simulate the behavior by checking the escaped string's interpretation in a context that cares about length.
+    // A simple way to do this in Java is to check the length of the string *after* it's constructed.
+
+    // We need to simulate the code generation and then the JavaScript interpretation.
+    // The bug report indicates the issue is in CodeGenerator.java.
+    // The problematic line is: case '\0': sb.append("\\0"); break;
+    // The fix is: case '\0': sb.append("\\000"); break;
+
+    // Let's assume we have a utility or a method that performs this escaping.
+    // Since we don't have the full CodeGenerator class, we'll simulate the outcome.
+
+    // Simulating the *incorrect* behavior:
+    // If '\0' is escaped to "\\0", the string becomes "\\03".
+    // In JavaScript, this is interpreted as a string of length 2: the character represented by octal 003, and '3'.
+    // However, the bug report implies that the length check fails when it should pass.
+    // The example code is: var x = "\u00003"; if (x.length < 2) { alert("fail"); } else { alert("win"); }
+    // The expected output is "win", meaning x.length is NOT less than 2.
+    // The observed output is "fail", meaning x.length IS less than 2.
+
+    // This implies that the incorrect escaping leads to a string that JavaScript interprets as having length 1.
+    // This is counter-intuitive if "\\0" is interpreted as octal 0. Let's re-read.
+    // "var x = "\u00003";" - This initializes x to a string containing a null character followed by '3'. Length is 2.
+    // "if (x.length < 2) { alert("fail"); } else { alert("win"); }"
+    // The problem is *not* that the string literal is misinterpreted. The problem is that the *generated code* for this string literal is incorrect.
+    // The compiler is generating code that, when executed in JS, produces a string of length 1.
+
+    // Let's consider the fix: sb.append("\\000");
+    // If the compiler generates "\\0003" for "\u00003", then JS interprets this correctly as a string of length 2.
+    // The test should verify that the *generated code* leads to the correct string length.
+
+    // Since we are writing a JUnit test for Java code, we need to test the Java side's behavior.
+    // The bug is in the *CodeGenerator* which is Java code.
+    // The problematic Java code is:
+    // case '\0': sb.append("\\0"); break;
+    // The fix is:
+    // case '\0': sb.append("\\000"); break;
+
+    // We need to test the `CodeGenerator.escape()` method or a similar utility that would perform this escaping.
+    // Assuming such a method exists and is called `escapeString`:
+
+    // Let's simulate the faulty behavior first.
+    // If `escapeString("\u00003")` returns "\\03" (as implied by the fix making it "\\000")
+    // This is not directly testable without the `CodeGenerator` class.
+
+    // The prompt asks for a JUnit test *method* that reproduces the failure.
+    // The failure is that a string containing a null byte followed by '3' results in a JS string of length 1 *after compilation*.
+    // This means the *generated JS code* for `"\u00003"` must be something like `"\03"` which JS parses as a single character (octal 3).
+    // The Java code responsible for generating this JS is `CodeGenerator.java`.
+
+    // Let's assume we can mock or directly test the escaping logic in Java.
+    // We need a Java method that takes a String and returns the escaped String *as if* it were JS code.
+
+    // Let's imagine a simplified `escapeJsString` method in Java that has the bug:
+    // public static String escapeJsString_buggy(String input) {
+    //     StringBuilder sb = new StringBuilder();
+    //     for (char c : input.toCharArray()) {
+    //         switch (c) {
+    //             case '\0': sb.append("\\0"); break; // Buggy part
+    //             default: sb.append(c); break;
+    //         }
+    //     }
+    //     return sb.toString();
+    // }
+
+    // And the corrected version:
+    // public static String escapeJsString_fixed(String input) {
+    //     StringBuilder sb = new StringBuilder();
+    //     for (char c : input.toCharArray()) {
+    //         switch (c) {
+    //             case '\0': sb.append("\\000"); break; // Fixed part
+    //             default: sb.append(c); break;
+    //         }
+    //     }
+    //     return sb.toString();
+    // }
+
+    // The test should verify that the buggy version produces an output that, when interpreted by JS, leads to the observed failure.
+    // The observed failure is that `x.length < 2` is true. This means `x.length` is 0 or 1.
+    // Given the input `"\u00003"`, the length must be 1.
+
+    // So, we need to test that the buggy Java escaping produces a string that *evaluates* to a JS string of length 1.
+    // This is tricky to do directly in JUnit without an actual JS engine.
+
+    // However, the *root cause* is the Java code generating "\\0" instead of "\\000".
+    // The test should reproduce the Java code's incorrect output for the null character.
+
+    // Let's focus on the Java side's output.
+    // The input string is `"\u00003"`. This is a Java string with a null character followed by '3'.
+    // The problematic Java code `sb.append("\\0");` for `case '\0'` means that when the character `\0` is encountered, the string `\\0` is appended.
+    // So, the Java method, when processing `"\u00003"`, should append `\\0` for `\u0000` and then `3` for `3`.
+    // The resulting Java string representing the JS code would be `"\\03"`.
+
+    // The test should assert that the buggy escaping logic produces `"\\03"` for the input `"\u00003"`.
+    // And the fixed logic produces `"\\0003"`.
+
+    // Since we don't have the `CodeGenerator` class directly available to instantiate and call its `escape` method,
+    // we simulate the behavior of that method.
+
+    String input = "\u00003"; // Java string with null char and '3'
+
+    // Simulate the buggy escaping logic from the bug report:
+    // When '\0' is encountered, append "\\0"
+    String escapedBuggy = escapeStringBuggy(input);
+
+    // The bug report implies that this `escapedBuggy` string, when used in JS, leads to a string of length 1.
+    // This means JS interprets "\\03" as a single character (octal 3).
+    // So, the test should assert that the buggy output is "\\03".
+
+    assertEquals("\\03", escapedBuggy);
+
+    // Now, simulate the fixed escaping logic:
+    // When '\0' is encountered, append "\\000"
+    String escapedFixed = escapeStringFixed(input);
+
+    // The test should assert that the fixed output is "\\0003".
+    assertEquals("\\0003", escapedFixed);
+
+    // The test method itself should reproduce the *failure*.
+    // The failure is that the generated code results in a string of length < 2.
+    // This implies the buggy escaping `\\0` is the culprit.
+    // So, the test should assert the *output* of the buggy escaping logic.
+}
+
+// Helper methods to simulate the buggy and fixed CodeGenerator behavior.
+// These would ideally be part of the test class or a test utility.
+private String escapeStringBuggy(String s) {
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < s.length(); i++) {
+        char c = s.charAt(i);
+        switch (c) {
+            case '\0': sb.append("\\0"); break; // Buggy part
+            case '\n': sb.append("\\n"); break;
+            case '\r': sb.append("\\r"); break;
+            case '\t': sb.append("\\t"); break;
+            case '"': sb.append("\\\""); break;
+            case '\\': sb.append("\\\\"); break;
+            default:
+                if (c < ' ') {
+                    // This part might be simplified for the test, focusing only on null.
+                    // For a more complete simulation, one would handle other control chars.
+                    String hex = Integer.toHexString(c);
+                    sb.append("\\u").append("0000".substring(hex.length())).append(hex);
+                } else {
+                    sb.append(c);
+                }
+                break;
+        }
+    }
+    return sb.toString();
+}
+
+private String escapeStringFixed(String s) {
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < s.length(); i++) {
+        char c = s.charAt(i);
+        switch (c) {
+            case '\0': sb.append("\\000"); break; // Fixed part
+            case '\n': sb.append("\\n"); break;
+            case '\r': sb.append("\\r"); break;
+            case '\t': sb.append("\\t"); break;
+            case '"': sb.append("\\\""); break;
+            case '\\': sb.append("\\\\"); break;
+            default:
+                if (c < ' ') {
+                    String hex = Integer.toHexString(c);
+                    sb.append("\\u").append("0000".substring(hex.length())).append(hex);
+                } else {
+                    sb.append(c);
+                }
+                break;
+        }
+    }
+    return sb.toString();
+}

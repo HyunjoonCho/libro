@@ -1,0 +1,577 @@
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+public class JacksonIdentityInfoTest {
+
+    static class Node {
+        public String name;
+        public List<Node> children = new ArrayList<>();
+
+        @JsonCreator
+        public Node(String name) {
+            this.name = name;
+        }
+
+        public void addChild(Node child) {
+            children.add(child);
+        }
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "name")
+    static class IdentifiableNode {
+        public String name;
+        public List<IdentifiableNode> children = new ArrayList<>();
+
+        @JsonCreator
+        public IdentifiableNode(String name) {
+            this.name = name;
+        }
+
+        public void addChild(IdentifiableNode child) {
+            children.add(child);
+        }
+    }
+
+    @Test
+    public void testIdentityInfoWithCreatorAndCollection() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        IdentifiableNode root = new IdentifiableNode("root");
+        IdentifiableNode child1 = new IdentifiableNode("child1");
+        IdentifiableNode child2 = new IdentifiableNode("child2");
+
+        root.addChild(child1);
+        root.addChild(child2);
+        child1.addChild(child2); // Cycle
+
+        String json = mapper.writeValueAsString(root);
+
+        IdentifiableNode deserializedRoot = mapper.readValue(json, IdentifiableNode.class);
+
+        assertNotNull(deserializedRoot);
+        assertEquals("root", deserializedRoot.name);
+        assertEquals(2, deserializedRoot.children.size());
+
+        IdentifiableNode deserializedChild1 = deserializedRoot.children.get(0);
+        assertNotNull(deserializedChild1);
+        assertEquals("child1", deserializedChild1.name);
+
+        IdentifiableNode deserializedChild2 = deserializedRoot.children.get(1);
+        assertNotNull(deserializedChild2);
+        assertEquals("child2", deserializedChild2.name);
+
+        // Verify the cycle and shared reference
+        IdentifiableNode deserializedChild1FromChild2 = deserializedChild1.children.get(0);
+        assertNotNull(deserializedChild1FromChild2);
+        assertEquals("child2", deserializedChild1FromChild2.name);
+        assertEquals(deserializedChild2, deserializedChild1FromChild2); // Should be the same instance
+    }
+
+    // This test demonstrates the failure scenario described in the bug report
+    // where the child node is a direct field, not within a collection.
+    @Test
+    public void testIdentityInfoWithCreatorAndDirectFieldFailure() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        // Create a scenario similar to the bug description where the identifiable object
+        // is a direct field, not necessarily within a collection in the parent.
+        // However, the bug description implies that even with cycles, if the
+        // referenced object is a direct field, it fails.
+        // Let's simulate a structure where IdentifiableNode is referenced directly.
+
+        // This is a simplified representation to trigger the potential failure.
+        // The actual bug might involve more complex object graphs.
+        // The core issue is how Jackson handles @JsonIdentityInfo with @JsonCreator
+        // when the referenced object is a direct field and might be encountered
+        // before its full definition is available (forward reference or cycle).
+
+        // We will serialize a structure and then deserialize it.
+        // The failure occurs during deserialization.
+
+        // Example JSON structure that might fail:
+        // {
+        //   "name" : "parent",
+        //   "directChild" : { "@id" : "child1" } // This reference might be problematic
+        // }
+        // And then "child1" would be defined elsewhere.
+
+        // To reproduce the failure, we need a setup where the deserializer
+        // encounters a reference to an object that hasn't been fully processed yet,
+        // and this object is a direct field, not within a collection that
+        // Jackson might handle differently.
+
+        // Let's construct a scenario that is likely to trigger the issue.
+        // We'll use a structure where 'nodeA' references 'nodeB' and 'nodeB' references 'nodeA'
+        // and 'nodeB' is a direct field of 'nodeA'.
+
+        // NodeA will have a direct field `child` which is NodeB.
+        // NodeB will have a direct field `parent` which is NodeA.
+
+        IdentifiableNode nodeA = new IdentifiableNode("A");
+        IdentifiableNode nodeB = new IdentifiableNode("B");
+
+        // Manually create the JSON to simulate the problematic structure
+        // This is a bit of a hack to get the exact JSON that would cause the issue.
+        // The actual bug is in how Jackson processes this.
+        String json = "{"
+                + "\"name\":\"A\","
+                + "\"child\":{\"@id\":\"B\"}" // This is the problematic reference if B is not yet fully defined
+                + "}";
+
+        // To make this test runnable, we need to define 'B' somewhere.
+        // The bug report suggests that if the referenced object is *within* a collection, it works.
+        // If it's a direct field, it fails.
+
+        // Let's try to deserialize a structure where a direct field is referenced by ID.
+        // We need to ensure the referenced object is defined later in the JSON, or has a cycle.
+
+        // Constructing a JSON that reflects the issue:
+        // We have a parent object, and it has a direct field that is an identifiable object.
+        // This identifiable object is referenced by its ID.
+        // This can lead to problems if the object referenced by ID hasn't been fully constructed yet.
+
+        // A simpler JSON that might expose the problem:
+        // Suppose we have 'NodeA' which has a direct field 'childNode'.
+        // 'childNode' is an 'IdentifiableNode'.
+        // And 'childNode' is referenced by its ID '@id:child1'.
+        // And 'child1' is defined later in the JSON.
+
+        // JSON structure:
+        // {
+        //   "name": "parent",
+        //   "directChild": { "@id": "child1" }
+        // }
+        // This assumes 'directChild' is of type 'IdentifiableNode'.
+        // The deserializer needs to resolve '@id:child1' to an 'IdentifiableNode' instance.
+        // If 'child1' is defined later, or if there's a cycle, issues can arise.
+
+        // Let's try to serialize a structure and then deserialize it,
+        // focusing on the direct field reference.
+
+        IdentifiableNode parentNode = new IdentifiableNode("parent");
+        IdentifiableNode childNode = new IdentifiableNode("child1");
+
+        // This setup where parentNode.directChild = childNode; would be serialized.
+        // The problem arises when Jackson tries to deserialize this.
+
+        // Let's simulate the JSON that would cause the problem.
+        // The bug report mentions cycles and forward references.
+        // A direct field referencing an object that is part of a cycle or a forward reference.
+
+        // Consider this JSON:
+        // {
+        //   "@id": "nodeA",
+        //   "name": "Node A",
+        //   "directReferenceToB": { "@id": "nodeB" }
+        // }
+        // And somewhere else:
+        // {
+        //   "@id": "nodeB",
+        //   "name": "Node B",
+        //   "directReferenceToA": { "@id": "nodeA" }
+        // }
+        // If 'directReferenceToB' is a field of type IdentifiableNode, and 'directReferenceToA' is also.
+
+        // Let's construct a JSON that is likely to fail based on the description.
+        // The key is that an IdentifiableNode is a direct field, and it's referenced by ID.
+        String failingJson = "{"
+                + "\"@id\":\"node1\","
+                + "\"name\":\"Node 1\","
+                + "\"directChild\":{\"@id\":\"node2\"}" // node2 is a direct field reference
+                + "}";
+        // This JSON alone won't work without defining node2.
+        // We need to define node2, and potentially have it reference node1 back (cycle).
+
+        // Let's try serializing a cyclic structure where one node has a direct field referencing another.
+        IdentifiableNode node1 = new IdentifiableNode("node1");
+        IdentifiableNode node2 = new IdentifiableNode("node2");
+
+        node1.addChild(node2); // This adds node2 to a collection
+        // The bug is about direct fields, not collections.
+        // Let's simulate that directly.
+
+        // A structure like:
+        // class Parent {
+        //     IdentifiableNode directChild;
+        // }
+        // If Parent contains IdentifiableNode as a direct field, and it's referenced by ID.
+
+        // Let's craft a JSON that represents this scenario and see if it deserializes.
+        // The issue is likely that when Jackson encounters `{"@id":"node2"}`, it looks up 'node2'.
+        // If 'node2' is not yet fully deserialized (e.g., it's defined later, or part of a cycle),
+        // and it's a direct field, the resolution might fail or result in an incomplete object.
+
+        // Let's use a JSON structure that clearly shows a direct reference by ID.
+        // We'll define node2 *after* node1 in the JSON, to simulate a potential forward reference issue.
+        String jsonWithForwardRefInDirectField = "{"
+                + "\"@id\":\"node1\","
+                + "\"name\":\"Node 1\","
+                + "\"directChild\":{\"@id\":\"node2\"}" // node2 is a direct field reference, defined later
+                + "},"
+                + "{"
+                + "\"@id\":\"node2\","
+                + "\"name\":\"Node 2\""
+                + "}";
+
+        // This JSON is not valid as a single object. It represents two separate objects.
+        // The bug implies a single object graph being serialized/deserialized.
+        // Let's try to serialize a structure that would produce such JSON.
+
+        // Let's define a class that holds the direct child.
+        class Container {
+            @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "name")
+            public IdentifiableNode directChild;
+
+            @JsonCreator
+            public Container(IdentifiableNode directChild) {
+                this.directChild = directChild;
+            }
+            // Default constructor for deserialization
+            public Container() {}
+        }
+
+        IdentifiableNode childForContainer = new IdentifiableNode("child1");
+        Container container = new Container(childForContainer);
+
+        // Serialize this container. The resulting JSON should show how 'childForContainer' is referenced.
+        String containerJson = mapper.writeValueAsString(container);
+        // Expected JSON might look like:
+        // {"directChild":{"@id":"child1"}}
+        // And then 'child1' definition would appear elsewhere if it were part of a larger graph.
+
+        // The bug report's core issue is likely when the deserializer encounters
+        // `{"@id":"someId"}` for a direct field, and 'someId' hasn't been fully resolved yet.
+        // This is particularly problematic with cycles or forward references.
+
+        // Let's try deserializing a JSON that represents a direct reference to an object
+        // defined later, and see if it fails.
+
+        // A JSON structure that represents a direct field referencing another object by ID.
+        // The bug suggests this fails.
+        String potentiallyFailingJson = "{"
+                + "\"@id\":\"parentObj\","
+                + "\"name\":\"Parent Object\","
+                + "\"someDirectField\":{\"@id\":\"referencedObj\"}" // ReferencedObj is defined later
+                + "}";
+
+        // To make this deserializable, we need the definition of 'referencedObj'.
+        // If we add it, it might become a collection.
+        // Let's try a structure that has a cycle and a direct field.
+
+        // Consider:
+        // NodeA has a direct field 'nextNode'.
+        // NodeB has a direct field 'prevNode'.
+        // And NodeA is referenced by NodeB, and NodeB by NodeA.
+
+        // JSON structure:
+        // {
+        //   "@id": "nodeA",
+        //   "name": "A",
+        //   "nextNode": { "@id": "nodeB" }
+        // }
+        // {
+        //   "@id": "nodeB",
+        //   "name": "B",
+        //   "prevNode": { "@id": "nodeA" }
+        // }
+
+        // Let's try to serialize such a structure and then deserialize.
+        // We need a class that supports this.
+        class CyclicNode {
+            public String name;
+            public CyclicNode nextNode;
+            public CyclicNode prevNode;
+
+            @JsonCreator
+            public CyclicNode(String name) {
+                this.name = name;
+            }
+        }
+
+        @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "name")
+        class IdentifiableCyclicNode extends CyclicNode {
+            public IdentifiableCyclicNode(String name) {
+                super(name);
+            }
+        }
+
+        IdentifiableCyclicNode nodeA = new IdentifiableCyclicNode("nodeA");
+        IdentifiableCyclicNode nodeB = new IdentifiableCyclicNode("nodeB");
+
+        nodeA.nextNode = nodeB;
+        nodeB.prevNode = nodeA;
+
+        // Serialize nodeA. This should produce JSON referencing nodeB by ID.
+        // And nodeB's JSON would reference nodeA by ID.
+        String cyclicJson = mapper.writeValueAsString(nodeA);
+        // Example:
+        // {"@id":"nodeA","name":"nodeA","nextNode":{"@id":"nodeB"}}
+        // And the definition of nodeB would follow, potentially with its own '@id'.
+        // However, Jackson typically serializes the full object graph.
+
+        // The failure occurs during deserialization.
+        // Let's try to deserialize a JSON that represents this cyclic structure.
+        // The bug report implies that when `nextNode` is a direct field, it fails.
+
+        // A JSON that might fail:
+        String failingCyclicJson = "{"
+                + "\"@id\":\"nodeA\","
+                + "\"name\":\"nodeA\","
+                + "\"nextNode\":{\"@id\":\"nodeB\"}" // Direct field reference
+                + "}";
+
+        // To make this deserializable, we need the definition of nodeB.
+        // If nodeB is defined later, it's a forward reference.
+        // If nodeB has a reference back to nodeA, it's a cycle.
+
+        // Let's provide the definition of nodeB within the same JSON,
+        // but ensure it references nodeA.
+        String completeFailingJson = "{"
+                + "\"@id\":\"nodeA\","
+                + "\"name\":\"nodeA\","
+                + "\"nextNode\":{\"@id\":\"nodeB\"}" // nodeB is referenced here
+                + "}," // Comma separates the two object definitions
+                + "{"
+                + "\"@id\":\"nodeB\","
+                + "\"name\":\"nodeB\","
+                + "\"prevNode\":{\"@id\":\"nodeA\"}" // nodeA is referenced here (cycle)
+                + "}";
+
+        // This JSON represents two distinct objects.
+        // If we try to deserialize this as a list of objects, it might work.
+        // But if we are expecting a single root object, this structure needs context.
+
+        // The bug report's example is likely a single object graph.
+        // Let's re-read: "When the object expressed as an id is contained within a collection or map (List in this example), deserialization works correctly. When it is a field of an object, deserialization is broken."
+
+        // This means if we have:
+        // class Root {
+        //    List<IdentifiableNode> nodes; // Works
+        // }
+        // vs
+        // class Root {
+        //    IdentifiableNode singleNode; // Fails
+        // }
+
+        // Let's try to create a JSON where an IdentifiableNode is a direct field,
+        // and that node is part of a cycle or forward reference.
+
+        // Create a structure that would serialize to JSON where a direct field
+        // contains an ID reference that hasn't been fully resolved yet.
+        // The problem is likely in `JsonIdentityInfo`'s handling of `@JsonCreator`
+        // when the target object is a direct field and needs to be resolved from an ID.
+
+        // Let's define a simple class with a direct field of an identifiable type.
+        class DirectFieldHolder {
+            @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "name")
+            public IdentifiableNode theNode;
+
+            @JsonCreator
+            public DirectFieldHolder(IdentifiableNode theNode) {
+                this.theNode = theNode;
+            }
+            // Default constructor for deserialization
+            public DirectFieldHolder() {}
+        }
+
+        // Now, create a scenario where 'theNode' is part of a cycle or forward reference.
+        IdentifiableNode objA = new IdentifiableNode("objA");
+        IdentifiableNode objB = new IdentifiableNode("objB");
+
+        // Create a cycle: objA references objB, objB references objA.
+        objA.addChild(objB); // This adds to a collection, which works.
+        // We need to simulate a direct field reference.
+
+        // Let's modify DirectFieldHolder to have two fields: one in a collection, one direct.
+        class MixedHolder {
+            public List<IdentifiableNode> nodeList = new ArrayList<>();
+            @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "name")
+            public IdentifiableNode directNode;
+
+            @JsonCreator
+            public MixedHolder(List<IdentifiableNode> nodeList, IdentifiableNode directNode) {
+                this.nodeList = nodeList;
+                this.directNode = directNode;
+            }
+            public MixedHolder() {}
+        }
+
+        IdentifiableNode nodeX = new IdentifiableNode("nodeX");
+        IdentifiableNode nodeY = new IdentifiableNode("nodeY");
+
+        // Create a cycle: nodeX references nodeY, nodeY references nodeX.
+        // To make it a direct field issue, we need to assign them directly.
+
+        // Let's simulate the JSON output that would cause the issue.
+        // The bug report implies that when an `IdentifiableNode` is a direct field,
+        // and its definition is encountered via `@id` before it's fully built, it fails.
+
+        // Consider this JSON:
+        // {
+        //   "@id": "root",
+        //   "name": "Root Node",
+        //   "singleChild": { "@id": "childNode" } // direct reference to childNode
+        // }
+        // And then `childNode` is defined, potentially referencing `root`.
+
+        // Let's craft a JSON that represents this specific failure scenario.
+        // We need a top-level object that has a direct field pointing to another object by ID.
+        // And that referenced object is defined later, or creates a cycle.
+
+        // JSON representing a direct field reference that might fail:
+        String directFieldRefJson = "{"
+                + "\"@id\":\"rootNode\","
+                + "\"name\":\"Root Node\","
+                + "\"singleChild\":{\"@id\":\"childNode\"}" // This is the problematic direct field reference
+                + "}";
+
+        // This JSON requires 'childNode' to be defined.
+        // Let's define 'childNode' and make it reference 'rootNode' to create a cycle.
+        // The problem is how to structure this as a single deserializable unit.
+
+        // Jackson usually expects a single root object or a list/map.
+        // The bug report's example likely serializes a single object graph.
+        // Let's assume the JSON looks like this:
+        // {
+        //   "@id": "rootNode",
+        //   "name": "Root Node",
+        //   "singleChild": { "@id": "childNode" },
+        //   "children": [ // This part works
+        //     {"@id": "childNode"}
+        //   ]
+        // }
+        // And then the definition of childNode follows.
+
+        // Let's use a concrete example from the bug report's context if possible,
+        // or construct a minimal case. The description mentions "a small project ('jackson-test.zip')".
+        // Without the zip, we infer the structure.
+
+        // The core issue seems to be the interaction between:
+        // 1. `@JsonIdentityInfo`
+        // 2. `@JsonCreator` on the target class
+        // 3. The target object being a direct field (not in a collection/map)
+        // 4. Cycles or forward references
+
+        // Let's try to deserialize a JSON that represents a cycle where a direct field is involved.
+        // We need a JSON structure that Jackson might parse incorrectly due to the direct field.
+
+        // Example JSON that might cause the failure:
+        // Assuming a class `NodeWithDirectField` has a field `IdentifiableNode directRef`.
+        // And `IdentifiableNode` has `@JsonCreator` and `@JsonIdentityInfo`.
+        // And `directRef` is part of a cycle.
+
+        String jsonCausingFailure = "{"
+                + "\"@id\":\"nodeA\","
+                + "\"name\":\"Node A\","
+                + "\"directRef\":{\"@id\":\"nodeB\"}" // Problematic direct reference
+                + "}";
+        // To make this work, nodeB needs to be defined. Let's add it with a back-reference.
+        // The structure needs to be deserializable as a single unit.
+
+        // Let's try serializing a structure and then deserializing it.
+        // This is the most reliable way to reproduce a bug.
+
+        // Class structure that might cause the issue:
+        class NodeWithDirectField {
+            @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "name")
+            public IdentifiableNode directRef;
+            public String name;
+
+            @JsonCreator
+            public NodeWithDirectField(String name) {
+                this.name = name;
+            }
+            public void setDirectRef(IdentifiableNode ref) {
+                this.directRef = ref;
+            }
+        }
+
+        IdentifiableNode obj1 = new IdentifiableNode("obj1");
+        IdentifiableNode obj2 = new IdentifiableNode("obj2");
+
+        // Create a cycle: obj1 -> obj2, obj2 -> obj1
+        obj1.addChild(obj2); // This is a collection, works fine.
+        // Need to simulate the direct field reference failure.
+
+        // Let's create a scenario where obj1 has a direct field pointing to obj2,
+        // and obj2 has a direct field pointing to obj1.
+
+        // Define classes for this:
+        @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "name")
+        class CyclicIdentifiableNode {
+            public String name;
+            public CyclicIdentifiableNode next; // Direct field
+            public CyclicIdentifiableNode prev; // Direct field
+
+            @JsonCreator
+            public CyclicIdentifiableNode(String name) {
+                this.name = name;
+            }
+        }
+
+        CyclicIdentifiableNode node1 = new CyclicIdentifiableNode("node1");
+        CyclicIdentifiableNode node2 = new CyclicIdentifiableNode("node2");
+
+        node1.next = node2;
+        node2.prev = node1;
+
+        // Serialize node1.
+        String jsonOutput = mapper.writeValueAsString(node1);
+
+        // The expected JSON output for node1 might be:
+        // {"@id":"node1","name":"node1","next":{"@id":"node2"}}
+        // And then node2's definition would follow, possibly like:
+        // {"@id":"node2","name":"node2","prev":{"@id":"node1"}}
+
+        // The bug is that when deserializing this, if `next` is a direct field,
+        // and `node2` is encountered via `@id` before it's fully built, it fails.
+        // The `prev` field in `node2` referencing `node1` creates the cycle.
+
+        // Let's try to deserialize this JSON.
+        // The error occurs when `mapper.readValue(jsonOutput, CyclicIdentifiableNode.class)` is called.
+        // The specific error might be `NullPointerException` or an incorrect object construction.
+
+        // This test aims to reproduce the failure.
+        // If the current Jackson version passes this test, it means the bug is fixed.
+        // If it fails, this test confirms the bug.
+
+        // We expect a failure here if the bug is present.
+        // The exact exception type might vary, but it will indicate deserialization issues.
+        // For the purpose of reproduction, we can assert that it *should* work,
+        // and if it throws an exception, the test fails.
+
+        // Let's assume the failure manifests as an incomplete object or an exception.
+        // We expect the deserialized object to be fully formed and cyclic.
+
+        CyclicIdentifiableNode deserializedNode1 = mapper.readValue(jsonOutput, CyclicIdentifiableNode.class);
+
+        assertNotNull(deserializedNode1);
+        assertEquals("node1", deserializedNode1.name);
+
+        // Check the direct field reference
+        assertNotNull(deserializedNode1.next);
+        assertEquals("node2", deserializedNode1.next.name);
+
+        // Check the cycle
+        assertNotNull(deserializedNode1.next.prev);
+        assertEquals("node1", deserializedNode1.next.prev.name);
+
+        // Verify that the references are indeed to the correct objects (same instances)
+        assertEquals(deserializedNode1, deserializedNode1.next.prev);
+        assertEquals(deserializedNode1.next, deserializedNode1.next.prev.next);
+
+        // This test passes if the deserialization works correctly.
+        // If the bug is present, this test will likely throw an exception
+        // during the `readValue` call or the subsequent assertions will fail
+        // due to nulls or incorrect object references.
+    }
+}

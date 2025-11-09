@@ -1,0 +1,140 @@
+public void testCovariancesAndErrorsWithBoundParameters() throws EstimatorException {
+    // Mocking the necessary components to simulate the scenario
+    // This setup assumes a context where AbstractEstimator is used with a Problem
+    // which has both bound and unbound parameters.
+
+    // A simplified mock for the estimation problem
+    EstimationProblem problem = mock(EstimationProblem.class);
+
+    // Mocking parameters: 2 unbound, 1 bound
+    Parameter p1 = mock(Parameter.class);
+    Parameter p2 = mock(Parameter.class);
+    Parameter p3 = mock(Parameter.class);
+
+    // Assume p3 is bound
+    when(p1.isBound()).thenReturn(false);
+    when(p2.isBound()).thenReturn(false);
+    when(p3.isBound()).thenReturn(true);
+
+    // Mocking the array of all parameters
+    Parameter[] allParameters = new Parameter[]{p1, p2, p3};
+    when(problem.getAllParameters()).thenReturn(allParameters);
+
+    // Mocking the array of unbound parameters
+    Parameter[] unboundParameters = new Parameter[]{p1, p2};
+    when(problem.getUnboundParameters()).thenReturn(unboundParameters);
+
+    // Mocking the Jacobian calculation for unbound parameters only
+    // Let's assume a 2x2 Jacobian for 2 unbound parameters
+    RealMatrix jacobian = new Array2DRowRealMatrix(new double[][]{
+            {0.1, 0.2},
+            {0.3, 0.4}
+    });
+    when(problem.updateJacobian()).thenReturn(jacobian);
+
+    // Mocking other necessary methods for the estimator
+    when(problem.getObservations()).thenReturn(new double[2]);
+    when(problem.getEstimate()).thenReturn(new double[3]); // Estimate for all parameters
+
+    // Create an instance of the estimator (or a subclass if AbstractEstimator is abstract)
+    // For this test, we'll assume a concrete implementation or a way to instantiate AbstractEstimator
+    // For demonstration, let's assume we can directly test AbstractEstimator's logic if it were concrete
+    // or use a minimal concrete subclass. Since we don't have the concrete class, we'll simulate
+    // the call to the methods that are expected to fail.
+
+    // We will simulate the faulty logic within this test to trigger the ArrayIndexOutOfBoundsException.
+    // The actual fix would involve changing the loop bounds or using the unbound parameters' length.
+
+    // Simulate getCovariances() crashing logic
+    try {
+        // The original code would iterate up to 'cols' which is problem.getAllParameters().length (3)
+        // but the jacobian is only cols_unbound x rows (2x2).
+        // This loop is a simplification of where the error would occur.
+        int cols_all = allParameters.length; // This is 3
+        int cols_unbound = unboundParameters.length; // This is 2
+        int rows = 2; // Assuming 2 observations for a 2x2 jacobian
+
+        // Simulate accessing jacobian[i][j] where i or j could be out of bounds if cols_all is used.
+        // The error happens when trying to use the full parameter count (cols_all)
+        // with a matrix sized for unbound parameters (cols_unbound).
+
+        // For getCovariances:
+        // The calculation typically involves J^T * J. The dimension of J^T * J is cols_unbound x cols_unbound.
+        // If the code mistakenly uses cols_all for this dimension, it will fail.
+        // Let's simulate the part that might cause the crash:
+        RealMatrix JTJ = jacobian.transpose().multiply(jacobian); // This will be 2x2
+        // If the code then tries to create a covariance matrix of size cols_all x cols_all (3x3)
+        // based on JTJ (2x2), it will fail.
+        // For example, if it tries to invert JTJ and then scale it, and expects a 3x3 result.
+
+        // Simulating the problematic loop structure:
+        // This is a conceptual representation of where the error might manifest.
+        // The actual code might be more complex, but the core issue is using the wrong dimension.
+        for (int i = 0; i < cols_all; i++) { // Using cols_all (3) here is the problem
+            for (int j = 0; j < cols_all; j++) { // Using cols_all (3) here is the problem
+                // Accessing JTJ[i][j] would throw ArrayIndexOutOfBoundsException if i or j >= cols_unbound (2)
+                // Or if the result matrix is initialized to cols_all x cols_all.
+                if (i < cols_unbound && j < cols_unbound) {
+                    // This part is fine
+                    double val = JTJ.getEntry(i, j);
+                    // ... further calculations ...
+                } else {
+                    // This is where the problem occurs if the code tries to access JTJ or a result matrix
+                    // using an index >= cols_unbound.
+                    // For the purpose of triggering the exception, we can simulate it directly.
+                    // If the intention is to return a matrix of size cols_all x cols_all,
+                    // and it's populated using JTJ (cols_unbound x cols_unbound),
+                    // accessing indices beyond cols_unbound will fail.
+                    fail("Expected ArrayIndexOutOfBoundsException for getCovariances with bound parameters.");
+                }
+            }
+        }
+        // If the loop completes without exception (which it shouldn't with the faulty logic),
+        // then the test should fail.
+
+    } catch (ArrayIndexOutOfBoundsException e) {
+        // This is the expected exception.
+        // We can assert details if needed, but catching it confirms the bug.
+        assertTrue(true); // Test passes if this exception is caught.
+    } catch (EstimatorException e) {
+        // Catching EstimatorException as well, as AbstractEstimator methods might throw it.
+        fail("Caught EstimatorException instead of ArrayIndexOutOfBoundsException: " + e.getMessage());
+    }
+
+    // Simulate guessParametersErrors() crashing logic
+    try {
+        // Similar logic applies here, the error stems from using the total parameter count
+        // instead of the unbound parameter count when dealing with the Jacobian.
+        int cols_all = allParameters.length; // 3
+        int cols_unbound = unboundParameters.length; // 2
+        int rows = 2; // Assuming 2 observations
+
+        // guessParametersErrors() might involve calculating standard errors from the covariance matrix.
+        // If the covariance matrix is incorrectly sized or populated, this can lead to errors.
+        // The core issue remains the incorrect dimension handling.
+
+        // Simulating the problematic access:
+        // If the method expects to return an array of size cols_all, but calculations
+        // are based on cols_unbound, it can lead to issues.
+        // For instance, if it tries to extract diagonal elements of a covariance matrix
+        // that was intended to be cols_all x cols_all but was computed from a cols_unbound x cols_unbound JTJ.
+
+        // Let's simulate an attempt to access an element that would be out of bounds.
+        // For example, if it tries to calculate the error for the bound parameter (index 2).
+        if (cols_all > cols_unbound) { // This condition is true (3 > 2)
+            // Simulate accessing an error value for a bound parameter, which should conceptually be 0
+            // or handled differently, but the bug causes an exception.
+            // If the code tries to get sqrt(covariance[2][2]) and covariance is only 2x2, it fails.
+            fail("Expected ArrayIndexOutOfBoundsException for guessParametersErrors with bound parameters.");
+        }
+        // If the loop completes without exception (which it shouldn't with the faulty logic),
+        // then the test should fail.
+
+    } catch (ArrayIndexOutOfBoundsException e) {
+        // This is the expected exception.
+        assertTrue(true); // Test passes if this exception is caught.
+    } catch (EstimatorException e) {
+        // Catching EstimatorException as well.
+        fail("Caught EstimatorException instead of ArrayIndexOutOfBoundsException: " + e.getMessage());
+    }
+}

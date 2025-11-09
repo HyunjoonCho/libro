@@ -1,0 +1,27 @@
+public void testReadValuesErrorRecovery() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    String json = "[{\"name\":\"Alice\"}, {\"name\":\"Bob\"}, {\"malformed\":"; // Malformed JSON
+    try (MappingIterator<Map<String, String>> iterator = mapper.readerFor(new TypeReference<Map<String, String>>() {}).readValues(
+        mapper.getFactory().createParser(json))) {
+        assertTrue(iterator.hasNextValue());
+        Map<String, String> first = iterator.nextValue();
+        assertEquals("Alice", first.get("name"));
+
+        assertTrue(iterator.hasNextValue());
+        Map<String, String> second = iterator.nextValue();
+        assertEquals("Bob", second.get("name"));
+
+        // The bug is that hasNextValue() might throw an exception or return incorrect results
+        // after a parsing error. The test aims to check if it can gracefully handle
+        // the malformed JSON and indicate no more values, or throw a predictable exception.
+        // Depending on the exact implementation and desired recovery, this assertion might change.
+        // For now, we expect it to indicate no more values or throw an exception.
+        try {
+            assertFalse(iterator.hasNextValue());
+        } catch (JsonProcessingException e) {
+            // Expected behavior in some recovery scenarios is to throw an exception
+            // that can be caught and handled.
+            assertTrue(e.getMessage().contains("Unexpected end-of-input"));
+        }
+    }
+}

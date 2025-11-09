@@ -1,0 +1,157 @@
+public void testGroupConstraints() {
+    OptionGroup optionGroup = new OptionGroup();
+    Option optionA = new Option("a", "option a");
+    Option optionB = new Option("b", "option b");
+    optionGroup.addOption(optionA);
+    optionGroup.addOption(optionB);
+    optionGroup.setRequired(true);
+
+    CommandLine cl = new CommandLine();
+    cl.addOption(optionA); // Adding only optionA to the command line
+
+    // This assertion should fail based on the description, as optionB is not present
+    // and the group constraint should not be met if optionB is required for the group.
+    // However, the current implementation does not consider the group's children.
+    assertTrue(cl.hasOption("a")); // This will be true
+    assertFalse(cl.hasOption("b")); // This will be false
+
+    // The bug implies that the group constraint should be evaluated based on its children,
+    // and since optionB is not present, the group might not be considered "satisfied"
+    // depending on how the constraint logic is implemented within the group itself.
+    // The description suggests that the group should be considered present if any of its children are present.
+    // If the group is required, and only optionA is present, the group *should* be considered satisfied.
+    // The bug description is slightly confusing here. Let's re-read:
+    // "the presence or not of Group A will not affect GroupB. This is because Groups are never added to a CommandLine so .hasOption(A) returns false and so it isn't counted."
+    // This implies that the group *itself* isn't added.
+    // "WriteableCommandLine#addOption(Option) should be used to indicate that a Group is present if any of a Groups children is present."
+    // This suggests a change in how groups are handled.
+
+    // Let's try to test the described incorrect behavior:
+    // A parent group B, with child group A.
+    // Set a minimum/maximum on Group B.
+    // The presence of Group A should not affect the constraints on Group B.
+
+    OptionGroup groupA = new OptionGroup();
+    Option optionA1 = new Option("a1", "option a1");
+    groupA.addOption(optionA1);
+    groupA.setRequired(true); // Group A itself is required
+
+    OptionGroup groupB = new OptionGroup();
+    Option optionB1 = new Option("b1", "option b1");
+    groupB.addOption(optionB1);
+    groupB.addOption(groupA); // Group A is a child of Group B
+    groupB.setRequired(true); // Group B is required
+
+    CommandLine cl2 = new CommandLine();
+    cl2.addOption(optionA1); // Only add option from Group A
+
+    // According to the bug, adding optionA1 should NOT satisfy the requirement for groupB
+    // because the group *itself* isn't added to the command line.
+    // The current implementation likely checks if "groupA" or "groupB" option is directly present,
+    // which it won't be.
+
+    // Let's try to assert the *expected* behavior after a fix, which would be that
+    // adding an option from a child group *should* satisfy the parent group's requirement.
+    // The bug report implies the opposite is happening.
+
+    // To reproduce the bug:
+    // We need to show that adding an option from a child group does NOT satisfy the parent group's requirement.
+    CommandLine clBug = new CommandLine();
+    clBug.addOption(optionA1); // Add option from group A
+
+    // If the bug is present, clBug.hasOption("b1") would be false, and
+    // if groupB was required, it would be considered not satisfied.
+    // The core issue is how the `Group` object is treated when added to `CommandLine`.
+    // It seems `Group` objects are not directly added as `Option` objects.
+
+    // Let's assume a scenario where groupB has a minimum of 1 option.
+    OptionGroup groupBWithMin = new OptionGroup();
+    Option optionB_child1 = new Option("b_child1", "b child 1");
+    Option optionB_child2 = new Option("b_child2", "b child 2");
+    groupBWithMin.addOption(optionB_child1);
+    groupBWithMin.addOption(optionB_child2);
+    groupBWithMin.setRequired(true); // Make the group required
+
+    OptionGroup childGroupForB = new OptionGroup();
+    Option childOption1 = new Option("child1", "child option 1");
+    childGroupForB.addOption(childOption1);
+    childGroupForB.setRequired(true); // Child group itself is required
+
+    groupBWithMin.addOption(childGroupForB); // Add the child group
+
+    CommandLine clReproduceBug = new CommandLine();
+    clReproduceBug.addOption(childOption1); // Add only an option from the child group
+
+    // The bug states: "the presence or not of Group A will not affect GroupB."
+    // This means that even though childOption1 is present (which satisfies childGroupForB),
+    // the presence of childGroupForB (or its options) should NOT count towards satisfying groupBWithMin.
+    // Therefore, if groupBWithMin is required, it should fail validation.
+
+    // Assertion that demonstrates the bug:
+    // If groupBWithMin is required, and only an option from its child group is present,
+    // the command line should NOT be considered valid *if the bug is present*.
+    // The actual check for group validity might happen elsewhere, but this setup
+    // should lead to the described incorrect behavior where child groups don't count.
+
+    // To test this, we'd need access to the validation logic that uses the group constraints.
+    // Assuming `CommandLine.validate()` or similar exists and uses group rules.
+    // The description implies that `cl.hasOption(group)` would return false.
+    // Let's simulate that.
+
+    // If the bug is present, adding `childOption1` to `clReproduceBug`
+    // will NOT cause `clReproduceBug.hasOption(childGroupForB)` to return true,
+    // and thus `clReproduceBug.hasOption(groupBWithMin)` will also likely not be considered true
+    // based on its children.
+
+    // A simplified test focusing on the `hasOption` behavior for groups:
+    CommandLine clSimple = new CommandLine();
+    OptionGroup parentGroup = new OptionGroup();
+    OptionGroup childGroup = new OptionGroup();
+    Option childOpt = new Option("c", "child option");
+    childGroup.addOption(childOpt);
+    parentGroup.addOption(childGroup);
+    parentGroup.addOption(new Option("p", "parent option"));
+
+    clSimple.addOption(childOpt); // Add an option from the child group
+
+    // Buggy behavior: clSimple.hasOption(childGroup) would return false.
+    // This is because the group object itself is not added as an option.
+    // The fix suggests that `addOption(Option)` should be used to indicate presence.
+    // This implies that when an option *within* a group is added, the group should somehow be marked.
+
+    // Let's try to assert the *absence* of the group when its children are present.
+    // This is what the bug report implies is happening and causing issues with constraints.
+    assertFalse("Bug: Group should not be considered present if only its child option is added.",
+                clSimple.hasOption(childGroup)); // This should be true after the fix, but false due to the bug.
+
+    // The description is a bit abstract without seeing the `CommandLine` and `OptionGroup` implementations.
+    // The core of the bug seems to be that `CommandLine.hasOption(OptionGroup)` doesn't check recursively
+    // or doesn't account for group membership when determining if a group is "present".
+    // The fix suggests that `WriteableCommandLine#addOption(Option)` should be updated.
+    // This implies that when an option belonging to a group is added, the group itself should be marked.
+
+    // Let's create a scenario where a parent group has a minimum constraint.
+    OptionGroup parentGroupWithMin = new OptionGroup();
+    parentGroupWithMin.setRequired(true); // Minimum of 1 required
+    OptionGroup childGroup1 = new OptionGroup();
+    childGroup1.addOption(new Option("c1", "child 1"));
+    OptionGroup childGroup2 = new OptionGroup();
+    childGroup2.addOption(new Option("c2", "child 2"));
+
+    parentGroupWithMin.addOption(childGroup1);
+    parentGroupWithMin.addOption(childGroup2);
+
+    CommandLine clTest = new CommandLine();
+    clTest.addOption(new Option("c1", "child 1")); // Add option from childGroup1
+
+    // Bug: parentGroupWithMin.isRequired() would return true, but the command line
+    // would NOT be considered to have satisfied parentGroupWithMin because
+    // childGroup1 (and its option c1) are not directly added as options to clTest.
+    // The `hasOption` check for the group itself would fail.
+
+    // Asserting the buggy behavior: The parent group's requirement is NOT met.
+    // This would typically manifest during a validation step.
+    // We can simulate this by checking if the group is considered "present".
+    assertFalse("Bug: Parent group not considered satisfied when only a child option is present.",
+                clTest.hasOption(parentGroupWithMin)); // This should be true after the fix.
+}

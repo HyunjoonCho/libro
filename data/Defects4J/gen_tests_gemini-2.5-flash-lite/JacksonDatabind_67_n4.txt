@@ -1,0 +1,95 @@
+public void testImmutableMapEnumKeyDeserializerModifierIgnored() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.setDeserializerModifier(new BeanDeserializerModifier() {
+        @Override
+        public KeyDeserializer modifyKeyDeserializer(
+                DeserializationConfig config,
+                JavaType type,
+                KeyDeserializer deserializer) {
+            if (type.isEnumType()) {
+                return new KeyDeserializer() {
+                    @Override
+                    @SuppressWarnings("unchecked")
+                    public Object deserializeKey(String key, DeserializationContext ctxt)
+                            throws IOException, JsonProcessingException {
+                        Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                        return Enum.valueOf(rawClass, key.toUpperCase());
+                    }
+                };
+            }
+            return super.modifyKeyDeserializer(config, type, deserializer);
+        }
+    });
+    mapper.registerModule(module);
+
+    // Test with an enum key in an ImmutableMap
+    Map<TestEnum, String> inputMap = Collections.singletonMap(TestEnum.VALUE_ONE, "test");
+    String json = mapper.writeValueAsString(inputMap);
+
+    // The deserializer should convert "value_one" to TestEnum.VALUE_ONE
+    // If the modifier is ignored, "value_one" will not be recognized.
+    String jsonWithLowerCaseKey = json.replace("VALUE_ONE", "value_one");
+
+    try {
+        Map<TestEnum, String> deserializedMap = mapper.readValue(jsonWithLowerCaseKey, new TypeReference<Map<TestEnum, String>>() {});
+        // If the test reaches here without an exception, it implies the modifier was not applied correctly
+        // and the default deserializer failed to handle the lower case enum key.
+        // We assert that the expected value is present, which will fail if the deserializer doesn't work.
+        assertNotNull(deserializedMap);
+        assertTrue(deserializedMap.containsKey(TestEnum.VALUE_ONE));
+        assertEquals("test", deserializedMap.get(TestEnum.VALUE_ONE));
+    } catch (Exception e) {
+        // If an exception is thrown (e.g., IllegalArgumentException or JsonMappingException),
+        // it might indicate the modifier was ignored and the default deserializer failed.
+        // However, the goal is to show the modifier ISN'T working, so we want to *expect* a failure
+        // if the default behavior is to fail on lowercase.
+        // The provided bug report suggests the modifier is ignored and the default deserializer
+        // is used, which would then fail.
+        // To reproduce the *failure* of the modifier being ignored, we need to show that the
+        // lowercase key *is not* correctly deserialized.
+        // If the default deserializer *does* handle lowercase (which the bug implies it doesn't for keys),
+        // then this test might pass unexpectedly.
+        // The core of the bug is that `modifyKeyDeserializer` is *not called* or its result is *ignored*
+        // when the type is an enum and `_createEnumKeyDeserializer` is called first.
+
+        // To truly reproduce the bug, we'd expect a failure here if the modifier was ignored
+        // and the default Enum.valueOf() (case-sensitive) was used on a lowercase string.
+        // Let's simulate the expected failure if the modifier IS ignored.
+        // If the deserializer fails, it will likely throw an exception like IllegalArgumentException
+        // or JsonMappingException.
+        // The test should fail if the modifier *is* correctly applied and deserializes "value_one".
+        // Therefore, if we catch an exception, it means the modifier was likely ignored and the default failed.
+        // This is the behavior described in the bug.
+        // The test is designed to pass if the modifier works, and fail if it doesn't.
+        // The bug description implies the modifier is ignored, leading to a failure in deserialization.
+        // So, if this catch block is hit, it means the *expected* failure due to the bug occurred.
+        // However, for a JUnit test, we want to assert a specific outcome.
+
+        // Let's re-evaluate: The bug says the modifier is ignored. This means the default deserializer
+        // for enum keys will be used. The default `Enum.valueOf()` is case-sensitive.
+        // So, deserializing "value_one" should fail.
+        // The test should *assert* that it fails, or assert that the result is *not* the expected enum.
+
+        // Let's try asserting that it *fails* to deserialize correctly.
+        // We'll wrap the readValue in a try-catch and expect an exception.
+        // This seems to be the most direct way to reproduce the failure state.
+        boolean exceptionCaught = false;
+        try {
+            mapper.readValue(jsonWithLowerCaseKey, new TypeReference<Map<TestEnum, String>>() {});
+        } catch (Exception expectedException) {
+            // We expect an exception here because the modifier is ignored,
+            // and the default deserializer is case-sensitive.
+            exceptionCaught = true;
+            // Optionally check the type of exception if known.
+            // For example, JsonMappingException or IllegalArgumentException.
+        }
+        assertTrue("Deserialization should fail when modifier is ignored for lowercase enum key", exceptionCaught);
+    }
+}
+
+// Helper enum for the test
+enum TestEnum {
+    VALUE_ONE,
+    VALUE_TWO
+}

@@ -1,0 +1,48 @@
+public void testCsvParserGetHeaderMapNpe() throws IOException {
+    CSVFormat csvFormat = CSVFormat.DEFAULT.withHeader();
+    CSVParser parser = CSVParser.parse("a,b,c\n1,2,3", csvFormat);
+    // This should not throw an NPE, even though the format doesn't explicitly define headers
+    // The parser itself creates a header map based on the first line if withHeader() is true.
+    // The bug report implies that if the format *itself* doesn't define headers, getHeaderMap() might be null.
+    // However, the provided stacktrace suggests it's an issue with the *creation* of the map within getHeaderMap,
+    // implying `this.headerMap` *was* null, and then a new LinkedHashMap was attempted.
+    // Let's simulate a scenario where headerMap might be null if not initialized properly.
+    // In the provided code, `CSVParser.parse` *does* initialize `headerMap` if `withHeader()` is true.
+    // The bug report's proposed fix is to return null if `this.headerMap` is null.
+    // This test will try to trigger that condition, assuming a scenario where `headerMap` is indeed null.
+
+    // Create a parser without headers explicitly defined in the format, but where the parser *might* still try to create one.
+    // The actual source code shows `headerMap` is initialized to null by default and populated by `parse`.
+    // The NPE happens inside `new LinkedHashMap<String, Integer>(this.headerMap)` if `this.headerMap` is null.
+    // This suggests the `getHeaderMap` method itself might be called when `this.headerMap` is null.
+
+    // A simpler way to trigger the NPE is to create a CSVParser directly without parsing any content,
+    // or with content that doesn't allow header creation, and then call getHeaderMap.
+    // Let's assume a scenario where the internal headerMap is not initialized.
+    CSVFormat formatWithoutHeader = CSVFormat.DEFAULT.withHeader(); // Still uses header logic, but format itself doesn't define them.
+    // Manually create a parser instance to potentially control the state of headerMap, though the static parse method is more common.
+    // The issue is likely in the getHeaderMap method implementation itself.
+    // The provided fix suggests `this.headerMap` can be null.
+    // Let's try to create a parser in a way that might lead to `this.headerMap` being null.
+    // If CSVParser is instantiated such that headerMap is null.
+    // For instance, if the constructor allows `headerMap` to be null and `getHeaderMap` is called.
+
+    // Re-reading the description and stacktrace:
+    // "Caused by: java.lang.NullPointerException at java.util.HashMap.<init>(HashMap.java:318) at java.util.LinkedHashMap.<init>(LinkedHashMap.java:212) at org.apache.commons.csv.CSVParser.getHeaderMap(CSVParser.java:288)"
+    // The NPE happens *inside* the constructor of LinkedHashMap when it's trying to initialize from `this.headerMap`.
+    // This strongly implies `this.headerMap` is null when `new LinkedHashMap<>(this.headerMap)` is called.
+    // The proposed fix is `return this.headerMap != null ? new LinkedHashMap<String, Integer>(this.headerMap) : null;`
+    // This means the test should trigger a state where `this.headerMap` is null.
+
+    // Let's construct a CSVParser where `headerMap` is explicitly null.
+    // The `CSVParser.parse` method initializes `headerMap` based on the format and the first record.
+    // If the format does NOT have headers, and the first record is parsed, `headerMap` should remain null.
+    CSVFormat format = CSVFormat.DEFAULT.withFirstRecordAsHeader(); // This implies headerMap should be populated.
+    // If we use a format that does NOT use headers:
+    CSVFormat noHeaderFormat = CSVFormat.DEFAULT;
+    CSVParser parser = CSVParser.parse("a,b,c\n1,2,3", noHeaderFormat);
+
+    // Now, let's call getHeaderMap(). If the internal headerMap is null, the original code would throw NPE.
+    // The fix is to return null. So, this test should assert that getHeaderMap() returns null.
+    assertNull("getHeaderMap() should return null when no headers are present.", parser.getHeaderMap());
+}

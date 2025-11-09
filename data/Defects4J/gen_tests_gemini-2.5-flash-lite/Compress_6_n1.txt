@@ -1,0 +1,302 @@
+public void testZipFileCorruption() throws IOException {
+    File tempZipFile = File.createTempFile("test", ".zip");
+    tempZipFile.deleteOnExit();
+
+    ZipArchiveOutputStream zipArchiveOutputStream = null;
+    try {
+        zipArchiveOutputStream = new ZipArchiveOutputStream(tempZipFile);
+        zipArchiveOutputStream.setEncoding("UTF-8");
+
+        // Create entries with names that are likely to cause hash collisions
+        // For example, using names that differ only by case or have similar prefixes/suffixes
+        // or are simply long and complex.
+        // The actual names that cause collisions depend on the HashMap implementation,
+        // but we can try to simulate the conditions described.
+        // Let's try to add entries that might have hash collisions based on common hashing strategies.
+        // For example, names like "File0001.txt", "File0002.txt", etc. can lead to collisions
+        // if the hashing is simple. Or names that result in the same hash code.
+
+        // Simulate a scenario where entries might have the same hash code.
+        // Let's add a bunch of entries. The exact number and names to trigger the bug
+        // are hard to predict without knowing the exact HashMap implementation's hash function.
+        // However, adding a significant number of entries with potentially similar characteristics
+        // is a good starting point.
+
+        // Example: Add entries with names that might lead to hash collisions.
+        // Let's assume that names like "entry1.txt" and "entry2.txt" might collide
+        // or names that differ only slightly might collide.
+        // For the purpose of reproducing the bug, we'll create a scenario
+        // that is likely to trigger the issue based on the description.
+
+        // Add an entry
+        ZipArchiveEntry entry1 = new ZipArchiveEntry("entry1.txt");
+        zipArchiveOutputStream.putArchiveEntry(entry1);
+        zipArchiveOutputStream.write("content1".getBytes());
+        zipArchiveOutputStream.closeArchiveEntry();
+
+        // Add another entry that might collide with entry1.
+        // The bug description suggests that if the name is set in the constructor,
+        // it might lead to issues. Let's try to create entries where the name
+        // is set in the constructor and see if a collision occurs.
+        // The description mentions that `equals()` and `hashCode()` in `ZipArchiveEntry`
+        // might not use the same filename value if it's set later.
+        // However, the core issue described is that `ZipArchiveEntry` treats two entries
+        // as equal if the filename is set in the constructor, which breaks the offset hashmap.
+        // So, we need two entries that are considered "equal" by `ZipArchiveEntry`
+        // but are distinct files, and one of them overwrites the offset of the other.
+        // This implies that the `ZipArchiveEntry`'s internal `hashCode` or `equals`
+        // methods might be flawed when names are set in the constructor.
+
+        // Let's simulate the problematic scenario: two entries that are considered equal
+        // by the `ZipArchiveEntry`'s equals/hashCode, leading to the offset being overwritten.
+        // The bug report implies that `ZipArchiveEntry("name")` might be the issue.
+        // If two `ZipArchiveEntry` objects are created with the same name using the constructor,
+        // they should be treated as equal. The bug is that this equality check might be
+        // inconsistently applied or that the internal map uses these objects in a way
+        // that leads to overwriting.
+
+        // To reproduce the bug, we need to create a situation where the `HashMap`
+        // used internally by `ZipOutputStream` to store offsets gets an incorrect entry
+        // due to `ZipArchiveEntry`'s `hashCode` and `equals` behavior.
+        // The description states: "if the filename of the entry is set in the ctor it will always treat two ZipArchiveEntries as equal."
+        // This implies that if we create two `ZipArchiveEntry` objects with the *same name*
+        // using the constructor, they will be considered equal. The bug is that the map
+        // will then overwrite the offset for the first entry with the offset for the second.
+
+        // Let's create two entries with the *same name* to trigger this.
+        ZipArchiveEntry entry2 = new ZipArchiveEntry("entry1.txt"); // Same name as entry1
+        zipArchiveOutputStream.putArchiveEntry(entry2);
+        zipArchiveOutputStream.write("content2".getBytes());
+        zipArchiveOutputStream.closeArchiveEntry();
+
+        // Add more entries to increase the chance of internal map operations.
+        for (int i = 2; i < 100; i++) { // Adding a reasonable number of entries
+            ZipArchiveEntry entry = new ZipArchiveEntry("entry" + i + ".txt");
+            zipArchiveOutputStream.putArchiveEntry(entry);
+            zipArchiveOutputStream.write(("content" + i).getBytes());
+            zipArchiveOutputStream.closeArchiveEntry();
+        }
+
+        zipArchiveOutputStream.finish();
+    } finally {
+        IOUtils.closeQuietly(zipArchiveOutputStream);
+    }
+
+    // Now, attempt to read the zip file and verify its integrity.
+    // If the bug is present, attempting to read it might throw an exception,
+    // or the unzipped content might be corrupted, or the file structure might be wrong.
+    // A common way to verify is to try and unzip it or iterate through its entries.
+    // The bug report mentions "corrupted index entries and would fail to unzip successfully".
+    // This suggests that reading the central directory might fail or point to wrong offsets.
+
+    ZipArchiveInputStream zipArchiveInputStream = null;
+    try {
+        zipArchiveInputStream = new ZipArchiveInputStream(new FileInputStream(tempZipFile));
+        int entryCount = 0;
+        while (zipArchiveInputStream.getNextZipEntry() != null) {
+            entryCount++;
+            // Optionally read the content to ensure it's not corrupted
+            ByteArrayOutputStream entryContent = new ByteArrayOutputStream();
+            IOUtils.copy(zipArchiveInputStream, entryContent);
+            // We don't strictly need to check content here, the corruption is in the index.
+        }
+        // The crucial part is that the loop completes without exceptions related to
+        // malformed central directory or invalid offsets.
+        // If the bug is present, the `getNextZipEntry()` might throw an exception
+        // or return null prematurely, or the offsets used internally could be wrong,
+        // leading to incorrect data being read or exceptions.
+
+        // Based on the bug description, the primary failure is during the zip creation.
+        // The corruption means that when a tool tries to read the zip, it fails.
+        // The test should confirm that the creation *doesn't* lead to such a state.
+        // If the creation *does* lead to such a state, the subsequent read attempt *should* fail.
+        // The problem is, the provided bug description doesn't specify *how* it fails during read.
+        // It says "fail to unzip successfully".
+        // For a unit test, we can assert that no exceptions are thrown during the read,
+        // implying the zip file is at least parsable.
+
+        // If the bug is reproduced, the creation process would have incorrectly written offsets.
+        // The read process would then likely fail with an exception like `ZipException`
+        // or `IOException` indicating a malformed zip or incorrect data.
+        // So, if the test *passes* (i.e., no exception thrown during read), it means the bug
+        // was *not* triggered under these specific conditions.
+        // To *reproduce the failure*, the test should *fail* (throw an exception).
+
+        // Let's assume that a malformed zip file will cause `getNextZipEntry()` to throw an exception
+        // or behave unexpectedly. If the test runs to completion without issues, it suggests
+        // the fix might be working, or the specific test case didn't hit the bug.
+        // The goal is to *reproduce the failure*, so we expect an exception.
+
+        // The bug description implies that the corruption happens during creation.
+        // The test should simulate the creation scenario that leads to corruption.
+        // The provided fix suggests `ZipArchiveEntry`'s `equals` and `hashCode` are the problem.
+        // The key is "if the filename of the entry is set in the ctor it will always treat two ZipArchiveEntries as equal."
+        // This means `new ZipArchiveEntry("same_name.txt")` and `new ZipArchiveEntry("same_name.txt")`
+        // are considered equal. The internal map will then overwrite entries.
+
+        // Let's refine the test to explicitly trigger this "equality" issue.
+        // We need to create two `ZipArchiveEntry` objects with the same name via constructor.
+        // The act of adding them to the `ZipArchiveOutputStream` should then cause the issue.
+
+        // Re-writing the setup to be more direct about the bug trigger.
+
+    } catch (Exception e) {
+        // If any exception occurs during reading, it implies the zip file might be corrupted.
+        // This is what we want to reproduce.
+        // However, a simple assertion that an exception is thrown isn't very informative.
+        // We need to ensure the *creation* process itself is what's being tested for the bug.
+        // The bug is in the *creation* of the zip, leading to a *corrupted* file.
+        // So, the test should focus on the creation.
+        // The failure is that a corrupted zip is produced.
+        // The simplest way to show a corrupted zip is to attempt to read it and see if it fails.
+
+        // The description says "fail to unzip successfully".
+        // Let's simulate the creation that leads to this.
+        // The provided patch description is key:
+        // "the equals() and hashCode() methods in ZipArchiveEntry do not always use the same filename value in their comparisons.
+        // In fact if the filename of the entry is set in the ctor it will always treat two ZipArchiveEntries as equal."
+
+        // So, if we create two ZipArchiveEntry objects with the same name using the constructor,
+        // they are treated as equal. The ZipOutputStream uses a map to store offsets.
+        // If two entries are equal, the map will overwrite the offset.
+
+        // Let's focus on the creation part again.
+        // The test should throw an exception if the creation *fails* to produce a valid zip.
+        // The current `try-catch` block around the reading is too broad.
+
+        // Let's restructure the test.
+        // The test should *create* the zip file with specific inputs designed to trigger the bug.
+        // Then, it should assert that the *creation process itself* resulted in a state that *would* cause corruption.
+        // The most direct way to test the *creation* is to ensure that the internal state
+        // of `ZipArchiveOutputStream` is consistent.
+
+        // The bug is: "the wrong offsets were being returned from the hashmap".
+        // This means the `HashMap<ZipArchiveEntry, Entry> entries` in `ZipArchiveOutputStream`
+        // is populated incorrectly.
+        // When `putArchiveEntry` is called, it looks up the entry in the `entries` map.
+        // If `entry1` and `entry2` are equal (same name, constructor used), `entries.put(entry1, ...)`
+        // followed by `entries.put(entry2, ...)` will result in `entry2` overwriting `entry1`'s data.
+        // The problem is that the offset stored for `entry1` might be correct, but when `entry2`
+        // is processed, its offset might be wrong, or the `entry1` offset might be lost.
+
+        // The most direct way to reproduce the failure is to create a zip file that *is* corrupted.
+        // Then, assert that the file is indeed corrupted. How to assert corruption?
+        // By attempting to read it and expecting an error.
+
+        // Let's simplify the test to focus on the creation of the problematic zip.
+
+    } finally {
+        // Ensure the temp file is cleaned up, even if an error occurs.
+        if (tempZipFile != null && tempZipFile.exists()) {
+            // tempZipFile.delete(); // For debugging, keep the file to inspect.
+        }
+    }
+
+    // --- Re-evaluation of the test structure based on the bug description ---
+    // The bug is in ZipArchiveOutputStream's handling of ZipArchiveEntry equality.
+    // Specifically, when two ZipArchiveEntry objects are equal (e.g., same name set via constructor),
+    // the internal map in ZipArchiveOutputStream can lead to incorrect offsets being stored or retrieved.
+    // This results in a corrupted zip file.
+
+    // To reproduce the failure, we need to:
+    // 1. Create a ZipArchiveOutputStream.
+    // 2. Add at least two ZipArchiveEntry objects that are considered equal by ZipArchiveEntry's equals/hashCode.
+    //    The description states: "if the filename of the entry is set in the ctor it will always treat two ZipArchiveEntries as equal."
+    //    This is a strong hint. Let's create two entries with the *exact same name* using the constructor.
+    // 3. Write some content for these entries.
+    // 4. Finish the zip file.
+    // 5. Attempt to read the created zip file. If the creation was successful in producing a corrupted zip,
+    //    the read operation should fail (e.g., throw an exception).
+
+    // Let's write a test that focuses on this specific scenario.
+
+    File corruptibleZipFile = File.createTempFile("corrupt", ".zip");
+    corruptibleZipFile.deleteOnExit();
+
+    ZipArchiveOutputStream zaos = null;
+    try {
+        zaos = new ZipArchiveOutputStream(corruptibleZipFile);
+        zaos.setEncoding("UTF-8"); // Important for consistent naming
+
+        // Create two entries with the exact same name using the constructor.
+        // This is the critical step to trigger the bug as described.
+        String collisionName = "colliding_entry.txt";
+
+        ZipArchiveEntry entry1 = new ZipArchiveEntry(collisionName);
+        zaos.putArchiveEntry(entry1);
+        zaos.write("content for first entry".getBytes());
+        zaos.closeArchiveEntry();
+
+        // Now, create a second entry with the *same name* using the constructor.
+        // According to the bug report, ZipArchiveEntry considers these equal.
+        // The ZipArchiveOutputStream's internal map will likely use these entries as keys.
+        // If they are equal, the second putArchiveEntry might overwrite the first's mapping,
+        // potentially leading to incorrect offsets being stored or retrieved later.
+        ZipArchiveEntry entry2 = new ZipArchiveEntry(collisionName);
+        zaos.putArchiveEntry(entry2);
+        zaos.write("content for second entry".getBytes());
+        zaos.closeArchiveEntry();
+
+        // Add a few more entries to make the zip file more complex and increase the likelihood
+        // of the corrupted offset being used when the central directory is written.
+        for (int i = 0; i < 50; i++) {
+            ZipArchiveEntry otherEntry = new ZipArchiveEntry("other_entry_" + i + ".txt");
+            zaos.putArchiveEntry(otherEntry);
+            zaos.write(("content for other entry " + i).getBytes());
+            zaos.closeArchiveEntry();
+        }
+
+        zaos.finish(); // This is where the central directory is written, likely using the faulty offsets.
+
+    } catch (IOException e) {
+        // If an IOException occurs during creation itself, it might be related, but the bug
+        // is about producing a *corrupted* file that fails *later* during reading.
+        // So, we don't want to catch and fail here unless it's a sign of the intended corruption.
+        // Let's rethrow to ensure we see creation errors.
+        throw e;
+    } finally {
+        IOUtils.closeQuietly(zaos);
+    }
+
+    // Now, attempt to read the created zip file.
+    // If the creation process was successful in producing a corrupted zip,
+    // this read operation should fail. We expect an exception.
+    try {
+        ZipArchiveInputStream zais = new ZipArchiveInputStream(new FileInputStream(corruptibleZipFile));
+        ZipArchiveEntry entry;
+        int entryCount = 0;
+        while ((entry = zais.getNextZipEntry()) != null) {
+            entryCount++;
+            // Read the entry content to ensure it's not completely unreadable.
+            // The corruption is often in the index/offsets, so reading might fail here.
+            byte[] buffer = new byte[1024];
+            int len;
+            while ((len = zais.read(buffer)) > 0) {
+                // Consume the data. If the offset was wrong, this read might fail or return garbage.
+            }
+        }
+        zais.close();
+
+        // If we reach here without an exception, it means the zip file was successfully read.
+        // This implies that the specific scenario we created *did not* result in corruption.
+        // To reproduce the *failure*, this part of the test should ideally throw an exception.
+        // So, if this point is reached, the test *should fail* because the bug was not reproduced.
+        fail("The created zip file was successfully read, indicating no corruption was produced by the test scenario. The bug was not reproduced.");
+
+    } catch (IOException e) {
+        // An IOException (or a subclass like ZipException) during reading indicates
+        // that the zip file is likely corrupted, as described in the bug report.
+        // This is the failure we want to reproduce.
+        // The test passes if this exception is caught.
+        // We can add a more specific check if needed, but catching any IOException
+        // during reading is a strong indicator of corruption.
+        // For example, if the offset pointed beyond the file, or to invalid data.
+        System.out.println("Successfully caught expected exception during zip reading, indicating corruption: " + e.getMessage());
+        // The test passes if we get here. No assertion needed, the exception itself is the indicator.
+    } finally {
+        // Clean up the temporary file.
+        if (corruptibleZipFile != null && corruptibleZipFile.exists()) {
+            // corruptibleZipFile.delete(); // Keep for debugging if needed.
+        }
+    }
+}

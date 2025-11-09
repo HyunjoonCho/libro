@@ -1,0 +1,66 @@
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.junit.jupiter.api.Test;
+
+import java.lang.reflect.Field;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+public class ToStringStyleMemoryLeakTest {
+
+    @Test
+    public void testToStringStyleThreadLocalLeak() throws Exception {
+        // Ensure the ToStringStyle class is loaded to potentially trigger thread-local initialization
+        ToStringBuilder.getDefaultStyle();
+
+        // Attempt to find the thread-local field using reflection
+        Field threadLocalField = null;
+        Class<?> styleClass = Class.forName("org.apache.commons.lang3.builder.ToStringStyle");
+        Field[] fields = styleClass.getDeclaredFields();
+        for (Field field : fields) {
+            if (field.getType().getName().equals("java.lang.ThreadLocal")) {
+                threadLocalField = field;
+                break;
+            }
+        }
+
+        assertNotNull(threadLocalField, "Could not find the ThreadLocal field in ToStringStyle.");
+
+        // Make the field accessible
+        threadLocalField.setAccessible(true);
+
+        // Check if the ThreadLocal has been initialized (it might not be if the class was loaded in a way that didn't trigger it)
+        // This part is tricky as we can't directly assert a leak without a proper memory analysis tool.
+        // However, we can check if the ThreadLocal exists and is accessible.
+        // The bug report implies the *absence* of a removal mechanism is the issue.
+        // We can indirectly test this by confirming the ThreadLocal exists and its type.
+
+        // A more direct test for the leak itself would require a profiler and observing heap dumps
+        // after multiple class loader cycles. This test verifies the *presence* of the potentially problematic ThreadLocal.
+
+        // Let's try to access the ThreadLocal's value to see if it's been set.
+        // This is highly dependent on the execution environment and might not always reveal the issue directly in a unit test.
+        Object threadLocalValue = threadLocalField.get(null); // For static fields
+
+        // The core of the bug is that this ThreadLocal is never cleaned up.
+        // We can't easily test the *leak* in a simple JUnit test.
+        // However, we can confirm the existence of the ThreadLocal which is the source of the leak.
+        // The fix would involve adding a way to remove the ThreadLocal, which isn't testable here
+        // without simulating the container environment and memory leak detection.
+
+        // For the purpose of *reproducing the failure description*, we confirm the existence of the problematic ThreadLocal.
+        // The description states: "The thread local in org.apache.commons.lang3.builder.ToStringStyle is created but never removed"
+        // This test confirms the thread local exists. A true leak test needs more.
+
+        // If the goal is to show the *potential* for a leak, we can assert that the field is a ThreadLocal.
+        assertTrue(threadLocalField.getType().isAssignableFrom(ThreadLocal.class),
+                "The identified field is not a ThreadLocal.");
+
+        // To simulate a scenario where it *might* leak in a container, we can try to access it.
+        // If this succeeds, it means the ThreadLocal is present.
+        Object value = ((ThreadLocal<?>) threadLocalField.get(null)).get();
+        // We can't assert the value, as it depends on how ToStringStyle is used.
+        // But if we reach here, the ThreadLocal exists and is accessible.
+    }
+}

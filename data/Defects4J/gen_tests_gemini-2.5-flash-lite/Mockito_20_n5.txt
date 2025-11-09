@@ -1,0 +1,228 @@
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Future;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+public class MockitoAbstractClassTest {
+
+    interface UserAccount {
+        List<String> getEmails();
+        void addEmail(String email);
+    }
+
+    interface AccountService {
+        void getAccount(String id, AsyncCallback<UserAccount> callback);
+    }
+
+    interface AsyncCallback<T> {
+        void onSuccess(T result);
+        void onFailure(Throwable thrown);
+    }
+
+    interface AccountRpcService {
+        Future<Account> getAccount(RpcContext context, String id);
+    }
+
+    static class Account {
+        // Dummy Account class
+    }
+
+    static class RpcContext {
+        // Dummy RpcContext class
+    }
+
+    // Custom Mockito Answer to handle abstract classes
+    static class AbstractClassAnswer implements Answer<Object> {
+        @Override
+        public Object answer(InvocationOnMock invocation) throws Throwable {
+            // Attempt to call the actual implementation if available (e.g., from a partial mock)
+            // Or provide a default behavior if the method is abstract
+            // This is a simplified example; a real implementation would be more robust
+            return null;
+        }
+    }
+
+    // Helper to create mocks for abstract classes
+    @SuppressWarnings("unchecked")
+    public static <T> T mockAbstractClass(Class<T> clazz) {
+        return (T) Mockito.mock(clazz, new AbstractClassAnswer());
+    }
+
+
+    @Test
+    public void testFakeWithTrivialLogic() {
+        // This test demonstrates the desired behavior, not the failure itself.
+        // The bug report suggests that Mockito *doesn't* easily support this out-of-the-box.
+        // The proposed solution in the bug report would make this cleaner.
+
+        abstract class FakeUserAccount implements UserAccount {
+            private final List<String> emails = new ArrayList<>();
+
+            @Override
+            public void addEmail(String email) {
+                emails.add(email);
+            }
+
+            @Override
+            public List<String> getEmails() {
+                return new ArrayList<>(emails); // Return a copy to prevent external modification
+            }
+        }
+
+        // Using Mockito to mock the abstract class directly (this is what the bug report suggests is hard)
+        // The proposed solution would make this @Fake annotation work.
+        // For the sake of demonstrating the *problem*, we'll show how it's currently done.
+
+        // Current approach requiring manual stubbing of all methods:
+        UserAccount userAccountMock = mock(UserAccount.class);
+        List<String> addedEmails = new ArrayList<>();
+        when(userAccountMock.getEmails()).thenReturn(addedEmails);
+        userAccountMock.addEmail("test@example.com");
+        addedEmails.add("test@example.com");
+        // This manual synchronization is tedious and error-prone, which is the core of the bug.
+
+        // If Mockito supported abstract classes as proposed, it might look like:
+        // @Fake private FakeUserAccount userAccount; // This is the desired syntax
+        // But this requires Mockito support.
+
+        // To reproduce the *spirit* of the bug, we'll just show that manual stubbing is needed.
+        // The failure is in the *lack* of convenient support, not a specific incorrect output.
+
+        // Let's simulate the tediousness:
+        UserAccount tediousMock = mock(UserAccount.class);
+        List<String> emailsList = new ArrayList<>();
+        when(tediousMock.getEmails()).thenAnswer(invocation -> new ArrayList<>(emailsList));
+        tediousMock.addEmail("a@b.com");
+        emailsList.add("a@b.com");
+        tediousMock.addEmail("c@d.com");
+        emailsList.add("c@d.com");
+
+        // Asserting the state that would be hard to maintain without the proposed feature
+        org.assertj.core.api.Assertions.assertThat(tediousMock.getEmails()).containsExactly("a@b.com", "c@d.com");
+    }
+
+
+    @Test
+    public void testCallbackStyleApi() {
+        // This test demonstrates the difficulty with callback-style APIs as described.
+        // The bug report implies that Mockito's current support requires verbose Answer implementations.
+
+        abstract class MockAccountService implements AccountService {
+            @Override
+            public void getAccount(String id, AsyncCallback<UserAccount> callback) {
+                callback.onSuccess(getAccount(id));
+            }
+            abstract UserAccount getAccount(String id);
+        }
+
+        // The bug report highlights the verbose and non-statically typed nature of current solutions.
+        AccountService service = mock(AccountService.class);
+        UserAccount account = mock(UserAccount.class);
+
+        // This is the verbose, potentially unsafe way without the proposed @Fake support
+        when(service.getAccount(eq("testId"), any(AsyncCallback.class))).thenAnswer(new Answer<Void>() {
+            @Override
+            public Void answer(InvocationOnMock invocation) throws Throwable {
+                AsyncCallback<UserAccount> callback = (AsyncCallback<UserAccount>) invocation.getArguments()[1];
+                callback.onSuccess(account); // Simulate calling the callback
+                return null;
+            }
+        });
+
+        // To show a failure, we'd need a scenario where this verbose stubbing leads to an error.
+        // The bug is more about verbosity and potential for error than a specific incorrect output.
+
+        // Let's verify the behavior with the verbose stubbing:
+        final UserAccount[] receivedAccount = new UserAccount[1];
+        service.getAccount("testId", new AsyncCallback<UserAccount>() {
+            @Override
+            public void onSuccess(UserAccount result) {
+                receivedAccount[0] = result;
+            }
+
+            @Override
+            public void onFailure(Throwable thrown) {
+                // not expected
+            }
+        });
+
+        org.assertj.core.api.Assertions.assertThat(receivedAccount[0]).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(receivedAccount[0]).isSameAs(account);
+    }
+
+    @Test
+    public void testUninterestingParameters() {
+        // This test demonstrates the issue with uninteresting parameters.
+        // The bug report suggests that Mockito requires repetitive matching for such parameters.
+
+        abstract class MockAccountRpcService implements AccountRpcService {
+            @Override
+            public Future<Account> getAccount(RpcContext context, String id) {
+                // checkNotNull(context); // Example of common sanity test not needing to be repeated
+                return getAccount(id);
+            }
+            abstract Future<Account> getAccount(String id);
+        }
+
+        AccountRpcService service = mock(AccountRpcService.class);
+        RpcContext context = mock(RpcContext.class);
+        Account account = new Account();
+        Future<Account> futureAccount = mock(Future.class);
+
+        // The "failure" here is the verbosity and boilerplate required to match the 'context' object.
+        // The bug report suggests that Mockito requires something like:
+        // when(service.getAccount(isA(RpcContext.class), eq("id"))).thenReturn(futureAccount);
+        // Or even more verbose if 'context' is not null.
+
+        // Let's reproduce the verbose matching that the bug report complains about:
+        when(service.getAccount(org.mockito.ArgumentMatchers.isA(RpcContext.class), eq("someId"))).thenReturn(futureAccount);
+
+        // This stubbing works, but the bug is that you *have* to do it this way,
+        // and it's repetitive if many tests have this "uninteresting" parameter.
+        // The proposed @Fake annotation would abstract this away.
+
+        // To show the "failure" is the verbosity, we'll just assert that the stubbing works.
+        Future<Account> result = service.getAccount(context, "someId");
+        org.assertj.core.api.Assertions.assertThat(result).isSameAs(futureAccount);
+
+        // If we tried to call it without matching RpcContext, it would fail:
+        // try {
+        //     service.getAccount(null, "someId"); // This would throw an exception if not stubbed properly
+        // } catch (Exception e) {
+        //     // Expected if not stubbed with null or isA(RpcContext.class)
+        // }
+    }
+
+    // Dummy implementation for testing purposes
+    static class DummyAsyncCallback<T> implements AsyncCallback<T> {
+        private T result;
+        private Throwable throwable;
+
+        @Override
+        public void onSuccess(T result) {
+            this.result = result;
+        }
+
+        @Override
+        public void onFailure(Throwable thrown) {
+            this.throwable = thrown;
+        }
+
+        public T getResult() {
+            return result;
+        }
+
+        public Throwable getThrowable() {
+            return throwable;
+        }
+    }
+}

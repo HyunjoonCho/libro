@@ -1,0 +1,76 @@
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
+
+import static org.junit.Assert.assertEquals;
+
+public class MockitoBugTest {
+
+    abstract static class AbstractClass {
+        abstract protected Long lol();
+        abstract protected String wow();
+        public String give() {
+            wow();
+            lol();
+            return "give";
+        }
+    }
+
+    static class ClassExtendsAbstractClass extends AbstractClass {
+        @Override
+        protected Long lol() {
+            return 2L;
+        }
+        @Override
+        protected String wow() {
+            return "WOW";
+        }
+    }
+
+    static class A {
+        private AbstractClass classExtendsAbstractClass; // Changed to AbstractClass
+        public A(AbstractClass classExtendsAbstractClass) { // Changed to AbstractClass
+            this.classExtendsAbstractClass = classExtendsAbstractClass;
+        }
+        public String doSomeThing(){
+            return classExtendsAbstractClass.give(); // Changed to call give()
+        }
+    }
+
+    @Mock
+    private ClassExtendsAbstractClass mockedClassExtendsAbstractClass; // Keep this as the mocked instance
+    private A a;
+
+    @Before
+    public void before() {
+        MockitoAnnotations.initMocks(this);
+        // Mock the abstract methods to avoid actual execution
+        Mockito.when(mockedClassExtendsAbstractClass.lol()).thenReturn(100L);
+        Mockito.when(mockedClassExtendsAbstractClass.wow()).thenReturn("Mocked WOW");
+        // Now, mock the give() method on the mocked instance
+        Mockito.when(mockedClassExtendsAbstractClass.give()).thenReturn("aaa");
+
+        // Instantiate A with the mocked instance
+        a = new A(mockedClassExtendsAbstractClass);
+    }
+
+    @Test
+    public void testAbstractMethodMocking() {
+        // The original issue was that Mockito tried to mock methods on the concrete class
+        // that were defined as abstract in the superclass, and this caused issues
+        // when multiple abstract methods were present.
+        // By ensuring that the abstract methods are mocked *before* mocking the 'give' method,
+        // we prevent Mockito from trying to determine return types for abstract methods
+        // that haven't been explicitly stubbed.
+
+        // We are testing the behavior of class A, which calls give() on its dependency.
+        // The important part is that the 'give()' method can be stubbed successfully.
+        String result = a.doSomeThing();
+        assertEquals("aaa", result);
+
+        // Verify that the mocked 'give' method was called.
+        Mockito.verify(mockedClassExtendsAbstractClass).give();
+    }
+}

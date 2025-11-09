@@ -1,0 +1,154 @@
+public void testHandleUnknownTypeIdReturningVoidCausesNPE() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.enableDefaultTyping();
+
+    SimpleModule module = new SimpleModule();
+    module.addDeserializer(Object.class, new JsonDeserializer<Object>() {
+        @Override
+        public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+            // Simulate an unknown type scenario
+            throw new JsonMappingException("Simulated unknown type");
+        }
+    });
+
+    mapper.registerModule(module);
+
+    // This test is designed to trigger the NPE by having handleUnknownTypeId return Void.class
+    // when default typing is enabled and an unknown type is encountered.
+    // The actual NPE occurs within Jackson's internal handling of this specific return value.
+    // We are asserting that calling this *should not* throw an NPE during deserialization setup
+    // or initial processing if the handler was correctly implemented to avoid it.
+    // The original bug description implies the NPE happens when the handler returns Void.class.
+    // To reproduce the *problem*, we need to set up a scenario where this would happen.
+    // The provided code snippet in the bug report is for the *handler* itself.
+    // Here, we simulate the *call site* that would use such a handler and expect it to work.
+
+    // The actual reproduction of the NPE would involve mocking or creating a specific
+    // DeserializationProblemHandler that returns Void.class. Since we are writing a test
+    // *for* the library, we'd expect the library's deserialization process to handle
+    // this scenario gracefully. The bug report states the NPE occurs *within* Jackson.
+
+    // Therefore, the test should attempt to deserialize something that *would* trigger
+    // the unknown type scenario, and we expect it not to crash due to the NPE described.
+    // If the bug is fixed, this test will pass. If not, it will fail with an NPE.
+
+    String json = "[\"com.example.UnknownClass\", {\"value\": 1}]"; // Example JSON that would trigger unknown type
+
+    try {
+        mapper.readValue(json, Object.class);
+        // If we reach here without an NPE, it means the scenario that *would* have caused
+        // the NPE (if the handler returned Void.class) is now handled correctly.
+        // The original bug description implies a specific handler returning Void.class
+        // caused the NPE. This test aims to show that *if* such a situation arises,
+        // it's now handled.
+
+        // To make this test more specific to the bug report's description of the *handler*,
+        // we would ideally mock the DeserializationProblemHandler. However, the prompt
+        // asks for a test method that *reproduces the failure behavior*. The failure
+        // behavior is an NPE. So, the test should attempt to trigger that NPE.
+
+        // Let's create a scenario that *should* trigger the problem if the bug exists.
+        // This requires a custom handler that returns Void.class.
+        ObjectMapper mapperWithProblematicHandler = new ObjectMapper();
+        mapperWithProblematicHandler.enableDefaultTyping();
+
+        DeserializationProblemHandler problematicHandler = new DeserializationProblemHandler() {
+            @Override
+            public JavaType handleUnknownTypeId(
+                    DeserializationContext ctxt,
+                    JavaType baseType,
+                    String typeId,
+                    com.fasterxml.jackson.databind.jsontype.TypeIdResolver idResolver,
+                    String failureMsg) throws IOException {
+                // This is the problematic part described in the bug report
+                return Void.TYPE.equals(baseType.getRawClass()) ? null : super.handleUnknownTypeId(ctxt, baseType, typeId, idResolver, failureMsg);
+            }
+        };
+        mapperWithProblematicHandler.addHandler(problematicHandler);
+
+        String jsonTrigger = "[\"com.fasterxml.jackson.databind.deser.HandleUnknowTypeIdTest$MyBaseClass\", {\"name\": \"test\"}]";
+        try {
+            mapperWithProblematicHandler.readValue(jsonTrigger, Object.class);
+            // If the bug is present, the above line *should* throw an NPE.
+            // If the bug is fixed, it might throw a JsonMappingException or similar,
+            // or it might be handled more gracefully.
+            // The goal is to *trigger* the condition that led to the NPE.
+        } catch (JsonMappingException e) {
+            // If the handler returns Void.class, Jackson might throw a JsonMappingException
+            // or an NPE depending on the exact version and context.
+            // The bug report specifically mentions NPE.
+            // If an NPE is caught here, it means the test successfully reproduced the failure.
+            // However, the prompt asks for a test that *reproduces the failure behavior*,
+            // implying the test should fail if the bug exists.
+            // So, we should *expect* an exception, but the *type* of exception is key.
+
+            // A better approach for a test is to assert that an NPE *does not* occur,
+            // or if it does, that it's handled.
+            // The bug report implies the NPE happens *during* deserialization.
+            // So, we wrap the deserialization in a try-catch and expect an exception.
+            // If it's an NPE, the test fails (as it reproduces the bug).
+            // If it's a different expected exception (like JsonMappingException),
+            // it might indicate the bug is fixed or handled differently.
+
+            // Let's refine: the bug report says returning Void.class *causes* NPE.
+            // So, a test that triggers this should *fail* with an NPE if the bug is present.
+            // If the bug is fixed, it might throw a different exception or succeed.
+
+            // To make this test runnable and reproducible, let's simulate the scenario
+            // that would lead to the NPE.
+            // The core of the issue is `HandleUnknownTypeId` returning `Void.class` (or `Void.TYPE`).
+            // Jackson's `DefaultTypeResolverBuilder` or similar components might then
+            // attempt to use this `Void.class` inappropriately, leading to an NPE.
+
+            // Let's re-read the bug: "Returning Void.class from ... handleUnknownTypeId() ... causing NPE".
+            // The test should set up Jackson to call this handler with a scenario that results in `Void.class` being returned,
+            // and then assert that an NPE is thrown.
+
+            // We need a custom handler that returns Void.class.
+            // Then we need to trigger it.
+
+            ObjectMapper mapperReproducingNPE = new ObjectMapper();
+            mapperReproducingNPE.enableDefaultTyping();
+
+            // Custom handler that returns Void.class for unknown types
+            DeserializationProblemHandler handlerReturningVoid = new DeserializationProblemHandler() {
+                @Override
+                public JavaType handleUnknownTypeId(
+                        DeserializationContext ctxt,
+                        JavaType baseType,
+                        String typeId,
+                        com.fasterxml.jackson.databind.jsontype.TypeIdResolver idResolver,
+                        String failureMsg) throws IOException {
+                    // Simulate returning Void.class for an unknown type
+                    return Void.TYPE; // This is the problematic return value
+                }
+            };
+            mapperReproducingNPE.addHandler(handlerReturningVoid);
+
+            // A JSON payload that would trigger the unknown type resolution
+            String jsonPayload = "[\"com.example.NonExistentClass\", {\"someField\": \"someValue\"}]";
+
+            try {
+                mapperReproducingNPE.readValue(jsonPayload, Object.class);
+                // If readValue completes without an exception, the NPE did not occur.
+                // This means the bug is fixed or the test setup is wrong.
+                // The original bug report implies an NPE *will* happen.
+                // So, if we reach here, the test *should fail* because it didn't reproduce the bug.
+                fail("Expected a NullPointerException due to handleUnknownTypeId returning Void.class, but no exception was thrown.");
+            } catch (NullPointerException e) {
+                // This is the expected outcome if the bug is present.
+                // The test successfully reproduced the NPE.
+                // We can optionally add a check for the message or stack trace if needed,
+                // but catching NPE is sufficient to indicate reproduction.
+                assertTrue(true); // Test passes if NPE is caught
+            } catch (JsonMappingException e) {
+                // Sometimes, the NPE might be wrapped or a different exception occurs first.
+                // If the underlying cause is the same logic path, this might still indicate the bug.
+                // However, the bug specifically mentions NPE.
+                // If we want to be strict, only catch NPE.
+                fail("Expected NullPointerException but caught JsonMappingException: " + e.getMessage());
+            } catch (Exception e) {
+                fail("Expected NullPointerException but caught unexpected exception: " + e.getClass().getName() + ": " + e.getMessage());
+            }
+        }
+    }

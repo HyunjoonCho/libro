@@ -1,0 +1,38 @@
+public void testSplitSurrogateOnWriteRaw() throws IOException {
+    JsonFactory jf = new JsonFactory();
+    StringWriter sw = new StringWriter();
+    JsonGenerator jg = jf.createGenerator(sw);
+
+    // Construct a string that causes the issue. The exact length and content might need
+    // tweaking based on the Jackson version and internal buffering.
+    // The key is to have multi-byte Unicode characters that might fall on a buffer boundary.
+    // A common problematic area is around 4k or 8k boundaries due to UTF-8 encoding.
+    // Let's try a string with many characters, including some multi-byte ones.
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < 4000; i++) {
+        sb.append("x");
+    }
+    // Add a character that is part of a surrogate pair or a multi-byte UTF-8 sequence
+    // Example: A character in the Private Use Area or a symbol requiring 3 or 4 bytes in UTF-8.
+    // U+10348 is a Gothic letter, which requires 4 bytes in UTF-8.
+    sb.append('\uD800'); // High surrogate
+    sb.append('\uDF48'); // Low surrogate for U+10348
+
+    // Add more characters to potentially push the surrogate pair across buffer boundaries
+    for (int i = 0; i < 100; i++) {
+        sb.append("y");
+    }
+
+    String problematicString = sb.toString();
+
+    try {
+        jg.writeRaw(problematicString);
+        jg.flush(); // Ensure all data is processed
+        fail("Expected JsonGenerationException for split surrogate");
+    } catch (JsonGenerationException e) {
+        // Check if the exception message indicates a split surrogate issue
+        assertTrue(e.getMessage().contains("Split surrogate on writeRaw() input"));
+    } finally {
+        IOUtils.closeQuietly(jg);
+    }
+}

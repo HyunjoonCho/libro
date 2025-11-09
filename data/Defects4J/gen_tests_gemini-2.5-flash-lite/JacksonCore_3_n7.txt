@@ -1,0 +1,128 @@
+public void testIssueUTF8StreamJsonParserConstructor() throws IOException {
+    IOContext ctxt = new IOContext(null, null, false);
+    ObjectCodec codec = null;
+    BytesToNameCanonicalizer sym = BytesToNameCanonicalizer.getEmptyNameTable();
+    byte[] inputBuffer = new byte[10];
+    InputStream in = new ByteArrayInputStream(inputBuffer);
+    int start = 5;
+    int end = 10;
+    boolean bufferRecyclable = false;
+
+    UTF8StreamJsonParser parser = new UTF8StreamJsonParser(ctxt, 0, in, codec, sym, inputBuffer, start, end, bufferRecyclable);
+
+    // Simulate a situation where an exception might be thrown, triggering the column calculation
+    try {
+        parser.nextToken(); // This might throw an exception depending on the input
+    } catch (Exception e) {
+        // Check if the column calculation uses _currInputRowStart and if it's correctly initialized
+        // We can't directly access private fields, but we can infer from the exception message
+        // if the column number is reported incorrectly due to _currInputRowStart being 0.
+        // A more robust test would involve mocking or modifying the class under test
+        // to expose the value or check the exception details specifically.
+
+        // For this example, let's assume an exception like JsonParseException would be thrown
+        // and we'd inspect its details if possible.
+        // If the bug is indeed that _currInputRowStart is 0 when it should be 'start',
+        // then the reported column number in an exception would be incorrect.
+        // For instance, if _inputPtr was 7 and _currInputRowStart was 0, col would be 8.
+        // If _currInputRowStart was 5, col would be 3.
+        // We'll try to trigger a specific exception that includes location info.
+
+        // A simple way to trigger an exception with location info might be to expect a token
+        // and provide invalid input.
+        try {
+             // Reset stream to beginning for a predictable invalid input
+             in.reset();
+             // This should throw an exception because the input is empty or invalid.
+             // The expected column number should be related to the 'start' parameter.
+             parser.readValueAsTree();
+        } catch (JsonParseException jpe) {
+            // If _currInputRowStart was not initialized to 'start', the column number in jpe.getLocation().getColumnNr()
+            // will be incorrect. It will likely be based on 0 instead of 'start'.
+            // For example, if _inputPtr is at byte 7 (relative to the start of the buffer),
+            // and start was 5, the correct column should be 3 (7 - 5 + 1).
+            // If _currInputRowStart is 0, the column would be 8 (7 - 0 + 1).
+            // We assert that the column number is NOT what it would be if _currInputRowStart was 0.
+            // This requires knowing the exact state _inputPtr would be in, which is hard without
+            // more specific input.
+
+            // A more direct test is to manually set _inputPtr and check the calculation.
+            // This requires reflection, which is generally discouraged in unit tests,
+            // but necessary here to test a private field's initialization indirectly.
+
+            // Let's try to trigger an exception that would use the column number.
+            // Provide some minimal valid JSON start, then invalid char.
+            ByteArrayInputStream badIn = new ByteArrayInputStream(new byte[]{'{', '"', 'a', '"', ':', '1', 'x'});
+            UTF8StreamJsonParser badParser = new UTF8StreamJsonParser(ctxt, 0, badIn, codec, sym, inputBuffer, start, end, bufferRecyclable);
+            try {
+                badParser.nextToken(); // Reads '{'
+                badParser.nextToken(); // Reads '"'
+                badParser.nextToken(); // Reads 'a'
+                badParser.nextToken(); // Reads '"'
+                badParser.nextToken(); // Reads ':'
+                badParser.nextToken(); // Reads '1'
+                badParser.nextToken(); // Reads 'x' - this should cause an error
+            } catch (JsonParseException jpe2) {
+                 // If _currInputRowStart was 0, and _inputPtr is pointing at 'x' (which is the 7th byte processed from the start of the buffer),
+                 // the column number would be 7 - 0 + 1 = 8.
+                 // If _currInputRowStart was correctly initialized to 'start' (5), the column number would be 7 - 5 + 1 = 3.
+                 // We expect the column number to be NOT 8, implying it's using a different base.
+                 // A more precise test would require knowing the exact byte _inputPtr lands on for the error.
+                 // Let's assume the error happens right after reading '1'. The _inputPtr would be pointing at 'x'.
+                 // The bytes read so far (including the start offset) would be:
+                 // Assuming inputBuffer is filled with zeros and we start at index 5.
+                 // inputBuffer = [0, 0, 0, 0, 0, '{', '"', 'a', '"', ':'] (example buffer content up to start)
+                 // If the actual stream content starts after the buffer offset, it's more complex.
+                 // Let's simplify and assume the buffer IS the stream content and start is the offset within it.
+                 // So, inputBuffer = ['{', '"', 'a', '"', ':', '1', 'x', ...] and start = 0.
+                 // If start = 5, it means we are conceptually starting parsing at the 5th byte of the buffer.
+                 // Let's re-evaluate the constructor call and the intended bug.
+                 // The bug states "_currInputRowStart isn't initialized in UTF8StreamJsonParser() constructor."
+                 // It should be initialized to the 'start' parameter.
+
+                 // Let's construct a scenario where the exception is triggered *after* some characters are read,
+                 // and the 'start' parameter is non-zero.
+                 byte[] testBuffer = new byte[20];
+                 System.arraycopy("{\"key\":123}".getBytes(), 0, testBuffer, 5, 11); // Place JSON starting at index 5
+                 ByteArrayInputStream specificIn = new ByteArrayInputStream(testBuffer);
+                 // Create parser starting at offset 5
+                 UTF8StreamJsonParser specificParser = new UTF8StreamJsonParser(ctxt, 0, specificIn, codec, sym, testBuffer, 5, testBuffer.length, bufferRecyclable);
+
+                 // Read some tokens. The first token "key" should be parsed correctly.
+                 // _inputPtr will advance. _currInputRowStart should be 5.
+                 specificParser.nextToken(); // START_OBJECT
+                 specificParser.nextToken(); // FIELD_NAME "key"
+                 // At this point, _inputPtr is pointing after "key".
+                 // Let's manually advance _inputPtr to simulate reading '1' in '123'
+                 // This is tricky without knowing the exact internal state.
+
+                 // Let's try to provoke an error by providing invalid JSON after a valid start.
+                 byte[] invalidJsonBuffer = new byte[30];
+                 System.arraycopy("{\"valid_key\":".getBytes(), 0, invalidJsonBuffer, 5, 13);
+                 invalidJsonBuffer[5 + 13] = 'x'; // Invalid character after colon
+                 ByteArrayInputStream invalidStream = new ByteArrayInputStream(invalidJsonBuffer);
+                 UTF8StreamJsonParser invalidParser = new UTF8StreamJsonParser(ctxt, 0, invalidStream, codec, sym, invalidJsonBuffer, 5, invalidJsonBuffer.length, bufferRecyclable);
+
+                 try {
+                     invalidParser.nextToken(); // START_OBJECT
+                     invalidParser.nextToken(); // FIELD_NAME "valid_key"
+                     invalidParser.nextToken(); // COLON
+                     // Now we expect a value, but get 'x'
+                     invalidParser.nextToken(); // This should throw an exception
+                 } catch (JsonParseException jpe3) {
+                     // If _currInputRowStart was 0, and _inputPtr is at index 5+13=18 (pointing at 'x'),
+                     // the column number would be 18 - 0 + 1 = 19.
+                     // If _currInputRowStart was 5, the column number would be 18 - 5 + 1 = 14.
+                     // The bug description implies the column number will be wrong.
+                     // We expect the column number to be different from what it would be if _currInputRowStart was 0.
+                     // A simple assertion is that the column number is not excessively large,
+                     // which would happen if it was calculated from 0 instead of the correct start offset.
+                     assertTrue("Column number seems incorrect, potentially due to uninitialized _currInputRowStart",
+                                jpe3.getLocation().getColumnNr() != (18 - 0 + 1)); // Assert it's not the value calculated from 0
+                     // A more direct assertion would be:
+                     // assertEquals(14, jpe3.getLocation().getColumnNr()); // This assumes _inputPtr is exactly at 18
+                 }
+            }
+        }
+    }
+}

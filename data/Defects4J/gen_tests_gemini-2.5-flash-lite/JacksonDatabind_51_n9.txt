@@ -1,0 +1,70 @@
+public void testGenericTypeResolution() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.addAbstractTypeResolver(new SimpleAbstractTypeResolver() {
+        @Override
+        public JavaType resolveAbstractType(final MapperConfig<?> config, final JavaType type) {
+            if (type.getRawClass().equals(MyAbstractClass.class)) {
+                return config.constructType(MyConcreteClass.class);
+            }
+            return null;
+        }
+    });
+    mapper.registerModule(module);
+
+    // This will fail because MyConcreteClass.genericField is not correctly deserialized
+    // The expected type is MyGenericType<String>, but it's likely being treated as Object
+    MyClass instance = new MyClass();
+    instance.data = new MyConcreteClass();
+    instance.data.genericField = new MyGenericType<>("test");
+
+    String json = mapper.writeValueAsString(instance);
+    MyClass readInstance = mapper.readValue(json, MyClass.class);
+
+    assertNotNull(readInstance);
+    assertNotNull(readInstance.data);
+    assertNotNull(readInstance.data.genericField);
+    assertEquals("test", readInstance.data.genericField.getValue());
+}
+
+// Helper classes (should be defined within or accessible by the test class)
+static class MyAbstractClass {}
+
+static class MyConcreteClass extends MyAbstractClass {
+    public MyGenericType<String> genericField;
+}
+
+static class MyGenericType<T> {
+    private T value;
+
+    public MyGenericType() {}
+
+    public MyGenericType(T value) {
+        this.value = value;
+    }
+
+    public T getValue() {
+        return value;
+    }
+
+    public void setValue(T value) {
+        this.value = value;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        MyGenericType<?> that = (MyGenericType<?>) o;
+        return Objects.equals(value, that.value);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(value);
+    }
+}
+
+static class MyClass {
+    public MyAbstractClass data;
+}

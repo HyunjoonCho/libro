@@ -1,0 +1,41 @@
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.io.IOException;
+
+public class JacksonBugReproducer {
+
+    @Test
+    public void testLongKeyThrowsException() throws IOException {
+        JsonFactory factory = new JsonFactory();
+        // Create a JSON string with a key longer than 262144 bytes
+        StringBuilder longKeyBuilder = new StringBuilder();
+        for (int i = 0; i < 262145; i++) {
+            longKeyBuilder.append("a");
+        }
+        String jsonString = "{\"" + longKeyBuilder.toString() + "\":\"value\"}";
+
+        JsonParser parser = factory.createParser(jsonString);
+
+        // We expect an ArrayIndexOutOfBoundsException when trying to parse the field name
+        // The exact exception might vary slightly depending on Jackson version and internal implementation details,
+        // but the root cause is the buffer overflow.
+        try {
+            // Advance parser to the first field name
+            parser.nextToken(); // Should be START_OBJECT
+            parser.nextToken(); // Should be FIELD_NAME
+            String fieldName = parser.getCurrentName();
+            // If we reach here without exception, the test fails.
+            fail("Expected ArrayIndexOutOfBoundsException for long key, but parsing succeeded.");
+        } catch (ArrayIndexOutOfBoundsException e) {
+            // Expected exception caught, test passes.
+            // Optionally, you can add more specific checks on the exception message or stack trace if needed.
+            assertTrue(e.getMessage() == null || e.getMessage().contains("length")); // Common message for arraycopy
+        } finally {
+            parser.close();
+        }
+    }
+}

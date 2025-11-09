@@ -1,0 +1,36 @@
+public void testTarArchiveInputStreamThrowsIOExceptionForCorruptFile() throws IOException {
+    byte[] corruptTarData = new byte[1024];
+    // Fill with some data, but ensure a corrupt header that will cause an error
+    // For example, a byte with value -1 in a field that expects octal digits.
+    corruptTarData[7] = (byte) -1; 
+    InputStream is = new ByteArrayInputStream(corruptTarData);
+    TarArchiveInputStream tais = null;
+    try {
+        tais = new TarArchiveInputStream(is);
+        // Attempt to read the next entry, which should trigger the exception
+        tais.getNextEntry();
+        fail("Expected an IOException to be thrown for corrupt tar data.");
+    } catch (IOException e) {
+        // Verify that the exception is an IOException and not an IllegalArgumentException
+        // The original bug report indicates it was an IllegalArgumentException.
+        // The fix should ensure it's an IOException.
+        assertTrue("Expected an IOException, but got: " + e.getClass().getName(), e instanceof IOException);
+        // Optionally, check if the cause is an IllegalArgumentException, as per the bug report
+        if (e.getCause() != null) {
+            assertTrue("Expected cause to be IllegalArgumentException, but got: " + e.getCause().getClass().getName(), e.getCause() instanceof IllegalArgumentException);
+        } else {
+             fail("Expected an IllegalArgumentException as the cause of the IOException.");
+        }
+    } finally {
+        if (tais != null) {
+            try {
+                tais.close();
+            } catch (IOException ignored) {
+            }
+        }
+        try {
+            is.close();
+        } catch (IOException ignored) {
+        }
+    }
+}

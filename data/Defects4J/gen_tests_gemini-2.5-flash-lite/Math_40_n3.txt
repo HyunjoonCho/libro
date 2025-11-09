@@ -1,0 +1,61 @@
+public void testBracketingNthOrderBrentSolver_AgingUnbalanced() {
+    BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver(1e-15, 1e-15, 1e-15, 100);
+    UnivariateFunction f = new UnivariateFunction() {
+        @Override
+        public double value(double x) {
+            if (x == 12500.0) {
+                return 3.7e-16;
+            }
+            return -7.0e-5;
+        }
+    };
+    // Simulate the unbalanced state described in the bug report
+    // xA = 12500.0, yA = 3.7e-16, agingA = 0
+    // xB = 12500.03, yB = -7.0e-5, agingB = 97
+    // Forcing the solver to start with this state might be complex without access to internal fields.
+    // Instead, we'll try to trigger the condition with a function and initial guess that might lead to it.
+
+    // A function that has a root very close to 12500, but is flat around it.
+    // This might cause the solver to get stuck with one boundary.
+    UnivariateFunction testFunction = new UnivariateFunction() {
+        @Override
+        public double value(double x) {
+            // A function that is almost zero at 12500, and negative shortly after.
+            // This is a simplification to try and reproduce the described problem.
+            double diff = x - 12500.0;
+            if (diff < 0) {
+                return 1e-16 * diff; // Very small positive or negative value
+            } else if (diff < 0.03) {
+                return -7e-5;
+            } else {
+                return -1e-4;
+            }
+        }
+    };
+
+    // We need to provide a bracket that is likely to trigger the issue.
+    // The original bug description implies that the aging mechanism gets stuck.
+    // Let's try to provide a bracket where one side is extremely close to zero,
+    // and the other side is further away and negative.
+    double xA = 12500.0;
+    double yA = 3.7e-16; // Very close to zero
+    double xB = 12500.03;
+    double yB = -7.0e-5; // Negative
+
+    // Setting a low maxIterationCount to ensure the test fails quickly if it gets stuck.
+    // The original bug implies it exceeds maxIterationCount.
+    BracketingNthOrderBrentSolver strictSolver = new BracketingNthOrderBrentSolver(1e-15, 1e-15, 1e-15, 5); // Low max iterations
+
+    try {
+        strictSolver.solve(100, testFunction, xA, xB, GoalType.MAXIMIZING); // Using MAXIMIZING to try and get close to yA
+        fail("Expected exception not thrown. Solver might have converged or not exceeded max iterations.");
+    } catch (MaxCountExceededException e) {
+        // This is the expected outcome if the solver gets stuck and exceeds iterations.
+        // We don't assert anything specific about the exception message here,
+        // as the goal is to reproduce the *failure* (exceeding max iterations).
+    } catch (NoBracketingException e) {
+        // This might happen if the initial bracket is invalid for the function.
+        // The test aims to reproduce the *specific* failure of exceeding iterations due to aging.
+        fail("NoBracketingException thrown, which is not the expected failure mode for this bug.");
+    }
+}

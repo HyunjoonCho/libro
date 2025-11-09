@@ -1,0 +1,52 @@
+public void testPearsonsCorrelationPValuePrecision() {
+    PearsonsCorrelation pearsonsCorrelation = new PearsonsCorrelation();
+    double[] x = new double[1000];
+    double[] y = new double[1000];
+    // Fill arrays with data that would result in a very small p-value
+    // For example, highly correlated data
+    for (int i = 0; i < x.length; i++) {
+        x[i] = i;
+        y[i] = i + Math.random() * 1e-15; // Introduce a tiny bit of noise
+    }
+
+    // Calculate p-values using the original method
+    double[] pValuesOriginal = pearsonsCorrelation.getCorrelationPValues(x, y);
+
+    // Calculate p-values using the proposed fix
+    // We need to access the underlying TDistribution to use the corrected calculation
+    // This might require reflection or making the TDistribution accessible if it's private.
+    // For the purpose of demonstrating the test case, let's assume we can get the t-statistic
+    // and the TDistribution. In a real scenario, you'd likely modify the PearsonsCorrelation class itself.
+
+    // Let's simulate the calculation based on the description:
+    // 1. Calculate the correlation coefficient
+    double r = pearsonsCorrelation.correlation(x, y);
+    // 2. Calculate the t-statistic
+    double tStat = r * Math.sqrt((x.length - 2) / (1 - r * r));
+    // 3. Get the TDistribution (assuming it's accessible or we create one)
+    // For this test, we'll create a new one for demonstration.
+    // In a real fix, you'd use the one internal to PearsonsCorrelation if possible.
+    TDistribution tDistribution = new TDistribution(x.length - 2);
+
+    // Original p-value calculation (simulated)
+    double pValueOriginalCalc = 2.0 * (1.0 - tDistribution.cumulativeProbability(tStat));
+
+    // Proposed p-value calculation
+    double pValueFixedCalc = 2.0 * tDistribution.cumulativeProbability(-tStat);
+
+    // Assert that the original calculation results in a very small or zero p-value
+    // and the fixed calculation results in a non-zero p-value.
+    // The threshold of 2.2e-16 is mentioned, so we'll use that as a reference.
+    assertTrue("Original p-value should be close to zero or machine epsilon limit",
+               pValueOriginalCalc <= 2.2e-16 || pValueOriginalCalc == 0.0);
+
+    // Assert that the fixed calculation yields a significantly larger, non-zero p-value
+    assertTrue("Fixed p-value should be significantly greater than zero",
+               pValueFixedCalc > 0.0);
+
+    // Also assert that the fixed p-value is generally larger than the original (if original wasn't exactly 0)
+    if (pValueOriginalCalc > 0.0) {
+        assertTrue("Fixed p-value should be larger than the original p-value",
+                   pValueFixedCalc > pValueOriginalCalc);
+    }
+}

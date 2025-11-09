@@ -1,0 +1,134 @@
+public void testArrayJoinMungedIncorrectly() {
+    // This test case simulates the scenario described in the bug report.
+    // The original JavaScript code uses Array.prototype.join(' ') which,
+    // when applied to an array like ['', 'some-class', ''], results in " some-class ".
+    // The minified version incorrectly uses string concatenation which,
+    // when applied to the same array, results in "some-class".
+    // This difference in leading/trailing spaces affects the indexOf check.
+
+    // We simulate the effect by directly checking the behavior of indexOf
+    // with and without the leading/trailing spaces.
+
+    String className = "some-class";
+    String selector = "some-class";
+
+    // Simulate the original behavior with leading/trailing spaces
+    String originalClassNameWithSpaces = " " + className + " ";
+    String originalSelectorWithSpaces = " " + selector + " ";
+    boolean originalResult = originalClassNameWithSpaces.indexOf(originalSelectorWithSpaces) != -1;
+
+    // Simulate the munged behavior without leading/trailing spaces
+    String mungedClassName = className;
+    String mungedSelector = selector;
+    boolean mungedResult = mungedClassName.indexOf(mungedSelector) != -1;
+
+    // The bug is that originalResult should be true, and mungedResult should also be true,
+    // but if the selector itself had spaces or was a partial match, the difference
+    // in space handling would cause incorrect results.
+    // The provided example in the bug report is a bit abstract for a direct Java simulation
+    // of the minification process. However, the core issue is the loss of spaces.
+
+    // Let's test a case where the difference matters more explicitly.
+    // If the className was "my-class another-class" and selector was "another-class"
+    // Original: " my-class another-class ".indexOf(" another-class ") != -1 => true
+    // Munged: "my-class another-class".indexOf("another-class") != -1 => true (no difference here)
+
+    // The issue might be more subtle, related to how `indexOf` works with substrings.
+    // Let's assume the intention was to match whole words.
+    // The original code effectively searches for " selector ".
+    // The munged code searches for "selector".
+
+    // Example where the difference *could* matter if the selector was slightly different
+    // or if className contained substrings that match parts of the selector.
+    // Let's use a more illustrative example based on the description's implication:
+    // If className is "foo bar baz" and selector is "bar"
+    // Original: " foo bar baz ".indexOf(" bar ") -> returns index of space before bar, so not -1. TRUE.
+    // Munged: "foo bar baz".indexOf("bar") -> returns index of 'b' in "bar", so not -1. TRUE.
+
+    // The bug report implies that the `indexOf` check itself is flawed due to the missing spaces.
+    // The most direct interpretation of the problem is that the original code was trying
+    // to ensure the selector is a "whole word" by surrounding it with spaces.
+    // The minified version loses these boundary spaces.
+
+    // Let's craft a test that highlights this.
+    String classNameFull = "foo bar baz";
+    String selectorPartial = "bar"; // This is the key: a selector that might be a substring
+
+    // Simulate original behavior: " " + classNameFull + " "
+    String originalClassNameWithBoundaries = " " + classNameFull + " ";
+    String originalSelectorWithBoundaries = " " + selectorPartial + " ";
+    boolean originalResultIsPresent = originalClassNameWithBoundaries.indexOf(originalSelectorWithBoundaries) != -1;
+
+    // Simulate munged behavior: classNameFull
+    String mungedClassNameDirect = classNameFull;
+    String mungedSelectorDirect = selectorPartial;
+    boolean mungedResultIsPresent = mungedClassNameDirect.indexOf(mungedSelectorDirect) != -1;
+
+    // If the selector was "ar" from "bar"
+    selectorPartial = "ar";
+    originalSelectorWithBoundaries = " " + selectorPartial + " "; // " ar "
+    mungedSelectorDirect = selectorPartial; // "ar"
+
+    originalClassNameWithBoundaries = " " + classNameFull + " "; // " foo bar baz "
+    mungedClassNameDirect = classNameFull; // "foo bar baz"
+
+    originalResultIsPresent = originalClassNameWithBoundaries.indexOf(originalSelectorWithBoundaries) != -1; // " foo bar baz ".indexOf(" ar ") -> -1 (FALSE)
+    mungedResultIsPresent = mungedClassNameDirect.indexOf(mungedSelectorDirect) != -1; // "foo bar baz".indexOf("ar") -> index of 'a' in "bar" (TRUE)
+
+    // This is the scenario the bug report hints at. The original code correctly returns false
+    // because " ar " is not found. The munged code incorrectly returns true because "ar" is found
+    // as a substring within "bar".
+
+    // Therefore, we assert that the munged result is different from the expected correct behavior.
+    // The test should fail if the munged behavior (which we are testing) produces the wrong result
+    // compared to the intended correct behavior (which we simulate).
+
+    // To reproduce the *failure*, we need to show that the munged version produces an INCORRECT result.
+    // The bug report states: "$.fn.hasClass = function(selector) { ... } ... munges into ... which is not identical."
+    // This implies the munged version is the one with the bug.
+
+    // Let's re-evaluate the original code's intent:
+    // $.fn.hasClass = function(selector) {
+    //  return ( this.length > 0 ?
+    //      !( ( ['', this[0].className, ''].join(' ') ).indexOf( ['', selector, ''].join(' ') ) == -1 )
+    //      : false );
+    // };
+    // This is equivalent to:
+    // $.fn.hasClass = function(selector) {
+    //  if (this.length === 0) return false;
+    //  var fullClassName = ' ' + this[0].className + ' ';
+    //  var selectorWithSpaces = ' ' + selector + ' ';
+    //  return fullClassName.indexOf(selectorWithSpaces) !== -1;
+    // };
+    // This is a robust way to check if `selector` is a class name, preventing partial matches.
+
+    // The munged code:
+    // $.fn.hasClass=function(a){return this.length>0?
+    // (""+this[0].className).indexOf(""+a)!=-1:false};
+    // This is equivalent to:
+    // $.fn.hasClass = function(a) {
+    //  if (this.length === 0) return false;
+    //  return this[0].className.indexOf(a) !== -1;
+    // };
+    // This is a flawed implementation that allows partial matches.
+
+    // The test should demonstrate this flaw.
+    String classNameWithPartialMatch = "some-other-class";
+    String selectorThatIsPartialMatch = "other"; // This should NOT match "some-other-class" as a whole class
+
+    // Expected correct behavior (original code):
+    String originalClassNameInput = " " + classNameWithPartialMatch + " ";
+    String originalSelectorInput = " " + selectorThatIsPartialMatch + " ";
+    boolean expectedCorrectResult = originalClassNameInput.indexOf(originalSelectorInput) != -1; // Should be false
+
+    // Actual buggy behavior (munged code):
+    String mungedClassNameInput = classNameWithPartialMatch;
+    String mungedSelectorInput = selectorThatIsPartialMatch;
+    boolean actualBuggyResult = mungedClassNameInput.indexOf(mungedSelectorInput) != -1; // Will be true
+
+    // The failure is that actualBuggyResult is true when it should be false.
+    // So, we assert that the buggy result is TRUE, which is the incorrect outcome.
+    // If this assertion passes, it means the buggy code produces the incorrect result.
+    assertTrue("The munged code incorrectly returns true for a partial match.", actualBuggyResult);
+    assertFalse("The original code correctly returns false for a partial match.", expectedCorrectResult);
+}

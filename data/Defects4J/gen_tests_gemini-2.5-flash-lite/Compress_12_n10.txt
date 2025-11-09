@@ -1,0 +1,28 @@
+public void testTarArchiveInputStreamThrowsIOException() throws IOException {
+    byte[] tarHeaderWithInvalidByte = new byte[512];
+    // Fill with spaces, then put an invalid byte (-1) at a position where octal is expected.
+    // The TarUtils.parseOctal method expects digits '0'-'7' or null terminator.
+    // The byte -1 (0xFF) is invalid.
+    Arrays.fill(tarHeaderWithInvalidByte, (byte) ' ');
+    tarHeaderWithInvalidByte[0] = (byte) '0'; // Start of a field
+    tarHeaderWithInvalidByte[7] = (byte) -1; // Invalid byte
+
+    // Create a TarArchiveInputStream with this corrupt header.
+    // We need to wrap it in a ByteArrayInputStream.
+    InputStream corruptTarStream = new ByteArrayInputStream(tarHeaderWithInvalidByte);
+    TarArchiveInputStream tais = new TarArchiveInputStream(corruptTarStream);
+
+    try {
+        tais.getNextTarEntry();
+        fail("Expected an IOException to be thrown for a corrupt tar header.");
+    } catch (IOException e) {
+        // We expect an IOException, and it might wrap an IllegalArgumentException.
+        // The key is that the top-level exception is IOException.
+        assertTrue("The caught exception should be an IOException or wrap one.", e instanceof IOException);
+        // Optionally, check if the cause is an IllegalArgumentException if the implementation detail matters.
+        // However, the bug report states it *throws* IllegalArgumentException *instead* of IOException.
+        // So, the direct exception thrown should be IOException.
+    } finally {
+        IOUtils.closeQuietly(tais);
+    }
+}

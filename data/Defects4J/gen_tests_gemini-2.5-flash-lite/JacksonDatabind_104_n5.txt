@@ -1,0 +1,55 @@
+import com.fasterxml.jackson.databind.util.StdDateFormat;
+import org.junit.Test;
+
+import java.text.ParseException;
+import java.util.Date;
+import java.util.TimeZone;
+
+import static org.junit.Assert.assertEquals;
+
+public class StdDateFormatTest {
+
+    @Test
+    public void testLargeISODates() throws ParseException {
+        StdDateFormat formatter = new StdDateFormat();
+        formatter.setTimeZone(TimeZone.getTimeZone("UTC")); // Ensure consistent formatting
+
+        // Test with Long.MAX_VALUE
+        Date maxDate = new Date(Long.MAX_VALUE);
+        String formattedMax = formatter.format(maxDate);
+        Date parsedMax = formatter.parse(formattedMax);
+        assertEquals(maxDate.getTime(), parsedMax.getTime());
+
+        // Test with Long.MIN_VALUE - this is expected to fail based on the bug description
+        // The bug report indicates that years < 0 are not handled correctly.
+        // The current implementation might throw an exception or produce incorrect output.
+        // We'll attempt to parse the formatted string and assert based on expected behavior if it doesn't throw.
+        Date minDate = new Date(Long.MIN_VALUE);
+        String formattedMin = formatter.format(minDate);
+
+        // The bug report suggests a ParseException or incorrect parsing for negative years.
+        // If it produces a string with a non-numeric year or a string that cannot be parsed,
+        // this test will fail, which is the desired outcome to reproduce the bug.
+        // If the implementation is fixed to handle negative years, this assertion would pass.
+        // For now, we'll focus on reproducing the failure by trying to parse.
+        try {
+            Date parsedMin = formatter.parse(formattedMin);
+            // If parsing succeeds, the original bug was that the parsed date was not equal to the original.
+            // However, the bug report also mentions the possibility of a ParseException.
+            // The most direct way to reproduce the described failure is to expect an incorrect parse result
+            // or an exception during parsing.
+            // The bug report states: "Years > 9999 are not rendered as 5 numbers or more, but with a non numerical characters for the thousands digit.."
+            // and the example shows "痝055-12-02T16:47:04.192+0000" which is unparseable.
+            // So, we expect a ParseException or an incorrect date if it parses.
+            // The provided test case in the bug report uses an assert that would fail if the times don't match.
+            // We'll replicate that expectation.
+            assertEquals(minDate.getTime(), parsedMin.getTime());
+        } catch (ParseException e) {
+            // If a ParseException is thrown, it means the formatting produced an unparseable string,
+            // which aligns with the bug description's example error message.
+            // This catch block confirms the failure mode.
+            // We re-throw to make the test fail, as the goal is to reproduce the bug.
+            throw e;
+        }
+    }
+}

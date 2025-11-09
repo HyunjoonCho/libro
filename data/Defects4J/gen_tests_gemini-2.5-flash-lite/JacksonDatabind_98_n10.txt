@@ -1,0 +1,107 @@
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class ExternalPropertyEnumPolymorphismTest {
+
+    // Define the enum and classes as they would appear in the user's code
+    public enum Kind {
+        CONTACT,
+        ANOTHER_KIND
+    }
+
+    public static class To {
+        public String name;
+
+        public To() {}
+
+        public To(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            To to = (To) o;
+            return java.util.Objects.equals(name, to.name);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(name);
+        }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "kind")
+    @JsonSubTypes({
+            @JsonSubTypes.Type(value = Contact.class, name = "CONTACT"),
+            @JsonSubTypes.Type(value = AnotherType.class, name = "ANOTHER_KIND")
+    })
+    public static abstract class Base {
+        public To to;
+    }
+
+    public static class Contact extends Base {
+        public Contact() {}
+
+        public Contact(To to) {
+            this.to = to;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Contact contact = (Contact) o;
+            return java.util.Objects.equals(to, contact.to);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(to);
+        }
+    }
+
+    public static class AnotherType extends Base {
+        public AnotherType() {}
+
+        public AnotherType(To to) {
+            this.to = to;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            AnotherType that = (AnotherType) o;
+            return java.util.Objects.equals(to, that.to);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(to);
+        }
+    }
+
+    @Test
+    public void testExternalPropertyEnumPolymorphism() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        String json = "{\n" +
+                      "  \"kind\": \"CONTACT\",\n" +
+                      "  \"to\": {\n" +
+                      "    \"name\": \"Foo\"\n" +
+                      "  }\n" +
+                      "}";
+
+        Base deserializedObject = mapper.readValue(json, Base.class);
+
+        // Assert that the correct type was deserialized and its content is as expected
+        assertEquals(Contact.class, deserializedObject.getClass());
+        assertEquals("Foo", deserializedObject.to.name);
+        assertEquals("CONTACT", ((Contact) deserializedObject).kind.name());
+    }
+}

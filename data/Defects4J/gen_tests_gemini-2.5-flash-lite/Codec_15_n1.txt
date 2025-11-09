@@ -1,0 +1,183 @@
+public void testSoundexHWRule() {
+    Soundex soundex = new Soundex("A000");
+    // Test case based on the description: "ph" should be coded as "P000", not "P000"
+    // The bug is that 'h' should not cause the 'p' to be ignored.
+    // The current implementation incorrectly ignores 'p' because it's preceded by 'h'.
+    // A correct implementation should encode 'p' and then ignore 'h'.
+    // The expected behavior for "Ph" is "P000" (P maps to 1, h is ignored).
+    // The bug occurs when the characters are separated by H or W, and the second character
+    // should still be encoded if it maps to a different code than the first.
+    // The bug description implies that the current code incorrectly ignores the second character
+    // if it maps to the same code as the first, even if separated by H or W.
+    // Let's test a case where the second character *should* be encoded.
+    // According to Soundex rules, adjacent letters with the same Soundex code are coded once.
+    // If separated by H or W, they are coded twice.
+    // Example: "Ashcraft" -> A261
+    // A=0, S=2, H=ignored, C=2, R=6, A=ignored, F=1, T=3 -> A22613 -> A261 (adjacent C and S ignored)
+    // Let's test the specific scenario described: separation by H or W.
+    // "Pfister" -> P236
+    // P=1, F=1, I=ignored, S=2, T=3, E=ignored, R=6 -> P11236 -> P236 (F is adjacent to P, same code, so ignored)
+    // "Pahster" -> P236
+    // P=1, A=ignored, H=ignored, S=2, T=3, E=ignored, R=6 -> P236. This is the case to test.
+    // The description says: "a character that is preceded by two characters that are either H or W, is not encoded"
+    // This is a bit confusing. Let's focus on the rule: "if two characters that map to the same code are separated by H or W, the second one is not encoded."
+    // This contradicts the Wikipedia link which says "two letters with the same soundex code separated by 'h' or 'w' are coded as a single number"
+    // Let's assume the description's interpretation of the rule is what's being tested.
+    // It seems the bug is that the *second* character is *not* encoded if separated by H or W, when it *should* be.
+    // Let's test "Ashcraft" again. A=0, S=2, H ignored, C=2. S and C map to 2. They are separated by H.
+    // According to the rule "if two characters that map to the same code are separated by H or W, the second one is not encoded."
+    // This implies S and C should be coded once. A261.
+    // The bug description says: "a character that is preceded by two characters that are either H or W, is not encoded, regardless of what the last consonant was."
+    // This implies that if we have something like "XHWY", Y might be ignored if it maps to the same code as X.
+    // Let's re-read the description carefully: "The Soundex algorithm says that if two characters that map to the same code are separated by H or W, the second one is not encoded."
+    // This is the rule that the *implementation* is *supposed* to follow.
+    // The bug is: "in the implementation (in Soundex.getMappingCode() line 191), a character that is preceded by two characters that are either H or W, is not encoded, regardless of what the last consonant was."
+    // This implies the implementation is *too strict* in ignoring characters.
+    // Let's try a simple case: "Robert" -> R163. R=0, B=1, R=0, T=3. R and R map to 0. They are separated by 'b'. Same code, not separated by H/W. So R is encoded once.
+    // "Rupert" -> R163. R=0, P=1, R=0, T=3. R and R map to 0. Separated by 'p'. Same code, not separated by H/W. R encoded once.
+    // Let's consider a case where the bug might manifest: "Ashcraft" -> A261.
+    // A = 0
+    // S = 2
+    // H = ignored
+    // C = 2. S and C have the same code (2). They are separated by H. The rule says the second one (C) is not encoded. This seems wrong based on the example "Ashcraft" -> A261.
+    // Let's check the Wikipedia link again. The example "Ashcraft" -> A261.
+    // A -> A
+    // S -> 2
+    // H -> ignored
+    // C -> 2. S and C map to 2. Separated by H. The rule is "Two letters with the same soundex code separated by 'h' or 'w' are coded as a single number". This means C should NOT be coded.
+    // R -> 6
+    // A -> ignored
+    // F -> 1
+    // T -> 3
+    // Result: A2613 -> A261. This matches the example.
+
+    // The bug description states: "The Soundex algorithm says that if two characters that map to the same code are separated by H or W, the second one is not encoded."
+    // This seems to be the *intended* behavior.
+    // The bug is: "in the implementation (in Soundex.getMappingCode() line 191), a character that is preceded by two characters that are either H or W, is not encoded, regardless of what the last consonant was."
+    // This means the implementation might be ignoring characters even when they *should* be encoded according to the rule.
+
+    // Let's try to create a case where a character *should* be encoded but is *not* due to the bug.
+    // Consider a sequence like: Consonant1, H, Consonant1.
+    // If the rule is applied correctly, the second Consonant1 should be ignored.
+    // If the bug is present, the second Consonant1 might be encoded incorrectly, or something else ignored.
+
+    // Let's assume the bug is that the check for H or W is too broad, and it causes *any* subsequent character to be ignored if it maps to the same code, even if the separator wasn't H or W.
+    // Or, it might be ignoring a character when it *shouldn't* be.
+
+    // Let's test the case described in the bug: "a character that is preceded by two characters that are either H or W, is not encoded".
+    // This implies a sequence like X H W Y. If Y maps to the same code as X, it's ignored.
+    // Let's try a simpler case based on the description's rule: "if two characters that map to the same code are separated by H or W, the second one is not encoded."
+    // Example: "test" T=3, E ignored, S=2, T=3. -> T230
+    // "t_h_e_s_t" where _ is ignored.
+    // Let's consider "T H S T". T=3, H ignored, S=2, T=3.
+    // According to the rule "if two characters that map to the same code are separated by H or W, the second one is not encoded."
+    // The two T's map to the same code (3). They are separated by H and S. This rule doesn't directly apply here.
+
+    // Let's focus on the bug description's specific claim: "a character that is preceded by two characters that are either H or W, is not encoded, regardless of what the last consonant was."
+    // This suggests a pattern like C1 H W C2 where C1 and C2 map to the same code.
+    // Let's try to construct such a string.
+    // Soundex mapping: B,F,P,V -> 1; C,G,J,K,Q,S,X,Z -> 2; D,T -> 3; L -> 4; M,N -> 5; R -> 6.
+    // Let's use 'B' (code 1) and 'P' (code 1).
+    // We need a character that is preceded by two H or W. This is unlikely in a typical word.
+    // The description might be slightly misinterpreting the implementation detail.
+
+    // Let's go back to the rule: "if two characters that map to the same code are separated by H or W, the second one is not encoded."
+    // Let's test this rule directly.
+    // String: "Ashcraft" -> A261.
+    // A -> A
+    // S -> 2
+    // H -> ignore
+    // C -> 2. S and C have same code. Separated by H. Rule says C should not be encoded.
+    // R -> 6
+    // A -> ignore
+    // F -> 1
+    // T -> 3
+    // Soundex code should be A261.
+
+    // Let's assume the bug is that the implementation *always* ignores the second character if the *previous* character was H or W, even if they don't map to the same code.
+    // Or, it ignores the second character if the *two previous* characters were H or W.
+
+    // Let's try a case that should produce a specific output if the rule is applied correctly.
+    // Consider "Tymczak" -> T522. T=3, Y ignored, M=5, C=2, Z=2, A ignored, K=2.
+    // C, Z, K all map to 2.
+    // C and Z are adjacent. They map to the same code. C is encoded as 2, Z is ignored.
+    // Z and K map to the same code. They are separated by nothing relevant. Z is encoded as 2, K is ignored.
+    // So, T M C Z K -> T 5 2 2 2 -> T522. This seems to follow the rule of adjacent same codes.
+
+    // Let's try to find a specific failure case based on the description's wording: "a character that is preceded by two characters that are either H or W, is not encoded, regardless of what the last consonant was."
+    // This implies a sequence like `X H W Y`. If `Y` maps to the same code as `X`, it is ignored.
+    // Let's try to construct this.
+    // Let X = 'P' (code 1). Let Y = 'B' (code 1).
+    // We need to insert H and W between them. This is not typical in English words.
+    // Let's assume the implementation checks the *immediately preceding* character's mapping code.
+    // And it has a special condition for H and W.
+
+    // Let's simplify based on the rule: "if two characters that map to the same code are separated by H or W, the second one is not encoded."
+    // Example: "T H T"
+    // T -> 3
+    // H -> ignore
+    // T -> 3. The two T's map to the same code (3). They are separated by H. According to the rule, the second T should NOT be encoded.
+    // Expected: "3000" (only the first T is encoded).
+    // If the bug is that the second T *is* encoded, then the code would be "3300".
+
+    // Let's try another: "P H P"
+    // P -> 1
+    // H -> ignore
+    // P -> 1. The two P's map to the same code (1). They are separated by H. According to the rule, the second P should NOT be encoded.
+    // Expected: "1000".
+    // If the bug is that the second P *is* encoded, then the code would be "1100".
+
+    // Let's assume the bug is the opposite: the second character *is* encoded when it shouldn't be.
+    // This means the check for H/W separation isn't working.
+    // So, for "P H P", if the bug is that the second P *is* encoded, the result would be "1100".
+
+    // Let's consider the description again: "a character that is preceded by two characters that are either H or W, is not encoded, regardless of what the last consonant was."
+    // This sounds like it's describing a *too aggressive* ignoring of characters.
+    // Let's try a string where this might happen.
+    // Suppose we have a character C1, then H, then W, then C2, and C1 and C2 map to the same code.
+    // Example: "P H W B" (P=1, B=1).
+    // P -> 1
+    // H -> ignore
+    // W -> ignore
+    // B -> 1. B maps to the same code as P. It is preceded by H and W.
+    // The bug description says "a character that is preceded by two characters that are either H or W, is not encoded".
+    // This implies that B should NOT be encoded.
+    // Expected: "1000".
+    // If the bug is that B *is* encoded, the result would be "1100".
+
+    // Let's use the example from the description's rule: "if two characters that map to the same code are separated by H or W, the second one is not encoded."
+    // Test case: "Ashcraft"
+    // A -> A
+    // S -> 2
+    // H -> ignored
+    // C -> 2. S and C have the same code. Separated by H. Rule: C should NOT be encoded.
+    // R -> 6
+    // A -> ignored
+    // F -> 1
+    // T -> 3
+    // Expected Soundex: A261.
+
+    // Let's assume the bug is that the implementation incorrectly encodes 'C' in "Ashcraft".
+    // If 'C' is encoded, the result would be "A2261" -> "A226". This is incorrect.
+
+    // Let's try to create a minimal test case that exposes the bug as described.
+    // The bug is about the handling of characters separated by H or W.
+    // Let's take two characters that map to the same code, separated by H.
+    // Example: 'S' and 'C' both map to 2.
+    // String: "SC" -> S200
+    // String: "SHC" -> S200 (H ignored, C maps to 2, but is it adjacent to S's code? No. Rule: "if two characters that map to the same code are separated by H or W, the second one is not encoded.")
+    // So, S=2, H=ignore, C=2. S and C have the same code. Separated by H. The second one (C) should NOT be encoded.
+    // Expected: S200.
+    // If the bug is that C *is* encoded, the result would be S220.
+
+    // Let's test this hypothesis.
+    // The Soundex mapping for 'S' is 2.
+    // The Soundex mapping for 'C' is 2.
+    // The character 'H' is ignored.
+    // In the string "SHC", 'S' maps to 2. 'H' is ignored. 'C' maps to 2.
+    // Since 'S' and 'C' map to the same code (2) and are separated by 'H', the rule states that the second character ('C') should NOT be encoded.
+    // Therefore, the expected Soundex code for "SHC" is "S200".
+    // If the bug exists, the implementation might incorrectly encode 'C', resulting in "S220".
+
+    assertEquals("S200", soundex.soundex("SHC"));
+}

@@ -1,0 +1,35 @@
+public void testConfigureDateFormatChangesTimeZone() throws JsonProcessingException {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(createJodaModule());
+    mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+
+    // In 2.5.4, this call does not change the ObjectMapper's time zone.
+    // In 2.6.0, this call changes the ObjectMapper's time zone to the JVM's default.
+    mapper.setDateFormat(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"));
+
+    DateTime dateTime = new DateTime(1988, 6, 25, 20, 30, DateTimeZone.UTC);
+    String serialized = mapper.writeValueAsString(dateTime);
+
+    // We expect the serialized string to reflect the UTC time zone,
+    // as configured in the JodaModule's serializer.
+    // The bug is that in 2.6.0, the ObjectMapper's default time zone
+    // overrides the serializer's time zone configuration.
+    assertEquals("\"1988-06-25 20:30:00\"", serialized);
+}
+
+// Helper methods from the bug report, needed for the test to compile.
+private static ObjectMapper createObjectMapper() {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(createJodaModule());
+    mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+    mapper.setDateFormat(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"));
+    return mapper;
+}
+
+private static SimpleModule createJodaModule() {
+    SimpleModule module = new SimpleModule();
+    module.addSerializer(DateTime.class, new DateTimeSerializer(
+            new JacksonJodaDateFormat(DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss")
+                    .withZoneUTC())));
+    return module;
+}

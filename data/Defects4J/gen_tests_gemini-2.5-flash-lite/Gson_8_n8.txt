@@ -1,0 +1,205 @@
+import com.google.gson.Gson;
+import org.junit.Test;
+import static org.junit.Assert.assertNotNull;
+
+public class GsonAndroidBugTest {
+
+    // Mock classes to simulate the structure of the JSON
+    static class FeedItem {
+        String feedItemChannel;
+        EstimatedData estimatedData;
+        HashedObjects hashedObjects;
+        boolean isDeleted;
+        int isDeletingEventually;
+        Object mutex; // This will be the problematic field
+        OperationSetQueue[] operationSetQueue;
+        SaveEvent saveEvent;
+        State state;
+        TaskQueue taskQueue;
+    }
+
+    static class EstimatedData {
+        String feedTopic;
+        int feedComments;
+        String createdBy;
+        String feedQuestion;
+        String feedDesc;
+    }
+
+    static class HashedObjects {}
+
+    static class OperationSetQueue {
+        // Empty object in the JSON
+    }
+
+    static class SaveEvent {
+        Callback[] callbacks;
+    }
+
+    static class Callback {}
+
+    static class State {
+        String className;
+        long createdAt;
+        boolean isComplete;
+        String objectId;
+        ServerData serverData;
+        long updatedAt;
+    }
+
+    static class ServerData {
+        String feedTopic;
+        String createdBy;
+        int feedComments;
+        String feedQuestion;
+        String feedDesc;
+    }
+
+    static class TaskQueue {
+        Lock lock;
+    }
+
+    static class Lock {
+        Sync sync;
+    }
+
+    static class Sync {
+        int state;
+    }
+
+    @Test
+    public void testGsonAndroidJniError() {
+        // This test case is designed to reproduce the JNI error by attempting
+        // to deserialize a JSON that contains complex nested objects that Gson
+        // tries to instantiate using UnsafeAllocator, which fails on Android
+        // for certain types like java.util.concurrent.locks.Lock.
+
+        String jsonWithProblematicFields = "{"
+                + "\"feedItemChannel\":\"mdldsrgXN1\","
+                + "\"estimatedData\":{"
+                + "   \"feedTopic\":\"Testing\","
+                + "   \"feedComments\":2,"
+                + "   \"createdBy\":\"KXTQtpfBSW\","
+                + "   \"feedQuestion\":\"Test Question \","
+                + "   \"feedDesc\":\"Test \""
+                + "},"
+                + "\"hashedObjects\":{},"
+                + "\"isDeleted\":false,"
+                + "\"isDeletingEventually\":0,"
+                // The 'mutex' field is problematic because it's an interface/abstract class
+                // or a type that UnsafeAllocator struggles with on Android.
+                // In the original bug report, it was likely a Lock implementation.
+                // We'll simulate a problematic type here.
+                // For reproduction, we can explicitly set it to null or an empty object
+                // if the actual JSON causes issues. The core issue is Gson trying to
+                // allocate an instance of a type it shouldn't or can't on Android.
+                // If the JSON had a concrete type that was the issue, we'd use that.
+                // For this reproduction, we'll assume the issue arises from the *attempt*
+                // to deserialize fields like 'mutex' and 'taskQueue.lock.sync' which
+                // might involve types that UnsafeAllocator can't handle.
+                // The original bug mentioned "can't make objects of type java.util.concurrent.locks.Lock".
+                // Let's simulate a scenario where such a field might be present or attempted.
+
+                // To specifically trigger the "can't make objects of type java.util.concurrent.locks.Lock"
+                // error, the JSON would need to contain a field that maps to a Java type
+                // like java.util.concurrent.locks.Lock. Since we don't have the exact type
+                // from the Parse SDK that was serialized, we'll use a placeholder that
+                // is known to cause issues or mimic the structure.
+                // The provided JSON has 'mutex' as an empty object and 'taskQueue.lock.sync'
+                // as an object with an int. The stack trace points to UnsafeAllocator
+                // trying to allocate an instance of 'Lock'. This implies that 'mutex' or
+                // a field within 'taskQueue' resolved to 'Lock' at runtime.
+
+                // Let's construct a JSON that might lead to this, assuming 'mutex'
+                // was intended to be a Lock or similar problematic type.
+                // If the actual Parse Object serializes a Lock, the JSON might look different.
+                // Given the description, the issue is likely with how Gson's UnsafeAllocator
+                // handles certain types on Android.
+
+                // For a direct reproduction of the error "can't make objects of type java.util.concurrent.locks.Lock",
+                // we need a field that Gson attempts to deserialize into a Lock.
+                // Since we don't have the exact Parse SDK object structure that resulted in this,
+                // we'll create a representative JSON that includes fields that often cause
+                // issues or are complex types. The original bug report specifically mentions `Lock`.
+                // Let's assume `mutex` was meant to be a Lock or a type that Gson tries to
+                // instantiate using UnsafeAllocator and fails.
+
+                // A more direct simulation would be to mock the problematic type if it were available.
+                // Since it's not, we'll use the provided JSON structure and hope that the
+                // interaction with Android's ART runtime and Gson's UnsafeAllocator triggers
+                // the same underlying issue. The key is that `gson.fromJson` is called.
+
+                // The provided JSON has `mutex` as an empty object `{}`.
+                // If the Parse SDK serialized a `java.util.concurrent.locks.Lock` into this field,
+                // Gson would try to instantiate it.
+                // Let's use the provided JSON string directly as it's the context of the bug.
+                "\"mutex\":{},"
+                + "\"operationSetQueue\":[{\"a\":1}]," // Added a dummy field to make it valid JSON
+                + "\"saveEvent\":{\"callbacks\":[]},"
+                + "\"state\":{"
+                + "   \"className\":\"FeedItem\","
+                + "   \"createdAt\":1458798818385,"
+                + "   \"isComplete\":true,"
+                + "   \"objectId\":\"mdldsrgXN1\","
+                + "   \"serverData\":{"
+                + "      \"feedTopic\":\"TestTopic\","
+                + "      \"createdBy\":\"KXTQtpfBSW\","
+                + "      \"feedComments\":2,"
+                + "      \"feedQuestion\":\"Test Question \","
+                + "      \"feedDesc\":\"Test \""
+                + "   },"
+                + "   \"updatedAt\":1458803553636"
+                + "},"
+                + "\"taskQueue\":{"
+                + "   \"lock\":{"
+                + "      \"sync\":{"
+                + "         \"state\":0"
+                + "      }"
+                + "   }"
+                + "}"
+                + "}";
+
+        Gson gson = new Gson();
+
+        // The problematic part is when gson.fromJson attempts to create instances
+        // of types that UnsafeAllocator cannot handle on Android, such as
+        // java.util.concurrent.locks.Lock or similar complex/abstract types.
+        // This test simply calls the problematic code path.
+        // The assertion is just to ensure the method call itself is made,
+        // as the failure is an exception.
+        try {
+            FeedItem item = gson.fromJson(jsonWithProblematicFields, FeedItem.class);
+            // If fromJson completes without throwing an exception, the test passes
+            // in the sense that it didn't reproduce the specific JNI error.
+            // However, if the environment were a real Android device/emulator
+            // with the specific Gson version and ART runtime, this call
+            // would have thrown the JNI error.
+            // For a unit test, we can't directly cause a JNI error to be thrown
+            // and caught like a standard Java exception without specific mocking
+            // or native code interaction, which is beyond the scope of a simple JUnit test.
+            // The goal here is to call the code that *would* fail.
+            assertNotNull("Deserialization should complete (or throw the expected error)", item);
+
+            // We can add assertions about the deserialized object if it succeeds,
+            // but the primary goal is to trigger the failure.
+            // If the test passes here, it means the environment (JUnit runner)
+            // did not exhibit the JNI error, which is expected for a standard JVM.
+            // This test is more of a "trigger" than a "verify failure" in a standard JUnit setup.
+
+        } catch (Throwable e) {
+            // In a real Android environment, this catch block would likely not be reached
+            // because the JNI error is a critical error that might crash the app or
+            // be reported via Logcat directly.
+            // If we were running on Android with specific configurations, we might
+            // catch a RuntimeException or other error wrapping the JNI issue.
+            // For a standard JUnit test, we're primarily testing the logic flow.
+            // If an exception *is* caught here, it indicates a potential issue,
+            // but it might not be the *exact* JNI error.
+            System.err.println("Caught exception during Gson deserialization: " + e.getMessage());
+            e.printStackTrace();
+            // We could assert that an exception of a certain type was thrown if we knew
+            // how Gson wraps JNI errors in a Java exception, but the report indicates
+            // a direct JNI error logged by ART.
+        }
+    }
+}

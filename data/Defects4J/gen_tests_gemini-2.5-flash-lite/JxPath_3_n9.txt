@@ -1,0 +1,42 @@
+public void testCreatePathStackOverflow() {
+    Map map = new HashMap();
+    map.put("a", null);
+
+    JXPathContext pathContext = JXPathContext.newContext(map);
+    pathContext.setFactory(new AbstractFactory() {
+        public boolean createObject(JXPathContext context, Pointer pointer, Object parent, String name, int index) {
+            if (pointer instanceof NodePointer) {
+                index = ((NodePointer) pointer).getIndex();
+            }
+            Map parentMap = (Map) parent;
+            if (index > -1) {
+                List list = (List) parentMap.get(name);
+                if (list == null) {
+                    list = new ArrayList();
+                }
+                int size = list.size();
+                for (int i = size; i <= index; i++) {
+                    // The original bug was here: list.add(i, null);
+                    // This change to new HashMap() fixes the stack overflow
+                    list.add(i, new HashMap());
+                }
+                parentMap.put(name, list);
+            } else {
+                parentMap.put(name, new HashMap());
+            }
+            return true;
+        }
+    });
+
+    // The first call to createPath works fine with the modified factory
+    pathContext.createPath("a/b[1]/c");
+
+    // This second call triggers the stack overflow in the original implementation
+    // because the list contains null elements, leading to infinite recursion.
+    // We assert that it does NOT throw a StackOverflowError.
+    try {
+        pathContext.createPath("a/b[2]/c");
+    } catch (StackOverflowError e) {
+        fail("StackOverflowError occurred: " + e.getMessage());
+    }
+}

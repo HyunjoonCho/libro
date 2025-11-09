@@ -1,0 +1,72 @@
+public void testDateUtilsTruncateDST() {
+    // 2004-10-31 01:00:00 MDT - This is the hour that disappears during DST switch
+    // MDT is UTC-6
+    // The actual timestamp for 2004-10-31 01:00:00 MDT is 1099206000000L
+    // The timestamp for 2004-10-31 01:00:00 MST is 1099209600000L (one hour later)
+    // The timestamp for 2004-10-31 00:00:00 MDT is 1099202400000L
+    // The timestamp for 2004-10-31 02:00:00 MST is 1099213200000L
+
+    // The bug occurs because the truncate method, when encountering the DST switch,
+    // incorrectly adjusts the time based on the new offset, effectively skipping an hour.
+    // We expect that truncating to the hour should result in the beginning of that hour.
+
+    // Create a date object representing 2004-10-31 01:00:00 MDT
+    // Note: The exact timezone handling can be tricky. For this test, we rely on the
+    // system's default timezone or ensure it's set appropriately if needed for reproducibility.
+    // For demonstration, we'll use a timestamp that represents the problematic hour.
+    // The key is that this timestamp falls within the DST transition period where 1 AM MDT
+    // effectively becomes 2 AM MST, and the hour between 1 AM and 2 AM doesn't exist in local time.
+
+    // Timestamp for 2004-10-31 01:00:00 MDT.
+    // In a timezone like America/Denver, this date would be 2004-10-31 01:00:00 MDT.
+    // The DST switch happens at 2 AM on that day, moving from MDT (UTC-6) to MST (UTC-7).
+    // So, 1 AM MDT is a valid time. However, when truncating, the logic might incorrectly
+    // jump to the *next* hour which is 2 AM MST.
+
+    // The provided timestamp 1099206000000L corresponds to:
+    // Date: Sun Oct 31 01:00:00 MDT 2004
+    // If we truncate this to the hour, we expect it to remain 01:00:00 on that day.
+    // The bug report states it results in 01:00:00 MST, which is actually 2004-10-31 02:00:00 MDT equivalent.
+
+    // We need to set up a specific timezone for this test to be reliable,
+    // as DST rules vary by location. Let's assume a timezone where this DST switch occurs.
+    // For example, "America/Denver" or "America/Phoenix" (though Phoenix doesn't observe DST).
+    // Let's use a timezone that observes DST and has this switch.
+
+    TimeZone originalTimeZone = TimeZone.getDefault();
+    try {
+        // Set timezone to one that observes DST and has this switch
+        TimeZone.setDefault(TimeZone.getTimeZone("America/Denver"));
+
+        // 2004-10-31 01:00:00 MDT
+        // This timestamp, when interpreted in America/Denver on that date, is indeed 1 AM MDT.
+        // The DST switch happens at 2 AM local time.
+        long timestampMDT = 1099206000000L;
+        Date oct31_01MDT = new Date(timestampMDT);
+
+        // Truncate to the hour
+        Date result = DateUtils.truncate(oct31_01MDT, Calendar.HOUR_OF_DAY);
+
+        // The expected result is the start of the hour that the input date falls into.
+        // Since the input is 01:00:00, truncating to the hour should yield 01:00:00.
+        // The bug report indicates that it incorrectly yields a time that is one hour later.
+        // Let's construct the expected date: 2004-10-31 01:00:00 in the target timezone.
+        Calendar expectedCal = Calendar.getInstance();
+        expectedCal.setTimeZone(TimeZone.getTimeZone("America/Denver"));
+        expectedCal.set(2004, Calendar.OCTOBER, 31, 1, 0, 0);
+        expectedCal.set(Calendar.MILLISECOND, 0);
+        Date expectedDate = expectedCal.getTime();
+
+        // The bug is that 'result' will be something like 2004-10-31 02:00:00 MST
+        // which has a different timestamp.
+        // The assertion should check if the result is the *expected* start of the hour.
+        // If the bug is present, 'result' will NOT equal 'expectedDate'.
+        // Therefore, asserting equality will fail if the bug is present.
+
+        assertEquals("DateUtils.truncate did not handle DST switching hours correctly.", expectedDate, result);
+
+    } finally {
+        // Restore original timezone
+        TimeZone.setDefault(originalTimeZone);
+    }
+}

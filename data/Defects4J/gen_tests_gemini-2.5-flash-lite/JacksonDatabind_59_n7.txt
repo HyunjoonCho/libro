@@ -1,0 +1,91 @@
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectMapper.DefaultTyping;
+import com.fasterxml.jackson.databind.module.SimpleKeyDeserializers;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import java.io.IOException;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+public class TestJackson {
+
+    private static String TEST_INSTANCE_SERIALIZED = "{\"mapProperty\":[\"java.util.HashMap\",{\"Compound|Key\":\"Value\"}]}";
+
+    @Test
+    public void testFails() throws JsonParseException, JsonMappingException, IOException {
+        ObjectMapper mapper = new ObjectMapper().enableDefaultTyping(DefaultTyping.NON_FINAL);
+        TestClass testInstance = mapper.readValue(TEST_INSTANCE_SERIALIZED, TestClass.class);
+        String testInstanceSerialized = mapper.writeValueAsString(testInstance);
+        assertEquals(TEST_INSTANCE_SERIALIZED, testInstanceSerialized);
+    }
+
+    @Test
+    public void testSucceeds() throws JsonParseException, JsonMappingException, IOException {
+        ObjectMapper mapper = new ObjectMapper().enableDefaultTyping(DefaultTyping.NON_FINAL).registerModule(new SimpleModule() {
+            @Override
+            public void setupModule(SetupContext context) {
+                context.addKeyDeserializers(new SimpleKeyDeserializers().addDeserializer(CompoundKey.class, new CompoundKeyDeserializer()));
+            }
+        });
+        TestClass testInstance = mapper.readValue(TEST_INSTANCE_SERIALIZED, TestClass.class);
+        String testInstanceSerialized = mapper.writeValueAsString(testInstance);
+        assertEquals(TEST_INSTANCE_SERIALIZED, testInstanceSerialized);
+    }
+
+    @JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
+    public static final class TestClass {
+        @JsonSerialize(keyUsing = CompoundKeySerializer.class)
+        private final Map<CompoundKey, String> mapProperty;
+
+        @JsonCreator
+        private TestClass(@JsonDeserialize(keyUsing = CompoundKeyDeserializer.class) @JsonProperty("mapProperty") Map<CompoundKey, String> mapProperty) {
+            this.mapProperty = mapProperty;
+        }
+    }
+
+    public static final class CompoundKey {
+        private String part0;
+        private String part1;
+
+        public CompoundKey(String part0, String part1) {
+            this.part0 = part0;
+            this.part1 = part1;
+        }
+
+        public String getPart0() { return part0; }
+        public String getPart1() { return part1; }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CompoundKey that = (CompoundKey) o;
+            if (part0 != null ? !part0.equals(that.part0) : that.part0 != null) return false;
+            return part1 != null ? part1.equals(that.part1) : that.part1 == null;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = part0 != null ? part0.hashCode() : 0;
+            result = 31 * result + (part1 != null ? part1.hashCode() : 0);
+            return result;
+        }
+    }
+
+    public static class CompoundKeyDeserializer extends KeyDeserializer {
+        @Override
+        public Object deserializeKey(String s, DeserializationContext deserializationContext) {
+            String[] parts = s.split("\\|");
+            return new CompoundKey(parts[0], parts[1]);
+        }
+    }
+
+    public static class CompoundKeySerializer extends JsonSerializer<CompoundKey> {
+        @Override
+        public void serialize(CompoundKey compoundKey, JsonGenerator jsonGenerator, SerializerProvider serializerProvider) throws IOException {
+            jsonGenerator.writeFieldName(compoundKey.getPart0() + '|' + compoundKey.getPart1());
+        }
+    }
+}

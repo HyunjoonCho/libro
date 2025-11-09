@@ -1,0 +1,58 @@
+public void testClosureVariableInlining() throws Exception {
+    String js = "function foo() { var arr = [1, 2, 3, 4, 5]; for (var i = 0, l = arr.length; i < l; i++) { var j = arr[i]; (function() { var k = j; setTimeout(function() { console.log(k); }, 0); })(); } } foo();";
+    String compiledJs = closureCompiler.compile(js, CompilerOptions.LanguageMode.ECMASCRIPT5, CompilerOptions.CompilationLevel.SIMPLE_OPTIMIZATIONS);
+    // The original bug report implies that the compiled JS would have an issue with variable inlining
+    // leading to incorrect output when executed. The Java test cannot directly execute the JS and check
+    // console.log output. Instead, we'll check if the compiled JS has a specific characteristic that
+    // indicates the faulty inlining.
+    // A common symptom of this bug is that 'k' would be inlined and all console.log calls would print
+    // the *last* value of 'j' (which is 5). A correct implementation would preserve 'k' as a separate
+    // variable for each iteration, leading to logs of 1, 2, 3, 4, 5.
+    // We can't directly assert the output of console.log here. However, we can inspect the compiled
+    // code to see if it *avoids* the problematic inlining.
+    // If the bug is fixed, the generated code should look something like:
+    // function foo(){var a=[1,2,3,4,5];for(var b=0,c=a.length;b<c;b++){var d=a[b];(function(){var e=d;setTimeout(function(){console.log(e)},0)})();}}foo();
+    // Notice how 'e' is still declared within the inner IIFE. If it were inlined incorrectly,
+    // 'e' might be hoisted or replaced directly with 'd' in a way that loses its closure context.
+    // A simple check might be to ensure 'setTimeout' still references a variable that was defined
+    // inside the IIFE.
+
+    // This is a tricky one to test directly in Java without a JS engine.
+    // The spirit of the test is to ensure the compiler *doesn't* produce code where
+    // the 'k' variable from the IIFE is incorrectly shared or lost.
+    // Let's assume a fixed compiler would keep the 'k' variable distinct.
+    // We can't easily assert the *behavior* of the JS from Java.
+    // A workaround: If we had a way to execute the JS and capture output, we would.
+    // Given we don't, we'll assume the test is to ensure the *compilation* process
+    // doesn't fail or produce obviously malformed code for this specific case.
+
+    // For the purpose of demonstrating a test that *would* have failed and now passes,
+    // we'll assert something about the *structure* of the compiled code that indicates
+    // the fix is in place. A fixed compiler should not aggressively inline 'k' in a way
+    // that breaks the closure.
+
+    // A proxy for the bug might be that the original code would have resulted in
+    // the same value being logged multiple times (e.g., all 5s).
+    // If the compiler *correctly* handles the closure, the 'k' variable should persist
+    // its value for each iteration of the loop.
+
+    // The best we can do without executing the JS is to ensure the compilation
+    // itself doesn't throw an error and produces *some* valid JS.
+    // A more robust test would involve a JS execution environment.
+
+    // Let's try a more specific assertion if possible. The bug description implies
+    // "bad variable inlining". This means 'k' might be replaced by 'j' directly,
+    // or 'k' might be hoisted and shared across all closures.
+    // If 'k' is correctly handled, it should be a local variable within the IIFE.
+
+    // If the bug was present, the compiled output might look something like:
+    // function foo(){var arr=[1,2,3,4,5];for(var i=0,l=arr.length;i<l;i++){var j=arr[i];setTimeout(function(){console.log(j)},0)}}foo();
+    // Notice 'k' is gone and 'j' is used directly. This is bad because 'j' changes.
+
+    // A correct output would preserve 'k':
+    // function foo(){var arr=[1,2,3,4,5];for(var i=0,l=arr.length;i<l;i++){var j=arr[i];(function(){var k=j;setTimeout(function(){console.log(k)},0)})();}}foo();
+
+    // We can assert that the compiled JS *contains* the pattern "var k=j;" within the IIFE structure.
+    // This is a heuristic, but it targets the described issue.
+    assertTrue(compiledJs.contains("(function(){var k=j;setTimeout"));
+}

@@ -1,0 +1,149 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.util.Converter;
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.io.IOException;
+
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class JsonAnyGetterBugTest {
+
+    // Dummy Serializer
+    public static class MySerializer extends StdSerializer<Map<String, String>> {
+        public MySerializer() {
+            super(Map.class, false);
+        }
+
+        @Override
+        public void serialize(Map<String, String> value, JsonGenerator gen, com.fasterxml.jackson.databind.SerializerProvider provider) throws IOException {
+            gen.writeStartObject();
+            for (Map.Entry<String, String> entry : value.entrySet()) {
+                gen.writeStringField(entry.getKey(), "serialized_" + entry.getValue());
+            }
+            gen.writeEndObject();
+        }
+    }
+
+    // Dummy Converter
+    public static class MyConverter implements Converter<Map<String, String>, Map<String, String>> {
+        @Override
+        public Map<String, String> convert(Map<String, String> value) {
+            Map<String, String> convertedMap = new HashMap<>();
+            for (Map.Entry<String, String> entry : value.entrySet()) {
+                convertedMap.put(entry.getKey(), "converted_" + entry.getValue());
+            }
+            return convertedMap;
+        }
+
+        @Override
+        public Class<Map<String, String>> getInputType() {
+            return (Class<Map<String, String>>) (Class<?>) Map.class;
+        }
+
+        @Override
+        public Class<Map<String, String>> getOutputType() {
+            return (Class<Map<String, String>>) (Class<?>) Map.class;
+        }
+    }
+
+    public static class MyClassWithAnyGetterAndSerialize {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public MyClassWithAnyGetterAndSerialize() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(using = MySerializer.class)
+        @JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+    public static class MyClassWithAnyGetterAndConverter {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public MyClassWithAnyGetterAndConverter() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(converter = MyConverter.class)
+        @JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+    @Test
+    public void testJsonAnyGetterWithJsonSerializeUsing() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        MyClassWithAnyGetterAndSerialize obj = new MyClassWithAnyGetterAndSerialize();
+        String json = mapper.writeValueAsString(obj);
+
+        // The expected behavior is that MySerializer should be used.
+        // If the bug exists, it will likely serialize without the "serialized_" prefix.
+        // The actual output will depend on the exact bug manifestation.
+        // This test assumes the bug causes the serializer to be ignored.
+        // If the bug is fixed, this assertion might fail and need adjustment.
+        // For the purpose of reproducing the bug, we assert against the *unserialized* output.
+        // A correct implementation would result in "serialized_value1" and "serialized_value2".
+        // This test asserts that the "serialized_" prefix is *not* present, indicating the serializer was ignored.
+        // If the test passes, it means the serializer was indeed ignored.
+        // If the test fails, it means the serializer was applied (bug fixed or not present).
+
+        // Let's check for the absence of the "serialized_" prefix to confirm the serializer was ignored.
+        // If the serializer *was* applied, the output would contain "serialized_value1" and "serialized_value2".
+        // We are testing the bug where it *isn't* applied.
+        // So, we expect the raw values.
+        // This is a bit tricky: the bug description implies the serializer is ignored,
+        // meaning the raw values from the map are output.
+        // However, the JsonAnyGetter itself will output these fields.
+        // The core issue is that the *serialization logic* defined by @JsonSerialize is bypassed.
+
+        // Let's construct the expected JSON if the serializer is *ignored* (buggy behavior).
+        // JsonAnyGetter will take the map entries and write them as fields.
+        // If @JsonSerialize(using = MySerializer.class) is ignored, the values will be written as is.
+        String expectedJsonIfSerializerIgnored = "{\"key1\":\"value1\",\"key2\":\"value2\"}";
+
+        // If the serializer *is* applied (correct behavior), the JSON would be:
+        // String expectedJsonIfSerializerApplied = "{\"key1\":\"serialized_value1\",\"key2\":\"serialized_value2\"}";
+
+        // This test aims to reproduce the *bug*, so we assert against the state where the serializer is ignored.
+        // If this assertion passes, it confirms the serializer was ignored.
+        assertEquals(expectedJsonIfSerializerIgnored, json);
+    }
+
+    @Test
+    public void testJsonAnyGetterWithJsonSerializeConverter() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        MyClassWithAnyGetterAndConverter obj = new MyClassWithAnyGetterAndConverter();
+        String json = mapper.writeValueAsString(obj);
+
+        // The bug description states that @JsonSerialize(converter = MyConverter.class) *also* doesn't work with @JsonAnyGetter.
+        // This means the converter should be ignored, and the raw values should be serialized.
+        // If the converter *was* applied, the output would contain "converted_" prefix.
+        // We are testing the bug where it *isn't* applied.
+        // So, we expect the raw values.
+
+        // Let's construct the expected JSON if the converter is *ignored* (buggy behavior).
+        String expectedJsonIfConverterIgnored = "{\"key1\":\"value1\",\"key2\":\"value2\"}";
+
+        // If the converter *was* applied (correct behavior), the JSON would be:
+        // String expectedJsonIfConverterApplied = "{\"key1\":\"converted_value1\",\"key2\":\"converted_value2\"}";
+
+        // This test aims to reproduce the *bug*, so we assert against the state where the converter is ignored.
+        // If this assertion passes, it confirms the converter was ignored.
+        assertEquals(expectedJsonIfConverterIgnored, json);
+    }
+}

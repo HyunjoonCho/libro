@@ -1,0 +1,78 @@
+import org.junit.Test;
+import org.junit.Before;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import static org.junit.Assert.assertEquals;
+
+// Assume AbstractClass, ClassExtendsAbstractClass, and A are defined as in the bug report.
+
+public class MockitoBugTest {
+
+    @Mock
+    private ClassExtendsAbstractClass classExtendsAbstractClass;
+    private A a;
+
+    @Before
+    public void before() {
+        // The problematic line: Mockito.when(classExtendsAbstractClass.give()).thenReturn("aaa");
+        // This setup triggers the error because Mockito tries to mock the 'give' method,
+        // which internally calls 'lol()' and 'wow()'. During this process, it seems
+        // Mockito incorrectly infers the return type for 'lol()' based on the stubbed
+        // return value of 'give()', leading to the WrongTypeOfReturnValue exception.
+        Mockito.when(classExtendsAbstractClass.give()).thenReturn("aaa");
+    }
+
+    @Test
+    public void testWrongTypeOfReturnValue() {
+        // The test itself doesn't need to do much, the setup in @Before is enough to trigger the bug.
+        // However, to make it a valid test case, we can instantiate 'a' and potentially assert something,
+        // though the exception will be thrown during the 'before' method execution.
+        a = new A(classExtendsAbstractClass);
+
+        // If the test reaches here, it means the exception was NOT thrown, which would be unexpected
+        // given the bug description. We can add an assertion that should pass if the bug is *not* present.
+        // However, the primary goal is to reproduce the exception.
+        // The exception is thrown during the Mockito.when(...) call in the @Before method.
+        // To specifically reproduce the described failure, the test method itself might not need
+        // explicit assertions if the setup in @Before is sufficient to cause the error.
+        // For clarity and to ensure the test runs, we can add a minimal assertion.
+        // If the @Before method fails, this test will not even execute its body.
+        // Therefore, the reproduction is inherently tied to the @Before method's setup.
+    }
+
+    // Helper classes to make the test runnable in isolation (if needed)
+    // In a real scenario, these would be in their respective files.
+    abstract static class AbstractClass {
+        abstract protected Long lol();
+        abstract protected String wow();
+        public String give() {
+            wow();
+            lol();
+            return "give";
+        }
+    }
+
+    static class ClassExtendsAbstractClass extends AbstractClass {
+        @Override
+        protected Long lol() {
+            return 2L;
+        }
+        @Override
+        protected String wow() {
+            return "WOW";
+        }
+    }
+
+    static class A {
+      private ClassExtendsAbstractClass classExtendsAbstractClass;
+      public A(ClassExtendsAbstractClass classExtendsAbstractClass) {
+        this.classExtendsAbstractClass = classExtendsAbstractClass;
+      }
+      public String doSomeThing(){
+        // Note: The bug description mentions mocking doSomeThing(), but the provided
+        // failing code mocks classExtendsAbstractClass.give(). The test below
+        // reflects the failing code provided in the bug.
+        return classExtendsAbstractClass.wow();
+      }
+    }
+}

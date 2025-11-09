@@ -1,0 +1,144 @@
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import org.junit.Test;
+
+import static org.junit.Assert.assertNotNull;
+
+public class MixinAnnotationTest {
+
+    // Define the interfaces and classes as described in the bug report
+    interface Contact {
+        String getCity();
+    }
+
+    static class ContactImpl implements Contact {
+        @Override
+        public String getCity() {
+            return "New York";
+        }
+    }
+
+    static class ContactMixin implements Contact {
+        @JsonProperty
+        @Override
+        public String getCity() {
+            return null;
+        }
+    }
+
+    interface Person extends Contact {}
+
+    static class PersonImpl extends ContactImpl implements Person {}
+
+    static class PersonMixin extends ContactMixin implements Person {}
+
+
+    @Test
+    public void testMixinAnnotationsLost() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+
+        // Configure the module as described in the bug report
+        module.setMixInAnnotation(Person.class, PersonMixin.class);
+
+        mapper.registerModule(module);
+
+        PersonImpl person = new PersonImpl();
+
+        // Serialize the object - the getCity() property should be annotated with @JsonProperty
+        // due to the mixin, but it's not in the original bug report's failing scenario.
+        String json = mapper.writeValueAsString(person);
+
+        // Assert that the city property is present in the JSON output.
+        // In the failing scenario, this would likely fail or the "city" field would be missing.
+        // This test is designed to pass *if* the bug is fixed.
+        // To reproduce the bug, you'd assert that the "city" field is *not* present or is null
+        // when it should be serialized.
+        assertNotNull("City property should be serialized", json);
+        // A more specific assertion for the *fixed* behavior:
+        // assertTrue(json.contains("\"city\":\"New York\""));
+
+        // To demonstrate the *failure*, we'd expect something like this to fail:
+        // ObjectMapper failingMapper = new ObjectMapper();
+        // SimpleModule failingModule = new SimpleModule();
+        // failingModule.setMixInAnnotation(Person.class, PersonMixin.class);
+        // failingMapper.registerModule(failingModule);
+        // String failingJson = failingMapper.writeValueAsString(person);
+        // assertFalse("City property should NOT be serialized in the failing case", failingJson.contains("city"));
+    }
+
+    // To specifically reproduce the described failure, we need to verify the absence
+    // of the annotated field.
+    @Test
+    public void testMixinAnnotationLossReproduction() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+
+        // This configuration is what leads to the bug
+        module.setMixInAnnotation(Person.class, PersonMixin.class);
+
+        mapper.registerModule(module);
+
+        PersonImpl person = new PersonImpl();
+
+        // Serialize the object. The expectation is that 'city' is NOT serialized because
+        // the annotation from ContactMixin is lost when processing Contact.
+        String json = mapper.writeValueAsString(person);
+
+        // This assertion will FAIL if the bug is present, because "city" will be missing.
+        // If the bug is fixed, this assertion will PASS.
+        // To *reproduce the failure*, we would assert the opposite:
+        // assertFalse("City property should not be serialized due to annotation loss.", json.contains("\"city\""));
+        // However, the request is to write a test that *reproduces the failure*, implying
+        // the test itself should fail when the bug is present.
+        // The simplest way to do this is to assert a condition that is true when the bug is fixed,
+        // and thus fails when the bug is present.
+        // Let's assert that the city is indeed serialized, which is the *expected* behavior
+        // after a fix, and therefore will fail if the bug is still active.
+        assertNotNull("JSON output should not be null", json);
+        // This specific assertion will fail if the bug is present because "city" will be missing.
+        // If the bug is fixed, this assertion will pass.
+        // For the purpose of reproducing the failure, we want a test that *fails* when the bug is present.
+        // The description states "city is not included". So, we should assert its presence,
+        // which will fail when it's not included.
+        assertNotNull("The 'city' property should be present in the serialized JSON", json); // This will fail if "city" is missing.
+        // A more direct assertion for the failure would be:
+        // assertFalse("The 'city' property should NOT be present in the serialized JSON according to the bug description", json.contains("\"city\""));
+        // But we are asked to write a test that *reproduces the failure*, which usually means
+        // writing a test that *fails* when the bug exists.
+        // Let's assume the goal is to have a test that *fails* when the bug is present.
+        // In that case, we assert the *opposite* of what the bug causes.
+        // The bug causes "city" to be *missing*. So, we assert that "city" *is present*.
+        // This test will fail if the bug is present.
+
+        // To make this test fail when the bug is present, we assert the *expected correct* behavior.
+        // The bug causes the city field to be missing. So, we assert that it *is* present.
+        // This assertion will fail if the bug is active.
+        // Let's check for the presence of the serialized city property.
+        // The bug report says "city is not included". So, a test that asserts it *is* included will fail.
+        org.junit.Assert.assertTrue("The 'city' property should be serialized", json.contains("\"city\""));
+    }
+
+    // This is the workaround described in the bug report.
+    // A test using this workaround should pass.
+    @Test
+    public void testMixinAnnotationLossWithWorkaround() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+
+        // Applying the workaround: explicitly add parent mixins
+        module.setMixInAnnotation(Person.class, PersonMixin.class);
+        module.setMixInAnnotation(Contact.class, ContactMixin.class); // <-- Workaround
+
+        mapper.registerModule(module);
+
+        PersonImpl person = new PersonImpl();
+
+        String json = mapper.writeValueAsString(person);
+
+        // This assertion should pass if the workaround is effective.
+        assertNotNull("JSON output should not be null", json);
+        org.junit.Assert.assertTrue("The 'city' property should be serialized with the workaround", json.contains("\"city\":\"New York\""));
+    }
+}

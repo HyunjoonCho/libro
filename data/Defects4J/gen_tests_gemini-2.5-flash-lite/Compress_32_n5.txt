@@ -1,0 +1,33 @@
+public void testTarArchiveInputStreamRejectsLargeUidGid() throws IOException {
+    // Create a tar archive with a PAX extended header containing a large UID
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    TarArchiveOutputStream taos = new TarArchiveOutputStream(bos);
+
+    TarArchiveEntry entry = new TarArchiveEntry("testfile.txt");
+    entry.setSize(0);
+    taos.putArchiveEntry(entry);
+    taos.closeArchiveEntry();
+
+    // Add PAX header for UID
+    Map<String, String> paxHeaders = new HashMap<>();
+    // 4294967294 is 0xFFFFFFFF in decimal, which is the max value for an unsigned 32-bit integer
+    paxHeaders.put("uid", "4294967294");
+    taos.writePaxHeadersForUncompressedEntries(paxHeaders);
+
+    taos.close();
+
+    // Read the archive and expect a NumberFormatException when parsing the UID
+    ByteArrayInputStream bis = new ByteArrayInputStream(bos.toByteArray());
+    TarArchiveInputStream tais = new TarArchiveInputStream(bis);
+
+    try {
+        tais.getNextTarEntry();
+        // If getNextTarEntry succeeds, it means the NumberFormatException was not thrown as expected.
+        fail("Expected NumberFormatException for large UID");
+    } catch (NumberFormatException e) {
+        // Expected exception
+        assertTrue(e.getMessage().contains("4294967294"));
+    } finally {
+        tais.close();
+    }
+}

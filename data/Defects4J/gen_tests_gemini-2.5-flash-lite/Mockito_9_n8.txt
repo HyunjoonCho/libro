@@ -1,0 +1,103 @@
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.*;
+
+// Abstract class with an abstract method
+abstract class AbstractService {
+    public abstract String doSomethingAbstract();
+
+    public String doSomethingConcrete() {
+        return "Concrete: " + doSomethingAbstract();
+    }
+}
+
+// Concrete implementation
+class ConcreteService extends AbstractService {
+    @Override
+    public String doSomethingAbstract() {
+        return "Abstract Implemented";
+    }
+}
+
+@ExtendWith(MockitoExtension.class)
+class MockitoAbstractClassTest {
+
+    @Mock
+    AbstractService abstractServiceMock;
+
+    @InjectMocks
+    ConcreteService concreteService; // This won't work as expected due to the nature of spying
+
+    @Test
+    void testSpyingOnAbstractClass() {
+        // When spying on an abstract class, Mockito creates a real instance
+        // and then mocks specific methods.
+        // However, when the real implementation calls an abstract method,
+        // it calls the *real* abstract method, which is not implemented.
+        // If we simply spy on the abstract class, we can't directly inject it
+        // into a class that expects the concrete type.
+
+        // Let's demonstrate the issue by attempting to spy and mock
+        AbstractService realAbstractService = spy(new ConcreteService());
+
+        // Mock the abstract method to return a specific value
+        doReturn("Mocked Abstract").when(realAbstractService).doSomethingAbstract();
+
+        // Now, call the concrete method which internally calls the abstract method
+        // This call will use the mocked doSomethingAbstract()
+        String result = realAbstractService.doSomethingConcrete();
+
+        // Assert that the result is as expected with the mocked abstract method
+        assertEquals("Concrete: Mocked Abstract", result);
+
+        // The original bug description implies a scenario where injecting the spy
+        // might lead to issues if not handled carefully. The above test
+        // confirms that spying and mocking abstract methods *can* work,
+        // but the setup is crucial. The core of the original bug might have been
+        // related to how `spy()` interacts with abstract methods when not
+        // explicitly mocking them, or how it was used in conjunction with injection.
+
+        // To further illustrate a potential pitfall related to the original description:
+        // If we were to try and mock the AbstractService and inject it into a class
+        // that *uses* AbstractService, and that class calls doSomethingConcrete(),
+        // Mockito would need to stub doSomethingAbstract() if it's called.
+
+        // Example of a class that *uses* AbstractService
+        class ServiceUser {
+            private final AbstractService service;
+
+            public ServiceUser(AbstractService service) {
+                this.service = service;
+            }
+
+            public String useService() {
+                return service.doSomethingConcrete();
+            }
+        }
+
+        // If we mock AbstractService and try to use it without stubbing doSomethingAbstract,
+        // it would fail if doSomethingConcrete() is called.
+        AbstractService mockService = mock(AbstractService.class);
+        ServiceUser userWithMock = new ServiceUser(mockService);
+
+        // This would throw an UnstubbedInvocationsException if doSomethingAbstract() is called
+        // and not stubbed.
+        // userWithMock.useService();
+
+        // To make it work, we need to stub both or rely on the spy behavior.
+        // If we stub the abstract method:
+        doReturn("Stubbed Abstract").when(mockService).doSomethingAbstract();
+        assertEquals("Concrete: Stubbed Abstract", userWithMock.useService());
+
+        // The original bug's core issue might have been related to the default behavior
+        // of `spy()` on abstract classes before certain fixes, or how it interacted
+        // with dependency injection frameworks without proper stubbing.
+        // The provided test case demonstrates the correct usage of spying on abstract
+        // classes by ensuring the abstract method is stubbed when called by the concrete method.
+    }
+}

@@ -1,0 +1,22 @@
+public void testBZip2CompressorInputStreamReadToFullBuffer() throws Exception {
+    byte[] rawData = new byte[1024];
+    for (int i = 0; i < rawData.length; ++i) {
+        rawData[i] = (byte) (i % 256);
+    }
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    try (BZip2CompressorOutputStream bzipOut = new BZip2CompressorOutputStream(baos)) {
+        bzipOut.write(rawData);
+    }
+    ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+    try (BZip2CompressorInputStream bzipIn = new BZip2CompressorInputStream(bais)) {
+        byte[] buffer = new byte[1024];
+        int bytesRead = bzipIn.read(buffer, 0, buffer.length);
+        assertTrue("Expected to read some bytes", bytesRead > 0);
+        // This is the problematic call: offset == length, should return 0 if stream is not finished
+        bytesRead = bzipIn.read(buffer, buffer.length, 0);
+        assertEquals("Expected 0 bytes read when offset equals length and stream is not finished", 0, bytesRead);
+        // Verify that the stream is not actually finished by reading again
+        int bytesReadAgain = bzipIn.read(buffer, 0, buffer.length);
+        assertTrue("Stream should not be finished yet", bytesReadAgain > 0);
+    }
+}

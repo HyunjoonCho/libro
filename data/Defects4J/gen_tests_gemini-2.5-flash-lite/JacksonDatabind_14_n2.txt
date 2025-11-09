@@ -1,0 +1,26 @@
+public void testCustomDeserializerWithParentUpdate() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.addDeserializer(DataA.class, new DataADeserializer());
+    mapper.registerModule(module);
+
+    DataB db = new DataB();
+    db.da.i = 11;
+    db.k = 13;
+    String jsonBString = mapper.writeValueAsString(db);
+    JsonNode jsonBNode = mapper.valueToTree(db);
+
+    DataB dbUpdViaNode = new DataB();
+    // This is the line that fails and needs to be reproduced.
+    // The original test expects this to work, but it throws UnrecognizedPropertyException.
+    // The purpose of this test is to confirm that the exception is thrown as described.
+    try {
+        mapper.readerForUpdating(dbUpdViaNode).readValue(jsonBNode);
+        // If readValue succeeds, the test should fail because the bug is not reproduced.
+        Assert.fail("Expected UnrecognizedPropertyException when updating DataB from JsonNode with custom DataA deserializer.");
+    } catch (UnrecognizedPropertyException e) {
+        // This is the expected behavior, so the test passes if this exception is caught.
+        // We can add a more specific assertion if needed, e.g., checking the exception message.
+        assertTrue(e.getMessage().contains("Unrecognized field \"i\""));
+    }
+}

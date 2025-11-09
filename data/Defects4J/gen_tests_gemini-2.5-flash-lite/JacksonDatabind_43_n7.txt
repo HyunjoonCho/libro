@@ -1,0 +1,121 @@
+public void testObjectIdWithExplicitNullToken() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.disable(DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES);
+    mapper.setHandlerInstantiator(new MyHandlerInstantiator(mapper));
+    
+    String json = "{\"@id\": null, \"name\": \"test\"}";
+    
+    try {
+        mapper.readValue(json, MyClass.class);
+        fail("Should have thrown an exception for null @id");
+    } catch (JsonMappingException e) {
+        // Expected exception
+    }
+}
+
+// Dummy classes for the test
+@JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class, property = "@id")
+class MyClass {
+    public String name;
+}
+
+class MyHandlerInstantiator extends HandlerInstantiator {
+    private final ObjectMapper mapper;
+
+    public MyHandlerInstantiator(ObjectMapper mapper) {
+        this.mapper = mapper;
+    }
+
+    @Override
+    public JsonDeserializer<?> deserializerInstance(DeserializationConfig config, AnnotatedClass acc) {
+        return null;
+    }
+
+    @Override
+    public JsonDeserializer<?> deserializerInstance(DeserializationConfig config, AnnotatedMember member) {
+        return null;
+    }
+
+    @Override
+    public KeyDeserializer keyDeserializerInstance(DeserializationConfig config, AnnotatedClass acc) {
+        return null;
+    }
+
+    @Override
+    public TypeDeserializer typeDeserializerInstance(DeserializationConfig config, AnnotatedClass acc) {
+        return null;
+    }
+
+    @Override
+    public ValueInstantiator valueInstantiatorInstance(DeserializationConfig config, AnnotatedClass acc) {
+        if (acc.getRawClass() == MyClass.class) {
+            return new MyClassValueInstantiator(config, acc);
+        }
+        return super.valueInstantiatorInstance(config, acc);
+    }
+
+    private static class MyClassValueInstantiator extends ValueInstantiator {
+        private final DeserializationConfig config;
+        private final AnnotatedClass acc;
+
+        public MyClassValueInstantiator(DeserializationConfig config, AnnotatedClass acc) {
+            this.config = config;
+            this.acc = acc;
+        }
+
+        @Override
+        public Object createFromObjectWith(DeserializationContext ctxt, Object[] props) throws IOException {
+            // Simulate the behavior where @id is null
+            return new MyClass();
+        }
+
+        @Override
+        public boolean canCreateFromObjectWith() {
+            return true;
+        }
+        
+        @Override
+        public SettableBeanProperty[] getFromObjectArguments(DeserializationConfig config) {
+            // Return a dummy property for @id to simulate it being present
+            ObjectIdInfo objectIdInfo = acc.findObjectIdInfo();
+            if (objectIdInfo != null) {
+                AnnotatedMember idMember = acc.findAnnotatedMember(objectIdInfo.getPropertyName());
+                if (idMember != null) {
+                    return new SettableBeanProperty[] {
+                        new VirtualObjectIdProperty(objectIdInfo, idMember.getType().getRawClass())
+                    };
+                }
+            }
+            return super.getFromObjectArguments(config);
+        }
+    }
+    
+    // Dummy property to represent the @id field
+    private static class VirtualObjectIdProperty extends SettableBeanProperty.Field {
+        private final Class<?> type;
+        
+        public VirtualObjectIdProperty(ObjectIdInfo objectIdInfo, Class<?> type) {
+            super(objectIdInfo.getPropertyName(), type, null, null);
+            this.type = type;
+        }
+
+        @Override
+        public void deserializeAndSet(JsonParser p, DeserializationContext ctxt, Object bean) throws IOException {
+            // Simulate deserializing null for @id
+            if (p.getCurrentToken() == JsonToken.VALUE_NULL) {
+                // This is where the problem might occur in the actual implementation
+                // For the test, we just need to ensure this path is hit.
+                // A real implementation might try to assign null to the object ID,
+                // which could lead to issues depending on how it's handled.
+                // We'll let the framework throw an exception later if it's not handled.
+                return; 
+            }
+            super.deserializeAndSet(p, ctxt, bean);
+        }
+
+        @Override
+        public JavaType getType() {
+            return TypeFactory.defaultInstance().constructType(type);
+        }
+    }
+}

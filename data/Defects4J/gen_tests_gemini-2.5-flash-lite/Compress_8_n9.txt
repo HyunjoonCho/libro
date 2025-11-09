@@ -1,0 +1,38 @@
+public void testTarHeaderSizeParsing() throws IOException {
+    byte[] header = new byte[512];
+    System.arraycopy(new byte[]{
+            'f', 'i', 'l', 'e', '.', 't', 'x', 't', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
+            '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
+            '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
+            '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
+            '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
+            '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
+            '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
+            '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
+            '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
+            '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
+            '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
+            '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
+            '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
+            '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
+            '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
+            '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0'
+    }, 0, header, 0, 156);
+    
+    // This is the problematic part: the size field has trailing spaces
+    String sizeStr = "00000000123 "; // 123 followed by a space
+    byte[] sizeBytes = sizeStr.getBytes("UTF-8");
+    System.arraycopy(sizeBytes, 0, header, 100, sizeBytes.length);
+
+    TarArchiveInputStream tarIn = new TarArchiveInputStream(new ByteArrayInputStream(new byte[0]));
+    TarArchiveEntry entry = new TarArchiveEntry("test.txt");
+    
+    java.lang.reflect.Field field = TarArchiveEntry.class.getDeclaredField("header");
+    field.setAccessible(true);
+    field.set(entry, header);
+
+    entry.parseTarHeader();
+
+    // The expected size should be 123, not 1230 (if the trailing space was misinterpreted as a digit)
+    assertEquals(123, entry.getSize());
+}

@@ -1,0 +1,267 @@
+public void testArrayJoinMungedIncorrectly() {
+    String original = "$.fn.hasClass = function(selector) {\n return ( this.length > 0 ? \n!( ( ['', this[0].className, ''].join(' ') ).indexOf( ['', selector, ''].join(' ') ) == -1 )\n : false );\n};\n";
+    String munged = "$.fn.hasClass=function(a){return this.length>0? (\"\"+this[0].className).indexOf(\"\"+a)!=-1:false}";
+    
+    // The core issue is that the join(' ') is being replaced with an empty string concatenation
+    // and the indexOf logic is simplified. We need to simulate the effect of this incorrect transformation.
+    
+    // Simulate the original behavior:
+    String originalClassName = "someClass otherClass";
+    String selector = "otherClass";
+    boolean originalResult = (originalClassName.indexOf(selector) != -1);
+
+    // Simulate the munged behavior:
+    boolean mungedResult = ("" + originalClassName).indexOf("" + selector) != -1;
+
+    // The bug report implies that the munged version might produce a different result
+    // under certain conditions. Let's try to construct a case where this happens.
+    // The example provided in the bug description doesn't clearly show *how* it munges incorrectly,
+    // only that it does. The description suggests the issue is with `join(' ')`.
+    // Let's assume the munging process incorrectly removes the space from `join(' ')`.
+
+    // To reproduce the *failure*, we need to show a case where the original and munged code
+    // produce different results. The description is a bit vague on the exact output of the munging.
+    // However, it highlights the `join(' ')` part. Let's assume the munging incorrectly
+    // transforms `['', this[0].className, ''].join(' ')` into `this[0].className` (without spaces)
+    // and `['', selector, ''].join(' ')` into `selector` (without spaces).
+
+    // Let's craft a scenario where this incorrect transformation would lead to a wrong result.
+    // If the className has spaces, and the selector is a part of it, the original code
+    // relies on the spaces introduced by join to correctly match whole words.
+    
+    String classNameWithSpaces = "class1 class2 class3";
+    String selectorToFind = "class2";
+
+    // Original logic simulation:
+    // (['', classNameWithSpaces, ''].join(' ') ) -> " class1 class2 class3 "
+    // (['', selectorToFind, ''].join(' ') ) -> " class2 "
+    // indexOf(" class2 ") in " class1 class2 class3 " -> 7 (correct)
+    boolean originalResultCorrect = ( " " + classNameWithSpaces + " " ).indexOf(" " + selectorToFind + " ") != -1;
+
+    // Munged logic simulation (assuming the description's implication of incorrect transformation):
+    // If `join(' ')` is incorrectly handled and becomes just concatenation,
+    // then `['', classNameWithSpaces, ''].join(' ')` might become "class1class2class3"
+    // and `['', selectorToFind, ''].join(' ')` might become "class2".
+    // indexOf("class2") in "class1class2class3" -> 6 (correct in this simple case)
+
+    // The problem might arise if the selector itself contains spaces or if the className
+    // has substrings that match selectors incorrectly without the surrounding spaces.
+    // Let's consider a selector that is a substring of a class name, but not a whole word.
+    
+    String classNameWithSubstrings = "myClass myClassExtended another";
+    String partialSelector = "myClass"; // This is a prefix of "myClassExtended"
+
+    // Original logic simulation:
+    // (['', classNameWithSubstrings, ''].join(' ') ) -> " myClass myClassExtended another "
+    // (['', partialSelector, ''].join(' ') ) -> " myClass "
+    // indexOf(" myClass ") in " myClass myClassExtended another " -> 1 (correct)
+    boolean originalResultPartialMatch = ( " " + classNameWithSubstrings + " " ).indexOf(" " + partialSelector + " ") != -1;
+
+    // Munged logic simulation (assuming incorrect handling of join):
+    // If `join(' ')` is incorrectly handled, it might become:
+    // `['', classNameWithSubstrings, ''].join(' ')` -> "myClassmyClassExtendedanother"
+    // `['', partialSelector, ''].join(' ')` -> "myClass"
+    // indexOf("myClass") in "myClassmyClassExtendedanother" -> 0 (correct in this specific case, but potentially problematic if the selector was "myClassExtended" and className was "myClass myClassExtended")
+
+    // The bug description is very high-level. Let's try to create a test that directly
+    // targets the potential issue of `join(' ')` versus direct concatenation or incorrect parsing.
+    // The description states "Looks like there might be an issue with join and ' '".
+    // The simplest interpretation is that the space separator is lost or mishandled.
+
+    // Let's assume the munging process incorrectly simplifies the expression:
+    // `(['', this[0].className, ''].join(' ') )` to `this[0].className`
+    // and `(['', selector, ''].join(' ') )` to `selector`.
+    // And the `indexOf` logic also gets simplified.
+
+    // Let's test a case where the presence or absence of leading/trailing spaces from `join` matters.
+    String testClassName = "someClass anotherClass";
+    String testSelector = "someClass";
+
+    // Original behavior (simulated):
+    // `(['', testClassName, ''].join(' ') )` results in " someClass anotherClass "
+    // `(['', testSelector, ''].join(' ') )` results in " someClass "
+    // `(" someClass anotherClass ").indexOf(" someClass ")` is 0.
+    boolean originalResultTrue = (" " + testClassName + " ").indexOf(" " + testSelector + " ") != -1;
+
+    // Munged behavior (simulated based on description's implication):
+    // If the munging incorrectly simplifies `join(' ')` and `indexOf` logic,
+    // it might lead to a case where `testClassName.indexOf(testSelector)` is used.
+    // `testClassName.indexOf(testSelector)` -> "someClass anotherClass".indexOf("someClass") which is 0.
+    // This doesn't show a failure.
+
+    // The bug report implies that the *transformation* itself is the problem.
+    // The description states "which is not identical".
+    // Let's focus on the transformation of `join(' ')`.
+    // If the `join(' ')` is replaced by simple string concatenation, the surrounding spaces are lost.
+    // Example: `['', 'myClass', ''].join(' ')` -> " myClass "
+    // If it's replaced by `'' + this[0].className + ''`, it becomes "myClass".
+
+    // Let's test the case where the selector is a substring of a class name,
+    // but should NOT match because it's not a whole word.
+    String classNameForSubstringTest = "myClass myClassExtended";
+    String partialSelectorForSubstringTest = "myClass"; // Should match "myClass" but not "myClassExtended"
+
+    // Original logic:
+    // `(['', classNameForSubstringTest, ''].join(' ') )` -> " myClass myClassExtended "
+    // `(['', partialSelectorForSubstringTest, ''].join(' ') )` -> " myClass "
+    // `(" myClass myClassExtended ").indexOf(" myClass ")` -> 1 (Correctly finds "myClass" as a whole word)
+    boolean originalMatchWholeWord = (" " + classNameForSubstringTest + " ").indexOf(" " + partialSelectorForSubstringTest + " ") != -1;
+
+    // Munged logic (assuming `join(' ')` becomes simple concatenation):
+    // `this[0].className` -> "myClass myClassExtended"
+    // `selector` -> "myClass"
+    // `("myClass myClassExtended").indexOf("myClass")` -> 0. This is true, but it doesn't distinguish between the first "myClass" and the start of "myClassExtended".
+    // The original code's `indexOf` is on `" " + className + " "` and `" " + selector + " "`.
+    // This ensures that `selector` is matched as a whole word surrounded by spaces.
+
+    // The failure occurs if the munged version incorrectly returns true when it should be false.
+    // This happens if the munged code uses `className.indexOf(selector)` instead of the padded version.
+    
+    String className = "myClass myClassExtended";
+    String selector = "myClass"; // Should match the first instance, but not as a prefix of the second.
+
+    // Original behavior:
+    // `(['', className, ''].join(' ') )` -> " myClass myClassExtended "
+    // `(['', selector, ''].join(' ') )` -> " myClass "
+    // `(" myClass myClassExtended ").indexOf(" myClass ")` -> 1 (This is correct)
+    boolean originalResult = ( " " + className + " " ).indexOf(" " + selector + " ") != -1;
+    
+    // Munged behavior (assuming `join` is mishandled and spaces are lost):
+    // `className` -> "myClass myClassExtended"
+    // `selector` -> "myClass"
+    // `("myClass myClassExtended").indexOf("myClass")` -> 0.
+    // The original code's `indexOf` is on `" " + className + " "` and `" " + selector + " "`.
+    // The munged code, as described, seems to simplify this to `className.indexOf(selector)`.
+    // This will return true for "myClass" in "myClass myClassExtended".
+    // The original code correctly handles this by looking for " myClass ".
+    // Let's try to make the munged version return `false` when it should be `true`. This is hard given the description.
+
+    // The description says "munges into ... which is not identical."
+    // The key difference is the use of `join(' ')` which adds leading/trailing spaces,
+    // and the original `indexOf` checks for `['', selector, ''].join(' ')` which also adds spaces.
+    // This pattern ` " " + className + " " `.indexOf(` " " + selector + " " `) is a robust way to check for whole word matches.
+    // If the munging process *removes* these spaces, it can lead to incorrect matches.
+
+    // Let's test a case where a partial match would incorrectly succeed if spaces are ignored.
+    String classNameTest = "testClass testClassExtended";
+    String selectorTest = "testClass"; // This is a prefix of "testClassExtended"
+
+    // Original logic (simulated):
+    // `(['', classNameTest, ''].join(' ') )` -> " testClass testClassExtended "
+    // `(['', selectorTest, ''].join(' ') )` -> " testClass "
+    // `(" testClass testClassExtended ").indexOf(" testClass ")` -> 1 (Correctly matches the whole word)
+    boolean originalResultCorrectMatch = ( " " + classNameTest + " " ).indexOf(" " + selectorTest + " ") != -1;
+    
+    // Munged logic (simulated based on description's implication of losing spaces):
+    // `classNameTest` -> "testClass testClassExtended"
+    // `selectorTest` -> "testClass"
+    // `("testClass testClassExtended").indexOf("testClass")` -> 0.
+    // This would incorrectly match the start of "testClassExtended" if not for the fact that the original `indexOf` is checking for the *padded* selector.
+
+    // The bug report is about the *transformation* leading to a different code.
+    // The generated code is `(""+this[0].className).indexOf(""+a)!=-1`.
+    // This means the `join(' ')` and the padding `['', ..., '']` are gone.
+    // So, the munged code is effectively `className.indexOf(selector)`.
+    // We need to find a case where `className.indexOf(selector)` differs from `(" " + className + " ").indexOf(" " + selector + " ")`.
+    
+    String classNameBug = "testClass testClassExtended";
+    String selectorBug = "testClass"; // This is a prefix of "testClassExtended"
+
+    // Original code's effective behavior:
+    // Checks if " testClass " is in " testClass testClassExtended ". It is. Result: true.
+    boolean originalEffectiveResult = ( " " + classNameBug + " " ).indexOf(" " + selectorBug + " ") != -1;
+    
+    // Munged code's effective behavior:
+    // Checks if "testClass" is in "testClass testClassExtended". It is. Result: true.
+    boolean mungedEffectiveResult = classNameBug.indexOf(selectorBug) != -1;
+
+    // This is not showing a difference. The issue might be with `hasClass` itself.
+    // The original `hasClass` returns `!(... indexOf(...) == -1 )` which means `indexOf(...) != -1`.
+    // So both are checking for existence.
+
+    // Let's re-read the description carefully:
+    // "$.fn.hasClass = function(selector) { return ( this.length > 0 ? !( ( ['', this[0].className, ''].join(' ') ).indexOf( ['', selector, ''].join(' ') ) == -1 ) : false ); };"
+    // This means: `return this.length > 0 && ( ( " " + this[0].className + " " ).indexOf( " " + selector + " " ) != -1 );`
+
+    // Munged: "$.fn.hasClass=function(a){return this.length>0? (\"\"+this[0].className).indexOf(\"\"+a)!=-1:false};"
+    // This means: `return this.length > 0 && ( this[0].className.indexOf(a) != -1 );`
+
+    // The difference is `(" " + className + " ").indexOf(" " + selector + " ")` vs `className.indexOf(selector)`.
+    // The former checks for whole word matches, the latter checks for substrings.
+
+    // We need a case where `className.indexOf(selector)` is true, but `(" " + className + " ").indexOf(" " + selector + " ")` is false.
+    // This happens when `selector` is a substring of a class name, but not a whole word.
+    
+    String className = "myClass myClassExtended";
+    String selector = "myClass"; // This is a prefix of "myClassExtended"
+
+    // Original code's effective behavior:
+    // `(" " + "myClass myClassExtended" + " ").indexOf(" " + "myClass" + " ")`
+    // `(" myClass myClassExtended ").indexOf(" myClass ")` -> returns 1 (true)
+    boolean originalResult = ( " " + className + " " ).indexOf(" " + selector + " ") != -1;
+    
+    // Munged code's effective behavior:
+    // `className.indexOf(selector)`
+    // `"myClass myClassExtended".indexOf("myClass")` -> returns 0 (true)
+    boolean mungedResult = className.indexOf(selector) != -1;
+
+    // Still not showing a difference. The bug report implies the munged code is WRONG.
+    // The original code correctly checks for whole words. The munged code checks for substrings.
+    // A failure occurs if the munged code incorrectly returns `true` when the original would return `false`.
+    // This means we need a case where `className.indexOf(selector)` is true, but `(" " + className + " ").indexOf(" " + selector + " ")` is false.
+
+    String classNameExample = "someClass otherClass";
+    String selectorPrefix = "other"; // This is a substring of "otherClass" but not a whole word class name by itself.
+
+    // Original code's effective behavior:
+    // `(" " + classNameExample + " ").indexOf(" " + selectorPrefix + " ")`
+    // `(" someClass otherClass ").indexOf(" other ")` -> returns 12 (true)
+    boolean originalCorrect = ( " " + classNameExample + " " ).indexOf(" " + selectorPrefix + " ") != -1;
+    
+    // Munged code's effective behavior:
+    // `classNameExample.indexOf(selectorPrefix)`
+    // `"someClass otherClass".indexOf("other")` -> returns 12 (true)
+    boolean mungedCorrect = classNameExample.indexOf(selectorPrefix) != -1;
+    
+    // Still no difference. Let's try a selector that is a substring of a class name,
+    // but not the start of it, and not a whole word itself.
+    
+    String classNameExample2 = "classOne classTwo";
+    String selectorSubstring = "ass"; // Substring of "classOne" and "classTwo"
+
+    // Original code's effective behavior:
+    // `(" " + classNameExample2 + " ").indexOf(" " + selectorSubstring + " ")`
+    // `(" classOne classTwo ").indexOf(" ass ")` -> returns -1 (false)
+    boolean originalFalse = ( " " + classNameExample2 + " " ).indexOf(" " + selectorSubstring + " ") != -1;
+    
+    // Munged code's effective behavior:
+    // `classNameExample2.indexOf(selectorSubstring)`
+    // `"classOne classTwo".indexOf("ass")` -> returns 2 (true)
+    boolean mungedTrue = classNameExample2.indexOf(selectorSubstring) != -1;
+    
+    // This is it! The munged code incorrectly returns `true` when the original code would return `false`.
+    // The original code correctly uses `join(' ')` to pad the class name and selector with spaces,
+    // ensuring that only whole class names are matched. The munged code loses these spaces
+    // and performs a simple substring check, leading to false positives.
+    
+    String className = "classOne classTwo";
+    String selector = "ass"; // This is a substring within "classOne" and "classTwo"
+
+    // Simulate the original behavior:
+    // (['', className, ''].join(' ') ) -> " classOne classTwo "
+    // (['', selector, ''].join(' ') ) -> " ass "
+    // The indexOf(" ass ") in " classOne classTwo " is -1.
+    // So, !( -1 == -1 ) is !true which is false.
+    boolean originalResult = !( ( " " + className + " " ).indexOf(" " + selector + " ") == -1 );
+
+    // Simulate the munged behavior:
+    // ("" + className).indexOf("" + selector)
+    // "classOne classTwo".indexOf("ass") is 2.
+    // So, 2 != -1 is true.
+    boolean mungedResult = (className).indexOf(selector) != -1;
+
+    // Assert that the munged behavior is different and incorrect.
+    // The original behavior should be false, and the munged behavior should be true.
+    assertFalse("Original hasClass should return false for substring match", originalResult);
+    assertTrue("Munged hasClass incorrectly returns true for substring match", mungedResult);
+}

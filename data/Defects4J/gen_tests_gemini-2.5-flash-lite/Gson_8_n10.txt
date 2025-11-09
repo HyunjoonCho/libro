@@ -1,0 +1,147 @@
+import com.google.gson.Gson;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+// Assuming FeedItem is a class that can be serialized/deserialized by Gson
+// and that the provided JSON structure is representative.
+// For this test, we'll create a simplified FeedItem class that matches the structure.
+class FeedItem {
+    String feedItemChannel;
+    EstimatedData estimatedData;
+    HashedObjects hashedObjects;
+    boolean isDeleted;
+    int isDeletingEventually;
+    // The problematic fields that cause JNI errors in Android are likely
+    // complex objects like Locks or internal synchronization mechanisms.
+    // We'll represent them with placeholder classes or null for the test.
+    Object mutex; // Representing the problematic 'mutex' field
+    OperationSetQueue[] operationSetQueue; // Representing the problematic 'operationSetQueue'
+    SaveEvent saveEvent;
+    State state;
+    TaskQueue taskQueue; // Representing the problematic 'taskQueue'
+
+    // Inner classes to match the JSON structure
+    static class EstimatedData {
+        String feedTopic;
+        int feedComments;
+        String createdBy;
+        String feedQuestion;
+        String feedDesc;
+    }
+
+    static class HashedObjects {
+        // Empty for this example
+    }
+
+    static class OperationSetQueue {
+        // Empty for this example
+    }
+
+    static class SaveEvent {
+        Callback[] callbacks;
+        static class Callback {}
+    }
+
+    static class State {
+        String className;
+        long createdAt;
+        boolean isComplete;
+        String objectId;
+        ServerData serverData;
+        long updatedAt;
+        static class ServerData {
+            String feedTopic;
+            String createdBy;
+            int feedComments;
+            String feedQuestion;
+            String feedDesc;
+        }
+    }
+
+    static class TaskQueue {
+        Lock lock;
+        static class Lock {
+            Sync sync;
+            static class Sync {
+                int state;
+            }
+        }
+    }
+}
+
+
+public class GsonAndroidJniErrorTest {
+
+    @Test
+    public void testJniErrorWithComplexObjectFields() {
+        Gson gson = new Gson();
+        String jsonObj = "{\n" +
+                "   \"feedItemChannel\":\"mdldsrgXN1\",\n" +
+                "   \"estimatedData\":{\n" +
+                "      \"feedTopic\":\"Testing\",\n" +
+                "      \"feedComments\":2,\n" +
+                "      \"createdBy\":\"KXTQtpfBSW\",\n" +
+                "      \"feedQuestion\":\"Test Question \",\n" +
+                "      \"feedDesc\":\"Test \"\n" +
+                "   },\n" +
+                "   \"hashedObjects\":{ },\n" +
+                "   \"isDeleted\":false,\n" +
+                "   \"isDeletingEventually\":0,\n" +
+                "   \"mutex\":{ },\n" + // This field, or similar ones like taskQueue.lock, are likely the cause
+                "   \"operationSetQueue\":[ { } ],\n" + // This field, or similar ones like taskQueue.lock, are likely the cause
+                "   \"saveEvent\":{\n" +
+                "      \"callbacks\":[ ]\n" +
+                "   },\n" +
+                "   \"state\":{\n" +
+                "      \"className\":\"FeedItem\",\n" +
+                "      \"createdAt\":1458798818385,\n" +
+                "      \"isComplete\":true,\n" +
+                "      \"objectId\":\"mdldsrgXN1\",\n" +
+                "      \"serverData\":{\n" +
+                "         \"feedTopic\":\"TestTopic\",\n" +
+                "         \"createdBy\":\"KXTQtpfBSW\",\n" +
+                "         \"feedComments\":2,\n" +
+                "         \"feedQuestion\":\"Test Question \",\n" +
+                "         \"feedDesc\":\"Test \"\n" +
+                "      },\n" +
+                "      \"updatedAt\":1458803553636\n" +
+                "   },\n" +
+                "   \"taskQueue\":{\n" +
+                "      \"lock\":{\n" +
+                "         \"sync\":{\n" +
+                "            \"state\":0\n" +
+                "         }\n" +
+                "      }\n" +
+                "   }\n" +
+                "}";
+
+        // The assertion here is not about the correctness of the deserialized object,
+        // but rather that the deserialization process itself does not crash with a JNI error.
+        // If the GSON library has a bug related to deserializing certain complex types
+        // on Android (like internal locks or concurrency primitives), this test
+        // will fail with the described JNI error.
+        // If the test passes, it means the specific JSON structure and GSON version
+        // do not trigger the JNI error in the test environment.
+        // The goal is to reproduce the *failure*, so if this test *fails* with the JNI error,
+        // it has successfully reproduced the bug.
+        try {
+            FeedItem item = gson.fromJson(jsonObj, FeedItem.class);
+            assertNotNull("Deserialization should not result in a null object", item);
+            // Optionally, add assertions to check some fields if you expect specific values
+            // assertEquals("mdldsrgXN1", item.feedItemChannel);
+            // assertNotNull(item.estimatedData);
+            // assertEquals("Testing", item.estimatedData.feedTopic);
+        } catch (Exception e) {
+            // If any exception occurs during fromJson, especially a RuntimeException
+            // originating from native code (like the JNI error), this test will catch it.
+            // The original bug report indicates a "JNI DETECTED AN ERROR IN APPLICATION",
+            // which would likely manifest as a RuntimeException or similar.
+            // We are not asserting that an exception *should* be thrown, but if one is,
+            // and it's the type described, then the failure is reproduced.
+            // For a true test of reproduction, we'd expect the test runner to fail
+            // when the JNI error occurs. This try-catch is more for demonstration
+            // within a runnable test method structure.
+            fail("Deserialization failed with an unexpected exception: " + e.getMessage());
+        }
+    }
+}

@@ -1,0 +1,58 @@
+public void testZipArchiveInputStreamCompressedSizeUnknown() throws IOException {
+    ZipArchiveEntry entry = new ZipArchiveEntry("test.txt");
+    entry.setMethod(ZipMethod.BZIP2.getCode());
+    entry.setSize(10); // Original size
+    entry.setCompressedSize(ArchiveEntry.SIZE_UNKNOWN); // Compressed size unknown
+
+    byte[] data = {1, 2, 3, 4, 5};
+    ByteArrayInputStream bis = new ByteArrayInputStream(data);
+    ZipArchiveInputStream zipInputStream = new ZipArchiveInputStream(bis);
+
+    // Manually create a ZipArchive object to simulate the state before getNextZipEntry
+    // This is a bit of a hack to get to the specific part of the code.
+    // In a real scenario, this would be triggered by reading a zip file.
+    try {
+        // The actual test would involve creating a ZipArchiveEntry object and
+        // passing it to a method that uses it. Since we can't directly instantiate
+        // the internal `current` object, we simulate the condition where
+        // `entry.getCompressedSize()` returns `SIZE_UNKNOWN`.
+        // The bug report implies that `current.in` will be null if compressed size is unknown
+        // for certain compression methods.
+        // We will attempt to access `current.in` indirectly by calling a method that uses it.
+        // Since we cannot directly test the `if` block, we test the consequence.
+
+        // Create a zip archive with an entry that has UNKNOWN compressed size
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ZipArchiveOutputStream zaos = new ZipArchiveOutputStream(baos);
+        zaos.putArchiveEntry(entry);
+        zaos.write(data);
+        zaos.closeArchiveEntry();
+        zaos.finish();
+
+        ByteArrayInputStream zipInput = new ByteArrayInputStream(baos.toByteArray());
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(zipInput);
+
+        // This call should ideally throw an exception or handle the null current.in
+        // if the bug is present and accessible through public API.
+        // The bug report indicates a NullPointerException would occur later.
+        // We will try to read from the stream, which should trigger the problematic code path.
+        ZipArchiveEntry retrievedEntry = zis.getNextZipEntry();
+        assertNotNull(retrievedEntry);
+
+        // Attempting to read from the stream should cause a NullPointerException if current.in is null
+        // and not handled.
+        byte[] buffer = new byte[10];
+        int bytesRead = zis.read(buffer, 0, buffer.length);
+        // If we reach here without a NPE, the bug might have been fixed or the test setup is incorrect.
+        // If a NPE is thrown, this test will fail as expected.
+        // If the bug fix is to throw an IllegalArgumentException, this test should be adjusted.
+
+    } catch (NullPointerException e) {
+        // This is the expected outcome if the bug is present.
+        assertTrue(true); // Test passes if NullPointerException occurs
+    } catch (IOException e) {
+        // If another IOException occurs, it might be related or unrelated.
+        // For the purpose of this specific bug, we are looking for NPE.
+        fail("Expected NullPointerException but got " + e.getClass().getName());
+    }
+}

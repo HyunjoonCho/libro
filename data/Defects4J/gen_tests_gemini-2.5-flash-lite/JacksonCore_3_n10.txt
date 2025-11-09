@@ -1,0 +1,29 @@
+public void testIssueUTF8StreamJsonParser() throws IOException {
+    byte[] data = {(byte)0x7b, (byte)0x22, (byte)0x61,(byte)0x22,(byte)0x3a,(byte)0x31,(byte)0x7d}; // {"a":1}
+    IOContext ctxt = new IOContext(null, null, false);
+    ObjectCodec codec = null;
+    BytesToNameCanonicalizer sym = BytesToNameCanonicalizer.createRoot();
+    ByteArrayInputStream in = new ByteArrayInputStream(data);
+    UTF8StreamJsonParser parser = new UTF8StreamJsonParser(ctxt, 0, in, codec, sym, data, 10, data.length, false);
+    try {
+        while (parser.nextToken() != null) {}
+    } catch (Exception e) {
+        // We expect an exception to be thrown due to the incorrect column calculation
+        assertTrue(e.getMessage().contains("column"));
+        // Check if the column number is reasonable given the start offset
+        String message = e.getMessage();
+        int colIndex = message.indexOf("column");
+        int startIndex = message.indexOf("at offset ");
+        int endIndex = message.indexOf(" char");
+        if (colIndex > 0 && startIndex > 0 && endIndex > 0) {
+            int reportedColumn = Integer.parseInt(message.substring(colIndex + 7, endIndex).trim());
+            int offset = Integer.parseInt(message.substring(startIndex + 10, colIndex - 2).trim());
+            // With the bug, _currInputRowStart is 0, so col = offset - 0 + 1
+            // With the fix, _currInputRowStart = start, so col = offset - start + 1
+            // We expect the reported column to be offset - start + 1
+            assertEquals(offset - 10 + 1, reportedColumn);
+        } else {
+            fail("Could not parse exception message to verify column calculation.");
+        }
+    }
+}

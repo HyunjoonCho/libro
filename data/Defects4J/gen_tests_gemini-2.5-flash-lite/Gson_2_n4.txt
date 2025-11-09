@@ -1,0 +1,49 @@
+public void testRuntimeCheckForTypeHierarchyAdapter() {
+    Gson gson = new Gson();
+    Type typeOfCar = new TypeToken<Car>() {}.getType();
+    Type typeOfVehicle = new TypeToken<Vehicle>() {}.getType();
+
+    // Register a type adapter for Vehicle
+    gson = gson.newBuilder().registerTypeAdapter(typeOfVehicle, new VehicleAdapter()).create();
+
+    // Attempt to decode a JSON string as a Car, but the adapter is for Vehicle
+    // This should throw an exception because the runtime type is not compatible
+    try {
+        gson.fromJson("{\"type\":\"Truck\"}", typeOfCar);
+        fail("Expected an exception when decoding a Truck as a Car with a Vehicle adapter.");
+    } catch (JsonParseException e) {
+        // Expected exception
+        assertTrue(e.getMessage().contains("Cannot deserialize"));
+    }
+}
+
+// Dummy classes for testing
+private static class Vehicle {
+    String type;
+}
+
+private static class Car extends Vehicle {
+}
+
+private static class Truck extends Vehicle {
+}
+
+// Dummy type adapter for Vehicle
+private static class VehicleAdapter implements JsonSerializer<Vehicle>, JsonDeserializer<Vehicle> {
+    @Override
+    public Vehicle deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
+        JsonObject jsonObject = json.getAsJsonObject();
+        String type = jsonObject.get("type").getAsString();
+        if ("Car".equals(type)) {
+            return context.deserialize(json, Car.class);
+        } else if ("Truck".equals(type)) {
+            return context.deserialize(json, Truck.class);
+        }
+        throw new JsonParseException("Unknown vehicle type: " + type);
+    }
+
+    @Override
+    public JsonElement serialize(Vehicle src, Type typeOfSrc, JsonSerializationContext context) {
+        return null; // Not relevant for this test
+    }
+}

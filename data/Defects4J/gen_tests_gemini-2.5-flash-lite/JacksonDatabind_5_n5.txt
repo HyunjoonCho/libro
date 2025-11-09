@@ -1,0 +1,95 @@
+public void testMixinAnnotationsLostWithHierarchy() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.setMixInAnnotation(Person.class, PersonMixin.class);
+    // Workaround, explicitly adding parent mixin
+    module.setMixInAnnotation(Contact.class, ContactMixin.class);
+    mapper.registerModule(module);
+
+    PersonImpl person = new PersonImpl();
+    // Set a value for city to ensure it's not null and can be serialized
+    // Assuming PersonImpl has a way to set city, or we mock it.
+    // For the purpose of the test, we'll assume a default implementation or mock.
+    // If PersonImpl doesn't have a concrete setCity, this test might need adjustment
+    // based on how ContactImpl actually works.
+    // Let's assume ContactImpl has a setCity method for demonstration.
+    // If not, we might need to use a spy or a more complex setup.
+
+    // Mocking the behavior for testing the mixin itself
+    // Create a mock that implements Contact and Person
+    // This is a bit tricky as we are testing mixins on concrete classes.
+    // Let's try to create a concrete instance and see if the serialization works with the workaround.
+
+    // If PersonImpl is abstract or doesn't have a default constructor, this might fail.
+    // Assuming PersonImpl has a default constructor and getCity() returns a non-null value.
+    // For the sake of reproducing the bug, we need to ensure the serialization *fails* without the workaround.
+
+    // Test without the workaround (expected to fail serialization of 'city')
+    ObjectMapper mapperWithoutWorkaround = new ObjectMapper();
+    SimpleModule moduleWithoutWorkaround = new SimpleModule();
+    moduleWithoutWorkaround.setMixInAnnotation(Person.class, PersonMixin.class);
+    mapperWithoutWorkaround.registerModule(moduleWithoutWorkaround);
+
+    // Create a dummy object that would use the mixin hierarchy
+    // We need a concrete object that implements Person and Contact.
+    // Let's create a simple anonymous class for testing purposes.
+    PersonImpl testObject = new PersonImpl() {
+        @Override
+        public String getCity() {
+            return "TestCity"; // Ensure there's a value to serialize
+        }
+    };
+
+    // This serialization should FAIL to include "city" when the mixin hierarchy is involved without the explicit parent mixin registration.
+    String jsonWithoutWorkaround = mapperWithoutWorkaround.writeValueAsString(testObject);
+
+    // With the workaround, the serialization should SUCCEED in including "city".
+    String jsonWithWorkaround = mapper.writeValueAsString(testObject);
+
+    // Assert that 'city' is NOT present in the JSON without the workaround
+    assertFalse("City should not be serialized without explicit parent mixin registration", jsonWithoutWorkaround.contains("\"city\""));
+
+    // Assert that 'city' IS present in the JSON with the workaround
+    assertTrue("City should be serialized with explicit parent mixin registration", jsonWithWorkaround.contains("\"city\""));
+    assertTrue("City value should be present in the JSON with workaround", jsonWithWorkaround.contains("\"city\":\"TestCity\""));
+}
+
+// --- Helper classes and interfaces as described in the bug report ---
+// These need to be accessible within the test class or as static inner classes.
+
+interface Contact {
+    String getCity();
+}
+
+// A concrete implementation for testing
+class ContactImpl implements Contact {
+    private String city;
+
+    public void setCity(String city) {
+        this.city = city;
+    }
+
+    @Override
+    public String getCity() {
+        return this.city;
+    }
+}
+
+// Mixin for Contact
+class ContactMixin implements Contact {
+    @JsonProperty
+    public String getCity() {
+        return null;
+    }
+}
+
+interface Person extends Contact {}
+
+// Concrete implementation of Person
+class PersonImpl extends ContactImpl implements Person {}
+
+// Mixin for Person
+class PersonMixin extends ContactMixin implements Person {
+    // No additional methods needed here for this specific bug,
+    // as the issue is with the hierarchy and annotation inheritance.
+}

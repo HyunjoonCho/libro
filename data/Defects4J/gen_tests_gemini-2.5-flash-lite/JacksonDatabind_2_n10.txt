@@ -1,0 +1,222 @@
+public void testEmbeddedObjectInTree() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    // Assuming ListAttribute and X classes are defined as in the bug report
+    // and ListAttributeSerializer is registered with the ObjectMapper
+    
+    // Create a sample ListAttribute object
+    ListAttribute<String> listAttribute = new ListAttribute<>();
+    listAttribute.setItems(Arrays.asList("item1", "item2"));
+    listAttribute.setItemJsonKey("stringList");
+    
+    // Create a wrapper object X
+    X<String> wrapper = new X<>();
+    wrapper.s = "some string";
+    wrapper.items = Collections.singletonList(listAttribute);
+    
+    // Configure ObjectMapper to use the custom serializer
+    SimpleModule module = new SimpleModule();
+    module.addSerializer(ListAttribute.class, new ListAttributeSerializer());
+    mapper.registerModule(module);
+
+    // Serialize to a tree
+    JsonNode tree = mapper.valueToTree(wrapper);
+
+    // Assert that the 'items' field is not an EmbeddedObjectNode
+    // Instead, it should be an ArrayNode containing serialized objects
+    JsonNode itemsNode = tree.get("items");
+    assertNotNull(itemsNode);
+    assertFalse(itemsNode.isArray()); // This assertion will fail based on the bug description
+    // The bug is that itemsNode.get(0) is an EmbeddedObjectNode instead of an ObjectNode
+
+    // To reproduce the failure, we expect the first item in the 'items' array to be an EmbeddedObjectNode
+    // This is how the bug manifests: the list is serialized as a VALUE_EMBEDDED_OBJECT
+    assertTrue(itemsNode.get(0) instanceof com.fasterxml.jackson.databind.node.ObjectNode); // This assertion would be for the *fixed* behavior
+    // The *failing* behavior would be if itemsNode.get(0) were an EmbeddedObjectNode, which is not directly assertable as a type in JsonNode.
+    // We can infer it by checking its structure or by knowing it's not what we expect.
+    // A more direct way to show the failure is to check the structure that *should* be there but isn't.
+    
+    // Let's try to assert the expected structure that is *not* present due to the bug.
+    // The bug implies that `itemsNode.get(0)` is the ArrayList itself, not its contents serialized.
+    // We expect an ObjectNode representing the serialized ListAttribute.
+    JsonNode firstItem = itemsNode.get(0);
+    assertNotNull(firstItem);
+    // The bug description implies that the entire ListAttribute object is embedded directly,
+    // not serialized into its fields ("itemType", "items").
+    // Therefore, we expect the structure within the "items" array to reflect the ListAttribute's fields.
+    // If it's an EmbeddedObjectNode, it won't have these fields directly.
+    // We are testing the *failure*, so we expect the undesired behavior.
+    // The description says "the entire list ends up as a VALUE_EMBEDDED_OBJECT: the ArrayList itself."
+    // This means the `items` field of the *outer* X object contains the ArrayList, and *that ArrayList's elements* are the problem.
+    // The ListAttributeSerializer writes `jgen.writeObjectField("items", value.getItems());`
+    // This line is the culprit when serializing to tree.
+    
+    // Let's serialize and then check the resulting nodes.
+    // The `valueToTree` method should produce a tree where `tree.get("items").get(0)` is an ObjectNode
+    // containing "itemType" and "items". The bug is that it becomes an EmbeddedObjectNode.
+    
+    // To assert the failure, we'd check for the *absence* of the expected structure or the *presence* of the unexpected one.
+    // Since EmbeddedObjectNode is internal, let's check the structure that *should* be there.
+    
+    // The bug is that the `items` field within the `ListAttribute` is serialized as an EmbeddedObjectNode.
+    // Let's re-evaluate the structure.
+    // X contains a List<ListAttribute>.
+    // The ListAttributeSerializer serializes ListAttribute.
+    // Inside ListAttributeSerializer, `jgen.writeObjectField("items", value.getItems());` is called.
+    // If `value.getItems()` returns a List<String>, and this is serialized to tree, it should become an array of strings.
+    // The bug report implies `jgen.writeObjectField("items", value.getItems());` results in `VALUE_EMBEDDED_OBJECT` for the *entire ListAttribute* object itself, not just its `items` field.
+    // "When I serialize to a tree, the entire list ends up as a VALUE_EMBEDDED_OBJECT: the ArrayList itself."
+    // This means `tree.get("items").get(0)` should be an EmbeddedObjectNode *representing the ListAttribute*.
+    
+    // Let's try to construct a case that clearly shows this.
+    // The provided serializer is for `ListAttribute`.
+    // The `X` class has `List<T> items`. If `T` is `ListAttribute`, then `X` contains `List<ListAttribute>`.
+    // The `ListAttributeSerializer` is used to serialize `ListAttribute`.
+    // The `jgen.writeObjectField("items", value.getItems());` line is key. If `value.getItems()` is a `List<String>`, it should be serialized as an array.
+    // The bug report says "the entire list ends up as a VALUE_EMBEDDED_OBJECT: the ArrayList itself."
+    // This implies the `ListAttribute` object itself is being treated as an embedded object when it shouldn't be.
+    
+    // Let's assume the `X` class is actually:
+    // class X {
+    //     String s;
+    //     List<ListAttribute> listAttributes;
+    // }
+    // And the serializer `ListAttributeSerializer` is registered for `ListAttribute`.
+    
+    // Re-creating the scenario to match the description more closely:
+    // We are serializing an object that *contains* a ListAttribute.
+    // The ListAttributeSerializer writes `writeObjectField("items", value.getItems())`.
+    // If `value.getItems()` returns a `List<String>`, and the target is a tree, this `writeObjectField`
+    // call for the List<String> field might be the source of the embedded object.
+
+    // Let's create a simplified scenario focusing on ListAttribute and its serialization to tree.
+    ListAttribute<String> listAttr = new ListAttribute<>();
+    listAttr.setItemJsonKey("myStrings");
+    listAttr.setItems(Arrays.asList("hello", "world"));
+
+    // Use the mapper with the serializer
+    ObjectMapper treeMapper = new ObjectMapper();
+    SimpleModule moduleForTree = new SimpleModule();
+    moduleForTree.addSerializer(ListAttribute.class, new ListAttributeSerializer());
+    treeMapper.registerModule(moduleForTree);
+
+    // Directly serialize ListAttribute to a JsonNode tree
+    JsonNode listAttrTree = treeMapper.valueToTree(listAttr);
+
+    // According to the bug, the 'items' field should be serialized as an array of strings.
+    // The bug states "the entire list ends up as a VALUE_EMBEDDED_OBJECT: the ArrayList itself."
+    // This means `listAttrTree.get("items")` should be an ObjectNode representing the ArrayList, not an ArrayNode of strings.
+    // However, the serializer writes `writeObjectField("items", value.getItems())`. If `value.getItems()` is `List<String>`,
+    // `writeObjectField` should serialize it as an array.
+    // The description might be slightly misleading, or the context of `X` is important.
+    // "When I serialize to a tree, the entire list ends up as a VALUE_EMBEDDED_OBJECT: the ArrayList itself."
+    // This implies the `ListAttribute` object itself is being embedded.
+    // Let's assume the `X` class has a field `List<ListAttribute> items`.
+    // And `ListAttributeSerializer` serializes `ListAttribute`.
+    
+    // Let's simulate the structure described.
+    class Container {
+        public String s = "container string";
+        public List<ListAttribute<String>> items = new ArrayList<>();
+    }
+    
+    Container container = new Container();
+    container.items.add(listAttr); // Add the ListAttribute created earlier
+
+    // Now serialize the Container object to a tree using the mapper with the ListAttributeSerializer.
+    JsonNode containerTree = treeMapper.valueToTree(container);
+
+    // The bug is that `containerTree.get("items").get(0)` (which represents the ListAttribute)
+    // is an EmbeddedObjectNode, not an ObjectNode with "itemType" and "items" fields.
+    
+    JsonNode firstItemNode = containerTree.get("items").get(0);
+    
+    // Assert the failure: the first item should NOT be an ObjectNode with expected fields.
+    // Instead, it's an EmbeddedObjectNode. We can't directly assert `instanceof EmbeddedObjectNode` easily.
+    // We assert what *should* be there and expect it to fail.
+    
+    // Assert the structure that *should* be present if it were properly serialized into JsonNodes.
+    // This assertion is expected to FAIL due to the bug.
+    assertNotNull(firstItemNode);
+    assertTrue("Expected an ObjectNode for ListAttribute, but got something else.", firstItemNode.isObject()); // This should pass if it's an ObjectNode
+    
+    // Now check for the fields that *should* be there if it were a proper ObjectNode.
+    // If it's an EmbeddedObjectNode, these fields won't be directly accessible or won't exist.
+    // The bug description implies the `ListAttribute` object itself is embedded.
+    // So, `firstItemNode` should represent the `ListAttribute` object.
+    
+    // Let's check for the fields defined in ListAttributeSerializer.
+    // If `firstItemNode` is an ObjectNode, it will have these fields.
+    // If it's an EmbeddedObjectNode, these might not be directly available or might be represented differently.
+    // The bug implies `firstItemNode` is the ArrayList itself, which is incorrect.
+    // The bug says "the entire list ends up as a VALUE_EMBEDDED_OBJECT: the ArrayList itself."
+    // This means `listAttr` object is treated as an embedded object.
+    
+    // The test should assert the *expected* behavior, which will fail due to the bug.
+    // Expected: `firstItemNode` is an ObjectNode with fields "itemType" and "items".
+    
+    assertNotNull(firstItemNode.get("itemType"));
+    assertEquals("myStrings", firstItemNode.get("itemType").asText());
+    
+    // The second assertion is where the failure will likely manifest.
+    // The "items" field within the embedded ListAttribute should be an ArrayNode of strings.
+    // If it's an EmbeddedObjectNode representing the ListAttribute, its "items" field
+    // might not be directly accessible as an ArrayNode.
+    JsonNode nestedItemsNode = firstItemNode.get("items");
+    assertNotNull(nestedItemsNode);
+    assertTrue("Expected nested 'items' to be an ArrayNode, but it was not.", nestedItemsNode.isArray());
+    assertEquals(2, nestedItemsNode.size());
+    assertEquals("hello", nestedItemsNode.get(0).asText());
+    assertEquals("world", nestedItemsNode.get(1).asText());
+    
+    // The failure occurs because `treeMapper.valueToTree(container)` results in `containerTree.get("items").get(0)`
+    // being an `EmbeddedObjectNode` instead of an `ObjectNode` that correctly serializes the `ListAttribute`.
+    // The assertions above check for the *correct* serialization. When these assertions fail, the bug is reproduced.
+}
+
+// Dummy classes to make the test compilable, assuming they exist as per the bug report.
+// In a real test suite, these would be in separate files or imported.
+static class ListAttribute<T> {
+    private String itemJsonKey;
+    private List<T> items;
+
+    public String getItemJsonKey() {
+        return itemJsonKey;
+    }
+
+    public void setItemJsonKey(String itemJsonKey) {
+        this.itemJsonKey = itemJsonKey;
+    }
+
+    public List<T> getItems() {
+        return items;
+    }
+
+    public void setItems(List<T> items) {
+        this.items = items;
+    }
+}
+
+static class ListAttributeSerializer extends JsonSerializer<ListAttribute> {
+    @Override
+    public void serialize(ListAttribute value, JsonGenerator jgen,
+                          SerializerProvider provider) throws IOException {
+        jgen.writeStartObject();
+        jgen.writeStringField("itemType", value.getItemJsonKey());
+        jgen.writeObjectField("items", value.getItems()); // This is the problematic line when serializing to tree
+        jgen.writeEndObject();
+    }
+
+    @Override
+    public void serializeWithType(ListAttribute value, JsonGenerator jgen, SerializerProvider provider, TypeSerializer typeSer) throws IOException {
+        typeSer.writeTypePrefixForObject(value, jgen);
+        jgen.writeStringField("itemType", value.getItemJsonKey());
+        jgen.writeObjectField("items", value.getItems());
+        typeSer.writeTypeSuffixForObject(value, jgen);
+    }
+}
+
+// Dummy X class if needed, though the Container class above simulates the structure better for testing the ListAttribute serialization.
+// static class X<T> {
+//     String s;
+//     List<T> items;
+// }

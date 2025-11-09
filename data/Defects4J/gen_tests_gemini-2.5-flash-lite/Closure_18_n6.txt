@@ -1,0 +1,93 @@
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.DependencyOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class ClosureCompilerDependencyTest {
+
+    @Test
+    public void testDependencySortingWithClosurePassFalse() {
+        Compiler compiler = new Compiler();
+        CompilerOptions compilerOptions = new CompilerOptions();
+        compilerOptions.setClosurePass(false); // Prevent goog.require/goog.provide removal
+
+        DependencyOptions dependencyOptions = new DependencyOptions();
+        dependencyOptions.setDependencySorting(true);
+        compilerOptions.setDependencyOptions(dependencyOptions);
+
+        // Example JavaScript files with dependencies
+        SourceFile fileA = SourceFile.fromCode("a.js", "var a = 1;");
+        SourceFile fileB = SourceFile.fromCode("b.js", "goog.require('a'); var b = 2;");
+        SourceFile fileC = SourceFile.fromCode("c.js", "goog.provide('a'); var c = 3;");
+
+        List<SourceFile> inputs = new ArrayList<>();
+        inputs.add(fileA);
+        inputs.add(fileB);
+        inputs.add(fileC);
+
+        // Compile the code
+        compiler.compile(SourceFile.NO_TRANSFORMS, inputs.toArray(new SourceFile[0]), compilerOptions);
+
+        // Get the compiled code
+        String compiledCode = compiler.toSource();
+
+        // Assert that the files are not sorted correctly when closurePass is false
+        // The exact order might depend on the compiler's internal processing,
+        // but the key is that it *should* be sorted if dependency sorting is enabled.
+        // If closurePass is false, the expected behavior is that they are NOT sorted
+        // according to dependencies.
+        // In the buggy version, they would be output in the order they were provided,
+        // or some other non-dependent order.
+        // The test should verify this *incorrect* behavior.
+
+        // A simple check: if closurePass is false, and dependency sorting is true,
+        // the files are NOT guaranteed to be in dependency order.
+        // The bug report indicates that dependency sorting *stops working* entirely.
+        // So, we expect the output to *not* reflect the correct dependency order.
+
+        // Let's assume a correct dependency order would be c.js, a.js, b.js
+        // (because c provides 'a', and b requires 'a').
+        // If dependency sorting is broken with closurePass=false, the output
+        // will likely not follow this order.
+
+        // This assertion is tricky without knowing the exact non-dependent output.
+        // A more robust test would check the *absence* of dependency sorting.
+        // For instance, if fileB appears before fileC, it's clearly not sorted.
+        assertTrue("Dependency sorting should be broken when closurePass is false.",
+                   compiledCode.indexOf("var a = 1;") > compiledCode.indexOf("var c = 3;") ||
+                   compiledCode.indexOf("var b = 2;") < compiledCode.indexOf("var a = 1;") ||
+                   compiledCode.indexOf("var b = 2;") < compiledCode.indexOf("var c = 3;"));
+
+        // Alternatively, if we know closurePass=true *does* sort correctly,
+        // we can compare the output. However, the bug is specifically about
+        // closurePass=false.
+
+        // Let's try to assert that the order is NOT the correct dependent order.
+        // Correct order: c.js, a.js, b.js (or at least a.js before b.js, and c.js before a.js if c provides a)
+        // The bug implies that dependency sorting is *completely ignored*.
+        // So, the order might just be the input order: a.js, b.js, c.js
+        // or some other arbitrary order.
+
+        // The most direct way to reproduce the *failure* is to show that
+        // dependency sorting *didn't happen*.
+        // If the files are concatenated in the input order (a, b, c), that's evidence.
+        // If fileB appears before fileC, that's evidence.
+        // If fileB appears before fileA, that's evidence.
+
+        // Let's check for a specific incorrect ordering that would happen if sorting failed.
+        // If fileB comes before fileC, sorting failed.
+        // If fileB comes before fileA, sorting failed.
+        assertTrue("File B should not appear before its dependencies (A and C) if sorting worked.",
+                   compiledCode.indexOf("var b = 2;") > compiledCode.indexOf("var a = 1;") &&
+                   compiledCode.indexOf("var b = 2;") > compiledCode.indexOf("var c = 3;"));
+        // This assertion checks that the *correct* order is NOT present.
+        // If the bug is that sorting is *disabled*, then this assertion should pass.
+    }
+}

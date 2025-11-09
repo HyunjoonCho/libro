@@ -1,0 +1,94 @@
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import org.junit.Test;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+public class JsonDeserializeTest {
+
+    public interface MyCustomIdInterface {
+        UUID getId();
+    }
+
+    public static class Foo implements MyCustomIdInterface {
+        private UUID id;
+        private String property;
+
+        public UUID getId() {
+            return id;
+        }
+
+        public void setId(UUID id) {
+            this.id = id;
+        }
+
+        public String getProperty() {
+            return property;
+        }
+
+        public void setProperty(String property) {
+            this.property = property;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Foo foo = (Foo) o;
+            return java.util.Objects.equals(id, foo.id) &&
+                    java.util.Objects.equals(property, foo.property);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(id, property);
+        }
+    }
+
+    // Custom HashMap that deserializes the JSON structure
+    public static class MyHashMap<K, V extends MyCustomIdInterface> extends HashMap<K, V> {
+        // This method is called by Jackson to deserialize the list of objects
+        public void setEntries(java.util.List<V> entries) {
+            for (V entry : entries) {
+                put((K) entry.getId(), entry);
+            }
+        }
+    }
+
+    public static class Wrapper {
+        // The problematic annotation
+        @JsonDeserialize(as = MyHashMap.class)
+        private Map<UUID, Foo> something;
+
+        public Map<UUID, Foo> getSomething() {
+            return something;
+        }
+
+        public void setSomething(Map<UUID, Foo> something) {
+            this.something = something;
+        }
+    }
+
+    @Test
+    public void testTypeSpecializationForMaps() throws Exception {
+        String json = "{\"something\": [{\"id\": \"a7f7f7f7-f7f7-f7f7-f7f7-f7f7f7f7f7f7\", \"property\": \"value\"}]}";
+        UUID expectedUUID = UUID.fromString("a7f7f7f7-f7f7-f7f7-f7f7-f7f7f7f7f7f7");
+
+        com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+
+        Wrapper wrapper = objectMapper.readValue(json, Wrapper.class);
+
+        assertNotNull(wrapper);
+        assertNotNull(wrapper.getSomething());
+        assertEquals(1, wrapper.getSomething().size());
+
+        Foo foo = wrapper.getSomething().get(expectedUUID);
+        assertNotNull(foo);
+        assertEquals(expectedUUID, foo.getId());
+        assertEquals("value", foo.getProperty());
+    }
+}

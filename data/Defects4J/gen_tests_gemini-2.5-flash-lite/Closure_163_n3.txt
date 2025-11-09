@@ -1,0 +1,38 @@
+public void testVarCheckCrash() {
+    String jsCode = "var jQuery = function(selector) { return { length: 1 }; };\n" +
+                    "var core = {};\n" +
+                    "core.jquery = jQuery;\n" +
+                    "equal( jQuery(\" <div/> \").length, 1, \"Make sure whitespace is trimmed.\" );";
+    CompilerOptions options = new CompilerOptions();
+    options.setClosurePass(true);
+    options.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT_2020);
+    options.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT_2020);
+    options.setPrettyPrint(true);
+    options.setModuleResolutionMode(ModuleResolutionMode.BROWSER);
+    options.setDebug(true);
+    options.setModuleActivationMode(ModuleActivationMode.LOAD);
+    options.setModuleNames(Arrays.asList("jquery", "core"));
+    options.setModuleOutputPathPrefix("mod_");
+
+    SourceFile jqueryModule = SourceFile.fromCode("jquery", "var jQuery = function(selector) { return { length: 1 }; };");
+    SourceFile coreModule = SourceFile.fromCode("core", "goog.provide('core');\n" +
+                                                    "goog.require('jquery');\n" +
+                                                    "var equal = function(a, b, msg) { if (a !== b) throw new Error(msg); };\n" +
+                                                    "equal( jQuery(\" <div/> \").length, 1, \"Make sure whitespace is trimmed.\" );");
+
+    Compiler compiler = new Compiler();
+    compiler.compile(new AbstractCompiler.ReadConfiguration() {
+        @Override
+        public SourceFile[] getSourceFiles() {
+            return new SourceFile[]{jqueryModule, coreModule};
+        }
+
+        @Override
+        public String getJsRoot() {
+            return "";
+        }
+    }, new CompilerInput(coreModule), options);
+
+    assertEquals(1, compiler.getErrors().length); // Expecting VarCheck error
+    assertTrue(compiler.getErrors()[0].getMessage().contains("Unexpected variable jQuery"));
+}

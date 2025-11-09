@@ -1,0 +1,52 @@
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.fail;
+
+public class ClosureCompilerBugReproducer {
+
+    @Test
+    public void testInterfaceWithMultipleUnknownExtendsCrashesCompiler() {
+        String jsCode = "/**\n" +
+                        " * @interface\n" +
+                        " * @extends {unknown_1}\n" +
+                        " * @extends {unknown_2}\n" +
+                        " */\n" +
+                        "function Foo() {}";
+
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setPrettyPrint(true);
+        options.setVariableRenaming(CompilerOptions.VariableRenaming.OFF);
+        options.setRenamingPolicy(CompilerOptions.RenamingPolicy.OFF);
+        options.setClosurePass(true); // Enable closure checks
+
+        SourceFile sourceFile = SourceFile.fromCode("test.js", jsCode);
+
+        try {
+            compiler.compile(sourceFile, SourceFile.fromCode("empty.js", ""), options);
+            // If compile succeeds, the bug is not reproduced.
+            fail("Compiler should have thrown an exception for invalid @extends usage.");
+        } catch (RuntimeException e) {
+            // We expect a NullPointerException or similar runtime error from the compiler
+            // when it encounters this invalid code structure.
+            // The exact exception type might vary, but it should indicate a failure.
+            // We can check the error message for more specific validation if needed.
+            assertTrue(e.getMessage().contains("NullPointerException") || e.getMessage().contains("CheckInterfaceConflicts"));
+        }
+    }
+
+    // Helper methods for assertion, assuming they are available in the test class context
+    private void assertEquals(Object expected, Object actual) {
+        if (!expected.equals(actual)) {
+            throw new AssertionError("Expected: " + expected + ", Actual: " + actual);
+        }
+    }
+
+    private void assertTrue(boolean condition) {
+        if (!condition) {
+            throw new AssertionError("Assertion failed: condition is false.");
+        }
+    }
+}

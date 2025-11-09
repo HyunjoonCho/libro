@@ -1,0 +1,82 @@
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.ArchiveOutputStream;
+import org.apache.commons.compress.archivers.ArchiveStreamFactory;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.junit.Test;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+public class TarArchiveOutputStreamTest {
+
+    @Test
+    public void testGetBytesWrittenReturnsNonZeroValue() throws IOException {
+        // Create a dummy file to archive
+        File dummyFile = File.createTempFile("test", ".txt");
+        dummyFile.deleteOnExit();
+        try (FileOutputStream fos = new FileOutputStream(dummyFile)) {
+            fos.write("This is a test file.".getBytes());
+        }
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ArchiveOutputStream tarOut = null;
+        FileInputStream fis = null;
+
+        try {
+            tarOut = new ArchiveStreamFactory().createArchiveOutputStream(ArchiveStreamFactory.TAR, baos);
+            ArchiveEntry entry = tarOut.createArchiveEntry(dummyFile, dummyFile.getName());
+            tarOut.putArchiveEntry(entry);
+
+            fis = new FileInputStream(dummyFile);
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = fis.read(buffer)) > 0) {
+                tarOut.write(buffer, 0, bytesRead);
+            }
+
+            long bytesWrittenBeforeClose = tarOut.getBytesWritten();
+            tarOut.closeArchiveEntry();
+            tarOut.close();
+            long bytesWrittenAfterClose = tarOut.getBytesWritten();
+
+            // The getBytesWritten() should return a non-zero value after writing data
+            // It might not be perfectly accurate including headers, but it should not be zero.
+            assertTrue("Bytes written before closing should be non-zero", bytesWrittenBeforeClose > 0);
+            assertTrue("Bytes written after closing should be non-zero", bytesWrittenAfterClose > 0);
+
+            // Optionally, you could assert that bytesWrittenAfterClose is at least the size of the file content
+            // as it should include file content and tar headers.
+            assertTrue("Bytes written after close should be at least the size of the file content",
+                       bytesWrittenAfterClose >= dummyFile.length());
+
+
+        } catch (Exception e) {
+            fail("An exception occurred: " + e.getMessage());
+        } finally {
+            if (fis != null) {
+                try {
+                    fis.close();
+                } catch (IOException e) {
+                    // Ignore
+                }
+            }
+            if (tarOut != null) {
+                try {
+                    tarOut.close();
+                } catch (IOException e) {
+                    // Ignore
+                }
+            }
+            // Clean up the dummy file
+            if (dummyFile != null && dummyFile.exists()) {
+                dummyFile.delete();
+            }
+        }
+    }
+}

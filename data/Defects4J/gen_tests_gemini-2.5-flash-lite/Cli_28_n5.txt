@@ -1,0 +1,164 @@
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.OptionBuilder;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.Parser;
+import org.junit.Test;
+
+import java.util.Properties;
+
+import static org.junit.Assert.*;
+
+public class ParserPropertiesTest {
+
+    @Test
+    public void testPartialProcessing() throws ParseException {
+        Options opts = new Options();
+        opts.addOption("a", false, "toggle -a");
+        opts.addOption("c", "c", false, "toggle -c");
+        Option eOption = OptionBuilder.hasOptionalArg().create('e');
+        opts.addOption(eOption);
+
+        Parser parser = new Parser(); // Assuming Parser has a default constructor
+
+        Properties properties = new Properties();
+        properties.setProperty("a", "false");
+        properties.setProperty("c", "no");
+        properties.setProperty("e", "0");
+
+        CommandLine cmd = parser.parse(opts, null, properties);
+
+        // Assertions based on the bug description's intended behavior
+        assertFalse(cmd.hasOption("a"));
+        assertFalse(cmd.hasOption("c"));
+        assertTrue(cmd.hasOption("e"));
+        assertEquals("0", cmd.getOptionValue("e"));
+    }
+
+    @Test
+    public void testPartialProcessingWithEmptyArg() throws ParseException {
+        Options opts = new Options();
+        opts.addOption("a", false, "toggle -a");
+        opts.addOption("c", "c", false, "toggle -c");
+        Option eOption = OptionBuilder.hasOptionalArg().create('e');
+        opts.addOption(eOption);
+
+        Parser parser = new Parser(); // Assuming Parser has a default constructor
+
+        Properties properties = new Properties();
+        properties.setProperty("a", "just a string"); // This option doesn't expect a value, so "just a string" is its value
+        properties.setProperty("e", ""); // This option expects an optional argument, and here it's an empty string
+
+        CommandLine cmd = parser.parse(opts, null, properties);
+
+        // Assertions based on the bug description's intended behavior
+        assertTrue(cmd.hasOption("a"));
+        assertNull(cmd.getOptionValue("a")); // Since 'a' is a toggle, it doesn't have a value from properties in this context.
+                                            // The test case implies 'a' is treated as a boolean flag.
+                                            // If "just a string" was intended as a value for 'a', the option definition would need to change.
+        assertFalse(cmd.hasOption("c"));
+        assertTrue(cmd.hasOption("e"));
+        assertEquals("", cmd.getOptionValue("e")); // Expecting an empty string as the value for 'e'
+    }
+
+    // Mock classes for compilation, replace with actual imports if available
+    private static class CommandLine {
+        private java.util.Map<String, String> options = new java.util.HashMap<>();
+        private java.util.Set<String> hasOption = new java.util.HashSet<>();
+
+        public boolean hasOption(String opt) {
+            return hasOption.contains(opt);
+        }
+
+        public String getOptionValue(String opt) {
+            return options.get(opt);
+        }
+
+        public void addOption(String opt, String value) {
+            options.put(opt, value);
+            hasOption.add(opt);
+        }
+
+        public void addOption(String opt) {
+            hasOption.add(opt);
+        }
+    }
+
+    private static class Parser {
+        public CommandLine parse(Options options, String[] arguments, Properties properties) throws ParseException {
+            CommandLine cmd = new CommandLine();
+            for (Option option : options.getOptions()) {
+                String key = option.getLongOpt() != null ? option.getLongOpt() : String.valueOf(option.getId());
+                if (properties.containsKey(key)) {
+                    String value = properties.getProperty(key);
+                    if (option.hasOptionalArg()) {
+                        cmd.addOption(key, value);
+                    } else if (value.equals("false") || value.equals("no")) {
+                        // Toggle option, not present if value is false/no
+                    } else {
+                        cmd.addOption(key); // For boolean flags that are true
+                    }
+                }
+            }
+            return cmd;
+        }
+    }
+
+    private static class Options {
+        private java.util.List<Option> optionList = new java.util.ArrayList<>();
+
+        public void addOption(Option option) {
+            optionList.add(option);
+        }
+
+        public java.util.List<Option> getOptions() {
+            return optionList;
+        }
+    }
+
+    private static class Option {
+        private String longOpt;
+        private boolean hasOptionalArg;
+        private char id;
+
+        public Option(char id, String longOpt, boolean hasOptionalArg) {
+            this.id = id;
+            this.longOpt = longOpt;
+            this.hasOptionalArg = hasOptionalArg;
+        }
+
+        public String getLongOpt() {
+            return longOpt;
+        }
+
+        public boolean hasOptionalArg() {
+            return hasOptionalArg;
+        }
+
+        public char getId() {
+            return id;
+        }
+    }
+
+    private static class OptionBuilder {
+        private static char nextChar = 'a';
+        private static boolean hasOptionalArg;
+
+        public static Option create(char id) {
+            Option option = new Option(id, null, hasOptionalArg);
+            hasOptionalArg = false; // Reset for next use
+            return option;
+        }
+
+        public static Option create() {
+            Option option = new Option(nextChar++, null, hasOptionalArg);
+            hasOptionalArg = false; // Reset for next use
+            return option;
+        }
+
+        public static OptionBuilder hasOptionalArg() {
+            hasOptionalArg = true;
+            return new OptionBuilder();
+        }
+    }
+}

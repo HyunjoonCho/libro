@@ -1,0 +1,38 @@
+public void testVarCheckCrashWithModules() {
+    String jqueryCode = "var jQuery = function(selector) { return { length: 1 }; };";
+    String coreCode = "equal( jQuery(\" <div/> \").length, 1, \"Make sure whitespace is trimmed.\" );";
+
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setLanguage(CompilerOptions.LanguageMode.ECMASCRIPT_2020);
+    options.setClosurePass(true);
+    options.setPrettyPrint(true);
+    options.setDebug(true);
+    options.setModuleResolutionMode(ModuleResolutionMode.NODE);
+    options.setModuleActivationStreams(ImmutableList.of(
+            new ModuleActivationStreams("jquery", 1, null),
+            new ModuleActivationStreams("core", 1, ImmutableList.of("jquery"))
+    ));
+    options.setModuleOutputPathPrefix("mod_");
+    options.setExterns(ImmutableList.of(
+            SourceFile.fromCode("qunit_externs.js", "var equal = function(a, b, c) {};")
+    ));
+
+    List<SourceFile> inputs = ImmutableList.of(
+            SourceFile.fromCode("jquery.js", jqueryCode),
+            SourceFile.fromCode("core.js", coreCode)
+    );
+
+    try {
+        compiler.compile(new StringArraySourceFileArray(new SourceFile[0]),
+                         new StringArraySourceFileArray(inputs.toArray(new SourceFile[0])),
+                         options);
+        // If compilation succeeds, the test should fail as the bug is not reproduced.
+        // However, the bug report indicates a RuntimeException, so we expect that.
+        // If it doesn't throw, we can assert false or throw an exception.
+        fail("Compilation should have failed due to VarCheck error.");
+    } catch (RuntimeException e) {
+        // Check if the exception message indicates the expected error
+        assertTrue(e.getMessage().contains("INTERNAL COMPILER ERROR") || e.getMessage().contains("Unexpected variable jQuery$$2"));
+    }
+}

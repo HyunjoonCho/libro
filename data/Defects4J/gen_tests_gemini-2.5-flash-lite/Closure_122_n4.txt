@@ -1,0 +1,131 @@
+public void testNonJsDocCommentHandling() {
+    String code = "/* @preserve Foo License */\nalert('foo');";
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setPrettyPrint(true);
+    options.setParseJsDocInformation(false); // Ensure non-JSDoc comments are not treated as JSDoc
+    options.addExtraErrorPass(new CheckMissingReturn.Builder(compiler).build()); // Example of adding an error pass that might interact with comments
+    
+    // The original bug report describes a warning, not an error.
+    // We need to capture warnings to verify the behavior.
+    DiagnosticCollector<JSSourceFile> diagnostics = new DiagnosticCollector<>();
+    compiler.init(new MessageBundle(), new JSSourceFile[] { JSSourceFile.fromCode("test.js", code) }, options);
+    
+    // Setting a specific compiler pass that might trigger the warning
+    // In the absence of a direct reproducer for the warning in the prompt, 
+    // we simulate a scenario that might lead to comment processing issues.
+    // The key is that the original comment /* @preserve ... */ should be preserved or handled correctly.
+    // The bug implies a warning is issued for non-JSDoc comments with annotations.
+    
+    // A more direct reproduction would involve a specific pass that checks comments.
+    // Since the prompt doesn't specify such a pass, we'll focus on compilation.
+    
+    // The original bug description mentions a warning about "Non-JSDoc comment has annotations".
+    // Let's try to compile with a setting that might lead to this.
+    // The actual warning might be tied to specific compiler flags or passes not fully detailed.
+    
+    // A simplified approach: Compile and check for the specific warning message.
+    // If the compiler is configured to *not* parse JSDoc, it should ideally ignore such comments or pass them through.
+    // The bug states it *warns* about them.
+    
+    // Let's re-evaluate the bug description: "It spits out: ... WARNING - Parse error. Non-JSDoc comment has annotations. Did you mean to start it with '/**'?"
+    // This implies the compiler *does* process non-JSDoc comments and flags them if they look like JSDoc.
+    
+    // The test should verify that either:
+    // 1. The warning is issued as described.
+    // 2. The comment is preserved if the warning is suppressed or handled differently.
+    
+    // Given the prompt focuses on reproducing the *failure*, we aim to see the warning.
+    // The prompt also mentions that changing to /*! works, and /** preserves.
+    // The failure is with /* @preserve ... */.
+
+    // To trigger the warning, we'll use the original code and compile.
+    // The Closure Compiler API itself doesn't directly expose a way to "capture warnings" in a simple JUnit test without running a specific pass that generates them.
+    // However, the essence of the bug is how the compiler *treats* these comments.
+    
+    // Let's assume a scenario where the compiler's default behavior or a common pass would trigger this.
+    // The description implies the warning occurs during the parsing phase.
+    
+    // A more robust test would require knowing which specific compiler pass or setting triggers this warning.
+    // Without that, we can simulate the *input* that causes the issue.
+    
+    // The most direct way to test this is to provide the code and see if the compiler emits the specific warning.
+    // The `compile` method returns a `JSError[]` array.
+    
+    JSError[] errors = compiler.compile(
+        new JSSourceFile[] { JSSourceFile.fromCode("test.js", code) },
+        new JSSourceFile[] {}, // externs
+        options
+    );
+
+    // The bug report indicates a *warning*, not an error.
+    // The `compile` method returns errors. Warnings are often reported via `DiagnosticCollector`.
+    // Let's re-initialize with DiagnosticCollector.
+
+    compiler = new Compiler(); // Reset compiler
+    diagnostics = new DiagnosticCollector<>();
+    options = new CompilerOptions();
+    options.setPrettyPrint(true);
+    options.setParseJsDocInformation(false); // Crucial setting from the bug description's implication
+    
+    // To capture warnings, we need to provide a DiagnosticGroup to the compiler.
+    // The default DiagnosticGroups usually include warnings.
+    // Let's try compiling and checking the diagnostics.
+    
+    compiler.compile(
+        new JSSourceFile[] { JSSourceFile.fromCode("test.js", code) },
+        new JSSourceFile[] {}, // externs
+        options,
+        diagnostics
+    );
+    
+    // Now, check the diagnostics for the specific warning.
+    // The warning message from the bug report is: "Parse error. Non-JSDoc comment has annotations. Did you mean to start it with '/**'?"
+    // The specific error code or type for this warning might be needed.
+    // Looking at Closure Compiler's source or documentation, "NON_JSDOC_COMMENT_HAS_ANNOTATIONS" is a likely candidate for the warning type.
+    
+    boolean warningFound = false;
+    for (JSError diagnostic : diagnostics.getDiagnostics()) {
+        // The exact warning code might vary slightly between versions.
+        // Let's try to match the message content.
+        if (diagnostic.description.contains("Non-JSDoc comment has annotations") &&
+            diagnostic.description.contains("Did you mean to start it with '/**'?")) {
+            warningFound = true;
+            // Optionally, assert the severity is WARNING
+            assertEquals(DiagnosticType.make("NON_JSDOC_COMMENT_HAS_ANNOTATIONS", "Parse error. Non-JSDoc comment has annotations. Did you mean to start it with '/**'?"), diagnostic.getType());
+            break;
+        }
+    }
+    
+    assertTrue("The specific warning about non-JSDoc comment with annotations was not found.", warningFound);
+
+    // The bug also implies that changing the comment to /*! preserves it.
+    // Let's add a check for that scenario as well to show the contrast.
+    String preservedCode = "/*! @preserve Foo License */\nalert('foo');";
+    compiler = new Compiler(); // Reset compiler
+    diagnostics = new DiagnosticCollector<>();
+    options = new CompilerOptions();
+    options.setPrettyPrint(true);
+    options.setParseJsDocInformation(false); // Keep this consistent
+    
+    compiler.compile(
+        new JSSourceFile[] { JSSourceFile.fromCode("test_preserved.js", preservedCode) },
+        new JSSourceFile[] {}, // externs
+        options,
+        diagnostics
+    );
+    
+    // If the comment is preserved, no warning should be issued for this specific type.
+    // We can check the output code or just ensure the warning is absent.
+    boolean warningForPreservedFound = false;
+    for (JSError diagnostic : diagnostics.getDiagnostics()) {
+        if (diagnostic.description.contains("Non-JSDoc comment has annotations")) {
+            warningForPreservedFound = true;
+            break;
+        }
+    }
+    assertFalse("A warning was found for the '/*! ... */' comment, which should be preserved.", warningForPreservedFound);
+
+    // The bug report is about inconsistent handling. The test reproduces the specific warning
+    // that was described for the "/* @preserve ... */" case, confirming the bug.
+}

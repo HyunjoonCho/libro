@@ -1,0 +1,106 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.util.StdConverter;
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class JsonAnyGetterAndSerializeTest {
+
+    // Dummy Serializer
+    public static class MySerializer extends StdSerializer<String> {
+        public MySerializer() {
+            super(String.class);
+        }
+
+        @Override
+        public void serialize(String value, JsonGenerator gen, org. সরবরা.jackson.databind.SerializerProvider provider) throws IOException {
+            gen.writeString("SERIALIZED_" + value);
+        }
+    }
+
+    // Dummy Converter
+    public static class MyConverter extends StdConverter<Map<String, String>, Map<String, JsonNode>> {
+        @Override
+        public Map<String, JsonNode> convert(Map<String, String> value) {
+            Map<String, JsonNode> convertedMap = new HashMap<>();
+            ObjectMapper mapper = new ObjectMapper();
+            for (Map.Entry<String, String> entry : value.entrySet()) {
+                try {
+                    // Simulate serialization logic within the converter
+                    convertedMap.put(entry.getKey(), mapper.readTree("\"SERIALIZED_" + entry.getValue() + "\""));
+                } catch (IOException e) {
+                    // Handle exception appropriately in a real scenario
+                    throw new RuntimeException(e);
+                }
+            }
+            return convertedMap;
+        }
+    }
+
+    // Class with JsonAnyGetter and JsonSerialize (converter)
+    public static class MyClassWithConverter {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public MyClassWithConverter() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(converter = MyConverter.class)
+        @JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+    // Class with JsonAnyGetter and JsonSerialize (using) - This is the one that fails
+    public static class MyClassWithSerializer {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public MyClassWithSerializer() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(using = MySerializer.class)
+        @JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+    @Test
+    public void testJsonAnyGetterWithConverter() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        MyClassWithConverter obj = new MyClassWithConverter();
+        String json = mapper.writeValueAsString(obj);
+
+        // Expected output: {"key1":"SERIALIZED_value1","key2":"SERIALIZED_value2"}
+        // The converter should apply the serialization logic.
+        assertEquals("{\"key1\":\"SERIALIZED_value1\",\"key2\":\"SERIALIZED_value2\"}", json);
+    }
+
+    @Test
+    public void testJsonAnyGetterWithSerializerFails() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        MyClassWithSerializer obj = new MyClassWithSerializer();
+        String json = mapper.writeValueAsString(obj);
+
+        // The bug report states that @JsonSerialize(using = MySerializer.class) is ignored
+        // when @JsonAnyGetter is present. So, the output should NOT have "SERIALIZED_".
+        // It should just be the raw values.
+        // If the serializer were working, the expected output would be:
+        // "{\"key1\":\"SERIALIZED_value1\",\"key2\":\"SERIALIZED_value2\"}"
+        // Because the serializer is ignored, the actual output is:
+        assertEquals("{\"key1\":\"value1\",\"key2\":\"value2\"}", json);
+    }
+}

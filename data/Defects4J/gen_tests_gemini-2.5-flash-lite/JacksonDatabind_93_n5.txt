@@ -1,0 +1,37 @@
+public void testNpeWithSpringInterface() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
+
+    // Define the Spring interface and a simple implementation for testing
+    // Note: In a real scenario, these would be in their respective packages.
+    // For this test, we define them locally to avoid external dependencies.
+    interface GrantedAuthority {
+        String getAuthority();
+    }
+
+    // A mock implementation of Authentication for the test
+    // In the bug report, Authentication is a concrete class, but the NPE happens
+    // when validating a sub-type of an interface like GrantedAuthority.
+    // We simulate this by having Authentication hold a List<GrantedAuthority>.
+    class Authentication {
+        private List<GrantedAuthority> authorities = new ArrayList<GrantedAuthority>();
+
+        public List<GrantedAuthority> getAuthorities() {
+            return this.authorities;
+        }
+
+        public void setAuthorities(List<GrantedAuthority> authorities) {
+            this.authorities = authorities;
+        }
+    }
+
+    String json = "{\"@class\":\"org.springframework.security.core.Authentication\",\"authorities\":[\"java.util.ArrayList\",[]]}";
+
+    // The actual test case that should now pass without NPE
+    Authentication authentication = mapper.readValue(json, Authentication.class);
+
+    // Optional: Add assertions to verify the deserialization was successful
+    assertNotNull(authentication);
+    assertNotNull(authentication.getAuthorities());
+    assertTrue(authentication.getAuthorities() instanceof ArrayList);
+}

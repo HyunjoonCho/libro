@@ -1,0 +1,65 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.impl.DefaultTypeResolverBuilder;
+import com.fasterxml.jackson.databind.jsontype.TypeResolverBuilder;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.util.Collections;
+import java.util.Set;
+
+import static org.junit.Assert.assertThat;
+import static org.hamcrest.Matchers.empty;
+
+public class JacksonUnmodifiableSetMixinTest {
+
+    static final String EXPECTED_JSON = "[\"java.util.Collections$UnmodifiableSet\",[]]";
+
+    ObjectMapper mapper;
+
+    @Before
+    public void setup() {
+        mapper = new ObjectMapper();
+
+        // Custom TypeResolverBuilder to handle the UnmodifiableSetMixin
+        TypeResolverBuilder<?> typeResolverBuilder = new DefaultTypeResolverBuilder(ObjectMapper.DefaultTyping.NON_FINAL) {
+            @Override
+            public com.fasterxml.jackson.databind.jsontype.TypeIdResolver idResolver(com.fasterxml.jackson.databind.cfg.MapperConfig<?> config, com.fasterxml.jackson.databind.JavaType baseType, com.fasterxml.jackson.databind.util.PolymorphicTypeValidator propertyValidator, com.fasterxml.jackson.databind.AnnotationIntrospector.Integrator integrator, com.fasterxml.jackson.databind.cfg.MapperConfigBase<?, ?> configBase) {
+                return super.idResolver(config, baseType, propertyValidator, integrator, configBase);
+            }
+
+            @Override
+            public com.fasterxml.jackson.databind.JsonDeserializer<?> buildTypeDeserializer(com.fasterxml.jackson.databind.SerializationConfig config, com.fasterxml.jackson.databind.JavaType baseType, com.fasterxml.jackson.databind.annot.JsonTypeResolver resolver, com.fasterxml.jackson.databind.introspect.AnnotatedClass baseTypeClass, com.fasterxml.jackson.databind.jsontype.TypeIdResolver idRes, com.fasterxml.jackson.databind.cfg.MapperConfig<?> mapperConfig, com.fasterxml.jackson.databind.jsontype.impl.PolymorphicTypeValidator propertyValidator) {
+                if (baseType.getRawClass().equals(Collections.unmodifiableSet(Collections.emptySet()).getClass())) {
+                    // Special handling for UnmodifiableSet
+                    return new com.fasterxml.jackson.databind.deser.std.CollectionDeserializer(
+                            baseType, null, null, null, null, null, null, true) { // last param is 'ignore id'
+                        @Override
+                        protected java.util.Collection<Object> _deserialize(com.fasterxml.jackson.core.JsonParser p, com.fasterxml.jackson.databind.DeserializationContext ctxt) throws java.io.IOException {
+                            // Manually create an empty unmodifiable set
+                            return (java.util.Collection<Object>) Collections.unmodifiableSet(Collections.emptySet());
+                        }
+                    };
+                }
+                return super.buildTypeDeserializer(config, baseType, resolver, baseTypeClass, idRes, mapperConfig, propertyValidator);
+            }
+        };
+        typeResolverBuilder.init(JsonTypeInfo.Id.CLASS, null);
+        mapper.setDefaultTyping(typeResolverBuilder, ObjectMapper.DefaultTyping.NON_FINAL);
+        mapper.addMixIn(Collections.unmodifiableSet(Collections.<String>emptySet()).getClass(), UnmodifiableSetMixin.class);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void read() throws Exception {
+        Set<String> foo = mapper.readValue(EXPECTED_JSON, Set.class);
+        assertThat(foo, is(empty()));
+    }
+
+    // Define the UnmodifiableSetMixin as provided in the bug report
+    @com.fasterxml.jackson.annotation.JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY)
+    public abstract static class UnmodifiableSetMixin {
+        @JsonCreator
+        public UnmodifiableSetMixin(Set<?> s) {}
+    }
+}

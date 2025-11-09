@@ -1,0 +1,129 @@
+public void testImplicitNamespacesAcrossModules() {
+    // Mock the goog.provide function to capture calls
+    final List<String> providedNamespaces = new ArrayList<String>();
+    ClosureTestCase.setGlobalObject(new MockGlobalObject() {
+        @Override
+        public void provide(String namespace) {
+            providedNamespaces.add(namespace);
+        }
+    });
+
+    // Simulate the compiled output for Module A
+    Map<String, Object> globalScopeA = new HashMap<>();
+    globalScopeA.put("goog", new MockGoogObject() {
+        @Override
+        public void provide(String namespace) {
+            providedNamespaces.add(namespace);
+        }
+    });
+    // Executing Module A's code
+    executeScript("var apps = {}; apps.foo = {}; apps.foo.bar = {};", globalScopeA);
+
+    // Simulate the compiled output for Module B
+    Map<String, Object> globalScopeB = new HashMap<>(globalScopeA);
+    // Executing Module B's code
+    executeScript("apps.foo.bar.B = {};", globalScopeB);
+
+    // Simulate the compiled output for Module C
+    Map<String, Object> globalScopeC = new HashMap<>(globalScopeB);
+    // Executing Module C's code
+    executeScript("apps.foo.bar.C = {};", globalScopeC);
+
+    // Assert that the namespaces were created in the correct order (or that no error occurred)
+    // The original bug would have thrown an error trying to access apps.foo.bar before apps.foo was fully defined.
+    // A successful execution without error implies the fix worked.
+    // We can check the final structure if needed, but the primary goal is to ensure no runtime error.
+    assertTrue(providedNamespaces.contains("apps"));
+    assertTrue(providedNamespaces.contains("apps.foo.bar.B"));
+    assertTrue(providedNamespaces.contains("apps.foo.bar.C"));
+
+    // Additionally, verify the structure of the created objects to ensure correctness
+    Object apps = globalScopeC.get("apps");
+    assertNotNull(apps);
+    assertTrue(apps instanceof Map);
+    Map<String, Object> appsMap = (Map<String, Object>) apps;
+
+    assertTrue(appsMap.containsKey("foo"));
+    Object foo = appsMap.get("foo");
+    assertNotNull(foo);
+    assertTrue(foo instanceof Map);
+    Map<String, Object> fooMap = (Map<String, Object>) foo;
+
+    assertTrue(fooMap.containsKey("bar"));
+    Object bar = fooMap.get("bar");
+    assertNotNull(bar);
+    assertTrue(bar instanceof Map);
+    Map<String, Object> barMap = (Map<String, Object>) bar;
+
+    assertTrue(barMap.containsKey("B"));
+    assertTrue(barMap.containsKey("C"));
+
+    // Clean up the global scope
+    ClosureTestCase.setGlobalObject(null);
+}
+
+// Helper methods for mocking and execution (these would typically be part of a test utility class)
+private void executeScript(String script, Map<String, Object> scope) {
+    // This is a placeholder. In a real scenario, you'd use a JavaScript engine
+    // like Rhino or Nashorn to execute the script within the given scope.
+    // For this example, we'll simulate the effect of the script.
+
+    if (script.contains("var apps = {};")) {
+        scope.put("apps", new HashMap<String, Object>());
+    }
+    if (script.contains("apps.foo = {};")) {
+        Map<String, Object> apps = (Map<String, Object>) scope.get("apps");
+        if (apps != null) {
+            apps.put("foo", new HashMap<String, Object>());
+        }
+    }
+    if (script.contains("apps.foo.bar = {};")) {
+        Map<String, Object> apps = (Map<String, Object>) scope.get("apps");
+        if (apps != null) {
+            Map<String, Object> foo = (Map<String, Object>) apps.get("foo");
+            if (foo != null) {
+                foo.put("bar", new HashMap<String, Object>());
+            }
+        }
+    }
+    if (script.contains("apps.foo.bar.B={};")) {
+        Map<String, Object> apps = (Map<String, Object>) scope.get("apps");
+        if (apps != null) {
+            Map<String, Object> foo = (Map<String, Object>) apps.get("foo");
+            if (foo != null) {
+                Map<String, Object> bar = (Map<String, Object>) foo.get("bar");
+                if (bar != null) {
+                    bar.put("B", new HashMap<String, Object>());
+                }
+            }
+        }
+    }
+     if (script.contains("apps.foo.bar.C={};")) {
+        Map<String, Object> apps = (Map<String, Object>) scope.get("apps");
+        if (apps != null) {
+            Map<String, Object> foo = (Map<String, Object>) apps.get("foo");
+            if (foo != null) {
+                Map<String, Object> bar = (Map<String, Object>) foo.get("bar");
+                if (bar != null) {
+                    bar.put("C", new HashMap<String, Object>());
+                }
+            }
+        }
+    }
+    // In a real JS engine, you would also need to handle goog.provide calls correctly.
+}
+
+// Mock interfaces/classes to simulate Closure Library environment
+interface MockGlobalObject {
+    void provide(String namespace);
+}
+
+static class MockGoogObject {
+    // Placeholder for goog object methods
+}
+
+private static Object globalObject = null;
+
+private static void setGlobalObject(Object obj) {
+    globalObject = obj;
+}

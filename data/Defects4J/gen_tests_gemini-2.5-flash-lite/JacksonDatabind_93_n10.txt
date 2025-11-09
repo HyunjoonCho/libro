@@ -1,0 +1,46 @@
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertNotNull;
+
+public class JacksonBugTest {
+
+    // Dummy implementations for the Spring interfaces to make the test runnable
+    // In a real scenario, these would be part of the Spring security library
+    public interface GrantedAuthority {
+        String getAuthority();
+    }
+
+    public static class Authentication {
+        private List<GrantedAuthority> authorities = new ArrayList<GrantedAuthority>();
+
+        public List<GrantedAuthority> getAuthorities() {
+            return this.authorities;
+        }
+
+        public void setAuthorities(List<GrantedAuthority> authorities) {
+            this.authorities = authorities;
+        }
+    }
+
+    @Test
+    public void testSubTypeValidatorNPE() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
+
+        // The problematic JSON structure that triggers the NPE
+        String json = "{\"@class\":\"org.springframework.security.core.Authentication\",\"authorities\":[\"java.util.ArrayList\",[]]}";
+
+        // Attempt to read the JSON, expecting it to work as it did in prior versions
+        Authentication authentication = mapper.readValue(json, Authentication.class);
+
+        // Assert that the deserialization was successful and returned a non-null object
+        assertNotNull(authentication);
+        // Optionally, add more assertions to check the state of the deserialized object
+        // For example: assertEquals(0, authentication.getAuthorities().size());
+    }
+}

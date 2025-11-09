@@ -1,0 +1,66 @@
+public void testUnixExtraFieldLength0() throws Exception {
+    // This test case uses a manually crafted byte array that mimics the problematic data
+    // described in the bug report.
+    // The data represents a ZIP extra field with ID 0x7875 (Unix) and a length of 0.
+    // The parseFromLocalFileData method in Commons Compress incorrectly tries to read
+    // beyond the available data when encountering this specific scenario, leading to
+    // an ArrayIndexOutOfBoundsException.
+
+    byte[] data = new byte[] {
+        'U', 'T', // Signature for Unix Extra Field
+        0x00, 0x05, // Length of the data (5 bytes for timestamp)
+        0x07, (byte) 0x90, (byte) 0x94, 0x33, // Timestamp data (example values)
+        'u', 'x', // Signature for Unix Extra Field (second part)
+        0x00, 0x00 // Length of the data (0 bytes for UID/GID)
+    };
+
+    // We need to call the parseFromLocalFileData method with the problematic data.
+    // Since this is a private method, we'll use reflection to access and call it.
+    // This is a common technique for testing private methods or simulating specific internal states.
+
+    try {
+        // Construct a ZipArchiveEntry, as the method operates on it.
+        // The details of the entry itself are not critical for this specific bug,
+        // as the exception occurs during the parsing of the extra field data.
+        ZipArchiveEntry entry = new ZipArchiveEntry("dummy.txt");
+
+        // The UnixExtraField class is responsible for parsing the extra field data.
+        UnixExtraField unixExtraField = new UnixExtraField();
+
+        // Use reflection to invoke the private parseFromLocalFileData method.
+        // We need to find the method, make it accessible, and then invoke it.
+        java.lang.reflect.Method parseMethod = UnixExtraField.class.getDeclaredMethod(
+            "parseFromLocalFileData", byte[].class, int.class, int.class);
+        parseMethod.setAccessible(true);
+
+        // The offset is the starting position of the extra field data within the buffer.
+        // The length is the total size of the extra field data.
+        // In this scenario, the 'ux' part has a length of 0, which triggers the bug.
+        int offset = 0; // Assuming the data starts at the beginning of the buffer for simplicity
+        int length = data.length;
+
+        // Call the method. We expect an ArrayIndexOutOfBoundsException to be thrown.
+        parseMethod.invoke(unixExtraField, data, offset, length);
+
+        // If the above line does not throw an exception, the test should fail.
+        fail("Expected ArrayIndexOutOfBoundsException was not thrown.");
+
+    } catch (java.lang.reflect.InvocationTargetException e) {
+        // We expect the InvocationTargetException to wrap the actual exception thrown by the method.
+        // We need to check if the wrapped exception is indeed ArrayIndexOutOfBoundsException.
+        Throwable cause = e.getCause();
+        if (cause instanceof ArrayIndexOutOfBoundsException) {
+            // Success: The expected exception was thrown.
+            // We can optionally assert details of the exception if needed,
+            // but for reproducing the bug, catching it is sufficient.
+            assertTrue(true); // Explicitly mark as passed
+        } else {
+            // If a different exception was thrown, fail the test.
+            fail("Expected ArrayIndexOutOfBoundsException, but got " + cause.getClass().getName());
+        }
+    } catch (NoSuchMethodException e) {
+        fail("Could not find the parseFromLocalFileData method: " + e.getMessage());
+    } catch (IllegalAccessException e) {
+        fail("Could not access the parseFromLocalFileData method: " + e.getMessage());
+    }
+}

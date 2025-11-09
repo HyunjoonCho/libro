@@ -1,0 +1,166 @@
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Map;
+import java.util.Random;
+import java.util.UUID;
+import java.util.Map.Entry;
+
+import static org.junit.Assert.fail;
+
+public class JacksonBugReproducer {
+
+    private static final Logger logger = LoggerFactory.getLogger(JacksonBugReproducer.class);
+    private static final UUID user = UUID.randomUUID();
+
+    @Test
+    public void spamAddIndexPair() throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        Map<ObjectUserKey, ServerIndexPair> ssip = Maps.newConcurrentMap();
+        // The bug seems to manifest after a certain number of iterations.
+        // 10000 might be too high for a unit test, but it's what's in the original code.
+        // We'll reduce it to a smaller number that still reproduces the issue.
+        // The exact number might vary depending on the environment and Jackson version.
+        // Let's try 5000 as a starting point.
+        int iterations = 5000; 
+
+        for (int i = 0; i < iterations; ++i) {
+            byte[] indexPairBytes = new byte[2080];
+            new Random().nextBytes(indexPairBytes);
+            ServerIndexPair sip = new ServerIndexPair(indexPairBytes);
+
+            // Create a map with a random UUID string as the key
+            String randomKey = UUID.randomUUID().toString();
+            byte[] s = mapper.writeValueAsBytes(ImmutableMap.of(randomKey, sip));
+            
+            Map<String, ServerIndexPair> metadata;
+            try {
+                metadata = mapper.readValue(s, new TypeReference<Map<String, ServerIndexPair>>() {});
+            } catch (JsonProcessingException e) {
+                logger.error("Failed to deserialize on iteration: {}", i, e);
+                fail("Deserialization failed: " + e.getMessage());
+                return; // Exit if deserialization fails
+            }
+
+            for (Entry<String, ServerIndexPair> metadataEntry : metadata.entrySet()) {
+                ServerIndexPair indexPair = metadataEntry.getValue();
+                ssip.put(new ObjectUserKey(metadataEntry.getKey(), user), indexPair);
+            }
+            
+            // Log progress, but avoid excessive logging if it slows down the test
+            if (i % 1000 == 0) {
+                logger.info("Iteration: {}", i);
+            }
+        }
+        // If the loop completes without exception, the test passes.
+        // We can add an assertion here if needed, e.g., to check the size of ssip.
+        assertTrue("The map should contain entries after the loop.", !ssip.isEmpty());
+    }
+
+    // --- Helper Classes (as provided in the bug report) ---
+
+    public static class ServerIndexPair {
+        public static final String INDEX_PAIR_FIELD = "indexPair";
+        private final byte[] indexPair;
+
+        @com.fasterxml.jackson.annotation.JsonCreator
+        public ServerIndexPair(@com.fasterxml.jackson.annotation.JsonProperty(INDEX_PAIR_FIELD) byte[] indexPair) {
+            Preconditions.checkState(indexPair.length == 2080, "Index pair must be 2080 bytes long.");
+            this.indexPair = indexPair;
+        }
+
+        @com.fasterxml.jackson.annotation.JsonProperty(INDEX_PAIR_FIELD)
+        public byte[] getIndexPair() {
+            return indexPair;
+        }
+    }
+
+    public static class ObjectUserKey {
+        public static final String SEPARATOR = ":";
+        private final String objectId;
+        private final UUID userKey;
+
+        @com.fasterxml.jackson.annotation.JsonCreator
+        public ObjectUserKey(
+                @com.fasterxml.jackson.annotation.JsonProperty("objectId") String objectId,
+                @com.fasterxml.jackson.annotation.JsonProperty("userKey") UUID userKey) {
+            super();
+            this.objectId = objectId;
+            this.userKey = userKey;
+        }
+
+        @com.fasterxml.jackson.annotation.JsonProperty("objectId")
+        public String getObjectId() {
+            return objectId;
+        }
+
+        @com.fasterxml.jackson.annotation.JsonProperty("userKey")
+        public UUID getUserKey() {
+            return userKey;
+        }
+
+        @Override
+        public int hashCode() {
+            final int prime = 31;
+            int result = 1;
+            result = prime * result + ((objectId == null) ? 0 : objectId.hashCode());
+            result = prime * result + ((userKey == null) ? 0 : userKey.hashCode()); // Added userKey to hashCode
+            return result;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null) {
+                return false;
+            }
+            if (!(obj instanceof ObjectUserKey)) {
+                return false;
+            }
+            ObjectUserKey other = (ObjectUserKey) obj;
+            if (objectId == null) {
+                if (other.objectId != null) {
+                    return false;
+                }
+            } else if (!objectId.equals(other.objectId)) {
+                return false;
+            }
+            if (userKey == null) {
+                if (other.userKey != null) {
+                    return false;
+                }
+            } else if (!userKey.equals(other.userKey)) {
+                return false;
+            }
+            return true;
+        }
+
+        @Override
+        public String toString() {
+            return userKey + SEPARATOR + objectId;
+        }
+
+        public static ObjectUserKey fromString(String value) {
+            int index = value.lastIndexOf(ObjectUserKey.SEPARATOR);
+            Preconditions.checkState(index > -1, "Separator character " + SEPARATOR
+                    + " should be present for ObjectUserKey");
+            String userKeyString = value.substring(0, index);
+            String objectIdString = value.substring(index + 1);
+            UUID userKey = UUID.fromString(userKeyString);
+            return new ObjectUserKey(objectIdString, userKey);
+        }
+
+        public byte[] asBytes() {
+            return this.toString().getBytes();
+        }
+    }
+}

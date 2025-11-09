@@ -1,0 +1,128 @@
+public void testExtractTgzWithInvalidByte() throws Exception {
+    // Create a dummy .tgz file with the problematic header
+    // The problematic part is the "invalid byte 0 at offset 5" which is likely a null byte
+    // in the middle of a header field. We'll simulate this by creating a tar entry
+    // with a name that has a null character embedded.
+    byte[] tarHeader = new byte[512];
+    // Simulate a tar header. The exact bytes depend on the tar format specification.
+    // This is a simplified representation.
+    // Let's assume the header has a field for the name, and we'll put a null byte there.
+    // A real tar header has fixed-size fields.
+    // For simplicity, we'll create a minimal valid tar structure that includes a null byte in a name.
+
+    // A minimal tar entry:
+    // Name (100 bytes), Mode (8 bytes), UID (8 bytes), GID (8 bytes), Size (12 bytes),
+    // Mtime (12 bytes), Checksum (8 bytes), Typeflag (1 byte), Link name (100 bytes), Magic (6 bytes), Version (2 bytes), etc.
+    // We need to ensure the name field is padded correctly and contains the null byte.
+
+    String problematicName = "test" + (char) 0 + "file.txt"; // Name with a null byte
+    byte[] nameBytes = problematicName.getBytes("UTF-8");
+    System.arraycopy(nameBytes, 0, tarHeader, 0, Math.min(nameBytes.length, 100));
+
+    // Pad the rest of the name field with nulls
+    for (int i = nameBytes.length; i < 100; i++) {
+        tarHeader[i] = 0;
+    }
+
+    // Set other header fields to minimal valid values (e.g., zeros or spaces, followed by null terminator)
+    // Mode
+    byte[] modeBytes = "000644".getBytes("UTF-8"); // Example mode
+    System.arraycopy(modeBytes, 0, tarHeader, 100, modeBytes.length);
+    tarHeader[108] = 0; // Null terminator for mode
+
+    // UID
+    byte[] uidBytes = "000000".getBytes("UTF-8"); // Example UID
+    System.arraycopy(uidBytes, 0, tarHeader, 108, uidBytes.length);
+    tarHeader[116] = 0; // Null terminator for UID
+
+    // GID
+    byte[] gidBytes = "000000".getBytes("UTF-8"); // Example GID
+    System.arraycopy(gidBytes, 0, tarHeader, 116, gidBytes.length);
+    tarHeader[124] = 0; // Null terminator for GID
+
+    // Size (0 for this example, as we won't write any file content)
+    byte[] sizeBytes = "00000000000".getBytes("UTF-8"); // Size 0
+    System.arraycopy(sizeBytes, 0, tarHeader, 124, sizeBytes.length);
+    tarHeader[136] = 0; // Null terminator for size
+
+    // Mtime
+    byte[] mtimeBytes = "00000000000".getBytes("UTF-8"); // Example Mtime
+    System.arraycopy(mtimeBytes, 0, tarHeader, 136, mtimeBytes.length);
+    tarHeader[148] = 0; // Null terminator for Mtime
+
+    // Checksum (This needs to be calculated correctly for a valid tar, but for this test,
+    // we are aiming to trigger the parsing error *before* the checksum is fully validated
+    // in a way that would cause a different error. The error occurs in TarUtils.parseOctal.
+    // We can set it to spaces which is common for uninitialized checksums, or a dummy value.
+    // For the parseOctal error, the checksum field itself isn't the direct cause,
+    // but rather the preceding fields. Let's set it to spaces and a null terminator.
+    for (int i = 148; i < 156; i++) {
+        tarHeader[i] = ' ';
+    }
+    tarHeader[156] = 0; // Null terminator for checksum
+
+    // Typeflag
+    tarHeader[157] = (byte) '0'; // Regular file
+
+    // Link name (empty for a regular file)
+    for (int i = 158; i < 258; i++) {
+        tarHeader[i] = 0;
+    }
+
+    // Magic and Version
+    byte[] magicBytes = "ustar".getBytes("UTF-8");
+    System.arraycopy(magicBytes, 0, tarHeader, 257, magicBytes.length);
+    tarHeader[262] = '0';
+    tarHeader[263] = '0';
+
+    // After the fixed fields, the rest is usually padded with nulls.
+    // For the purpose of triggering the parseOctal error, the critical part
+    // is the malformed name field.
+
+    // Calculate a dummy checksum to satisfy the header structure, although the error
+    // happens before this is fully used for validation in a way that would prevent
+    // the initial parseOctal error.
+    long chk = 0;
+    for (int i = 0; i < 512; i++) {
+        chk += ((tarHeader[i] & 0xff));
+    }
+    String checksum = String.format("%6s", Long.toOctalString(chk)).replace(' ', '0');
+    System.arraycopy(checksum.getBytes("UTF-8"), 0, tarHeader, 148, 6);
+    tarHeader[155] = 0; // Null terminator for checksum
+
+    // Create a temporary directory and file
+    File tempDir = Files.createTempDirectory("tar_test").toFile();
+    tempDir.deleteOnExit();
+    File tgzFile = new File(tempDir, "problematic.tgz");
+
+    // Write the malformed tar header to a GZIP output stream
+    try (FileOutputStream fos = new FileOutputStream(tgzFile);
+         GZIPOutputStream gos = new GZIPOutputStream(fos)) {
+        gos.write(tarHeader);
+        // Write a tar entry terminator (two null blocks)
+        gos.write(new byte[512]);
+        gos.write(new byte[512]);
+    }
+
+    // Attempt to extract the file using the original code's logic
+    TarArchiveInputStream tarIn = null;
+    try {
+        tarIn = new TarArchiveInputStream(
+                new GZIPInputStream(
+                        new BufferedInputStream(
+                                new FileInputStream(tgzFile))));
+
+        // This call should throw the IllegalArgumentException
+        tarIn.getNextTarEntry();
+        fail("Expected IllegalArgumentException for invalid tar header");
+    } catch (IOException e) {
+        // Check if the exception is the one we expect, or caused by it
+        Throwable cause = e.getCause();
+        assertTrue("Expected IllegalArgumentException as cause", cause instanceof IllegalArgumentException);
+        assertTrue("Expected invalid byte message", cause.getMessage().contains("Invalid byte 0 at offset 5"));
+    } finally {
+        if (tarIn != null) {
+            tarIn.close();
+        }
+    }
+}

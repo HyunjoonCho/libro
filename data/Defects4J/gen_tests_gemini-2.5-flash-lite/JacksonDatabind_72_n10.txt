@@ -1,0 +1,61 @@
+public void testNonStaticInnerClassConstructor() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(new SimpleModule() {
+        @Override
+        public void setupModule(SetupContext context) {
+            context.addAbstractTypeResolver(new SimpleAbstractTypeResolver() {
+                @Override
+                public JavaType resolveAbstractType(MapperConfig<?> config, JavaType type) {
+                    if (type.getRawClass().equals(Something.class)) {
+                        return config.constructSpecializedType(type, Something.class);
+                    }
+                    return super.resolveAbstractType(config, type);
+                }
+            });
+        }
+    });
+
+    Something something = new Something(null);
+    String ser = mapper.writeValueAsString(something);
+
+    // The deserialization should not throw ArrayIndexOutOfBoundsException
+    // We expect it to fail, but with a different, more informative error
+    // or ideally, be handled correctly if the constructor was valid.
+    // For the purpose of reproducing the bug, we'll assert that it throws
+    // an exception, and specifically check the type if possible, though
+    // the original bug report shows ArrayIndexOutOfBoundsException.
+    // If the fix changes the exception type, this test might need adjustment.
+    try {
+        mapper.readValue(ser, Something.class);
+        fail("Expected an exception due to non-static inner class constructor");
+    } catch (JsonMappingException e) {
+        // Check if the underlying cause is related to the constructor or instantiation
+        // The original bug points to ArrayIndexOutOfBoundsException, but Jackson's behavior
+        // might evolve. We'll check for a common deserialization error related to instantiation.
+        assertTrue(e.getMessage().contains("Cannot instantiate abstract or interface type"));
+    } catch (IOException e) {
+        // Catching a broader IOException in case the specific exception type changes
+        assertTrue(e.getMessage().contains("Cannot instantiate abstract or interface type"));
+    }
+}
+
+// Helper classes as defined in the bug report
+static class Something {
+    public InnerSomething a;
+
+    @JsonCreator
+    public Something(@JsonProperty("a") InnerSomething a) {
+        this.a = a;
+    }
+
+    // Making InnerSomething static for a working scenario (not part of the bug repro)
+    // If InnerSomething is not static, it requires an instance of the outer class.
+    // The bug is specifically about the failure when it's NOT static.
+    // To make the test runnable, we need to define InnerSomething.
+    // The original bug describes a non-static inner class.
+    class InnerSomething {
+        @JsonCreator
+        public InnerSomething() {
+        }
+    }
+}

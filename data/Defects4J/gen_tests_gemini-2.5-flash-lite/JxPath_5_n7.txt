@@ -1,0 +1,101 @@
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.Pointer;
+import org.apache.commons.jxpath.Variables;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+public class JXPathBugTest {
+
+    @Test
+    public void testCannotComparePointers() {
+        try {
+            JXPathContext context = JXPathContext.newContext(new Object());
+            Variables vars = context.getVariables();
+            vars.declareVariable("var", "someValue");
+
+            // Construct an XPath expression that combines a variable with a node
+            String xpath = "$var | /someNode"; // Assuming a dummy node path for demonstration
+
+            // We need a way to represent the node part of the XPath.
+            // In a real scenario, this would come from an XML document or similar.
+            // For this test, we'll simulate a context that *might* lead to this error.
+            // The core issue is the comparison of a VariablePointer with a NodePointer
+            // from potentially different trees or contexts.
+
+            // The original bug description implies the error happens during selectNodes.
+            // To trigger the comparison, we need to create pointers that will be compared.
+            // This often happens when sorting or merging results.
+
+            // Let's try to directly create pointers that might cause the issue.
+            // This is a bit of a reverse-engineering of the stack trace.
+            Pointer varPointer = context.getPointer("$var");
+            // We need a NodePointer that is NOT from the same tree as the variable's context.
+            // This is tricky to simulate without a full tree.
+            // The error message "Cannot compare pointers that do not belong to the same tree: '$var' and ''"
+            // suggests that an empty NodePointer is being compared.
+
+            // A more direct way to reproduce the stack trace is to force the comparison.
+            // The JXPathContext.selectNodes method internally uses EvalContext which
+            // eventually calls NodePointer.compareNodePointers.
+
+            // To specifically hit the error as described, we need a scenario where
+            // JXPath tries to compare a variable pointer with a non-existent or
+            // root node pointer during the evaluation of a union.
+
+            // Let's simulate the scenario by creating a context and a variable,
+            // then attempting to select nodes using an XPath that involves a union
+            // with a path that might resolve to an empty pointer in certain contexts.
+
+            // The key is that `selectNodes` on a union expression will try to merge
+            // and sort results from both sides of the union. If one side yields
+            // a pointer from a different "tree" or context than the other, the comparison fails.
+
+            // Forcing the error: Let's try to evaluate an XPath that is known to cause issues
+            // with variables and potentially empty node sets.
+            // The original test case in JXPath seems to be `VariablePointerTestCase.testUnionOfVariableAndNode`
+            // which suggests that combining a variable with a node path is the trigger.
+
+            // Let's try to recreate that test's intent.
+            // We need a root object for JXPathContext.
+            Object root = new Object(); // A simple object as the root
+            JXPathContext xpathContext = JXPathContext.newContext(root);
+            Variables variables = xpathContext.getVariables();
+            variables.declareVariable("var", "someValue");
+
+            // The problematic XPath from the description is "$var | /MAIN/A"
+            // The error message also mentions "''" as the second pointer.
+            // This implies that `/MAIN/A` might resolve to an empty set,
+            // and JXPath tries to compare the variable pointer with the pointer
+            // representing the empty set or the root context.
+
+            // Let's use an XPath that is likely to produce an empty result for the node part
+            // in a simple object context.
+            String problematicXPath = "$var | /nonExistentNode";
+
+            // This selectNodes call is where the error is expected.
+            xpathContext.selectNodes(problematicXPath);
+
+            // If we reach here, the exception was not thrown, which would be unexpected
+            // based on the bug report.
+            fail("Expected JXPathException for comparing pointers from different trees.");
+
+        } catch (org.apache.commons.jxpath.JXPathException e) {
+            // Check if the exception message matches the description
+            String errorMessage = e.getMessage();
+            if (errorMessage != null &&
+                (errorMessage.contains("Cannot compare pointers that do not belong to the same tree") ||
+                 errorMessage.contains("Cannot compare pointers that do not belong to the same tree: '$var' and ''"))) {
+                // Expected exception caught
+                return;
+            } else {
+                // Some other JXPathException occurred
+                throw e;
+            }
+        } catch (Exception e) {
+            // Any other unexpected exception
+            throw e;
+        }
+    }
+}

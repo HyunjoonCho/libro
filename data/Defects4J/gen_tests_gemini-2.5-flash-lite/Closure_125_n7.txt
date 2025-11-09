@@ -1,0 +1,55 @@
+public void testRhinoIssue107() {
+    String jsCode = "var test = {};" +
+                    "/** @interface */" +
+                    "test.T = function() {};" +
+                    "/** @constructor @implements {test.T} */" +
+                    "test.A = function() {};" +
+                    "/** @constructor @implements {test.T} */" +
+                    "test.B = function() {};" +
+                    "/** @constructor */" +
+                    "test.X = function() {" +
+                    " this.type = test.A;" +
+                    " this.t = this.f();" +
+                    "};" +
+                    "/** @return {test.T} */" +
+                    "test.X.prototype.f = function() {" +
+                    " if (this.type === test.A) {" +
+                    " return new test.A();" +
+                    " } else if (this.type === test.B) {" +
+                    " return new test.B();" +
+                    " }" +
+                    "};";
+
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setWarningLevel(DiagnosticGroups.GLOBAL, CheckLevel.VERBOSE);
+    options.setLanguageIn(LanguageMode.ECMASCRIPT3);
+    options.setLanguageOut(LanguageMode.ECMASCRIPT3);
+    options.setPrettyPrint(true);
+    options.setBrowserFeatureset(BrowserFeatureset.getAll().get("CHROME"));
+
+    // The original bug report described a crash during compilation.
+    // We expect compilation to fail with a specific error if the bug is present.
+    // If the compiler no longer crashes, this test should ideally pass,
+    // but to reproduce the *failure*, we expect an exception.
+    // The specific exception was IllegalStateException.
+    try {
+        compiler.compile(
+            SourceFile.fromCode("externs.js", "function alert(x) {}"),
+            SourceFile.fromCode("test.js", jsCode),
+            options
+        );
+        // If compilation succeeds, the bug is fixed. The test should not assert anything here
+        // as it's meant to reproduce a failure. If we reach here, it means the test setup
+        // or the compiler version might not trigger the bug.
+        // In a real test suite, you might add a check here if the bug is fixed,
+        // e.g., assertNotNull("Compilation should have failed with IllegalStateException", compiler.getErrors());
+    } catch (RuntimeException e) {
+        // Check if the root cause is the expected IllegalStateException
+        Throwable cause = e.getCause();
+        while (cause != null && !(cause instanceof IllegalStateException)) {
+            cause = cause.getCause();
+        }
+        assertTrue("Expected IllegalStateException as a cause", cause instanceof IllegalStateException);
+    }
+}

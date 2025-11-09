@@ -1,0 +1,99 @@
+public void testOverzealousOptimizationConfusesVariables() {
+    // This test is designed to reproduce the behavior described in the bug report.
+    // It's not a direct unit test of a specific method, but rather a test
+    // that demonstrates the problematic optimization.
+    // The original bug report is in JavaScript, and this Java adaptation
+    // aims to simulate the core issue of variable confusion due to optimization.
+    // In a real scenario, this would likely involve testing the compiled output
+    // of a JavaScript compiler or framework.
+
+    // Since we are in a Java JUnit environment, we cannot directly execute
+    // the JavaScript code and observe the optimization.
+    // However, we can simulate the *consequence* of the optimization.
+    // The core problem is that the compiler incorrectly assumes 'uid'
+    // has not changed between the assignment to '_uid' and the check.
+
+    // Let's create a simplified Java equivalent that might exhibit similar issues
+    // if a Java compiler were to perform a similarly aggressive optimization.
+    // NOTE: This is a conceptual adaptation and might not perfectly mirror
+    // the JavaScript behavior due to differences in language and compiler.
+
+    // We'll use a mutable holder for the 'uid' to simulate potential changes.
+    class MutableLong {
+        long value;
+    }
+
+    MutableLong uidHolder = new MutableLong();
+
+    // Simulate the reset function
+    Runnable reset = () -> {
+        // In the original bug, Math.random() is used. For reproducibility,
+        // we'll use a fixed sequence or a predictable random source if possible.
+        // For this test, we'll assume a scenario where reset *could* change uid.
+        uidHolder.value = System.nanoTime(); // Simulating a change
+    };
+
+    // Simulate the doStuff function
+    // This recursive call and the conditional check are key to the bug.
+    // We need to simulate the scenario where 'reset()' is called within 'doStuff()'.
+    java.util.function.Consumer<Object> doStuff = new java.util.function.Consumer<Object>() {
+        @Override
+        public void accept(Object ignore) {
+            long originalUid = uidHolder.value; // Simulating '_uid = uid'
+            reset.run(); // This is where 'uid' might change
+
+            // The problematic check: if the compiler incorrectly assumes uid hasn't changed
+            // and optimizes `originalUid !== uidHolder.value` to `uidHolder.value !== uidHolder.value`
+            // if originalUid was optimized away.
+
+            // To reproduce the *failure*, we need to create a situation where
+            // originalUid *is different* from uidHolder.value after reset.run()
+            // AND the check *should* throw an exception.
+            // The bug report states the optimization leads to `uid !== uid` which is always false.
+            // So, the exception is *not* thrown when it should be.
+
+            // Let's force a state where the exception *should* be thrown.
+            // We'll set originalUid to a value, then reset will change it.
+            originalUid = 12345L; // Explicitly set a value
+            uidHolder.value = originalUid; // Initialize uidHolder
+            reset.run(); // This will change uidHolder.value
+
+            // Now, originalUid (12345L) is guaranteed to be different from the new uidHolder.value.
+            // The original JS code: `if (_uid !== uid) { throw 'reset() was called'; }`
+            // The optimized JS code: `if (a !== a) { throw 'reset() was called'; }`
+            // This optimized version will never throw.
+
+            // In Java, we can't directly test the optimized JS output.
+            // We can test if our Java simulation correctly identifies the difference.
+            // If the optimization *wasn't* overzealous, originalUid would be compared to the potentially changed uidHolder.value.
+            // The bug is that the comparison becomes faulty.
+
+            // To *reproduce the failure*, we need to assert that the *incorrect* optimized behavior occurs.
+            // This means the exception *is not* thrown when it should be.
+
+            // We'll use a flag to track if the "throw" condition was met.
+            boolean shouldThrow = (originalUid != uidHolder.value);
+
+            // If the compiler were buggy like in the report, it might optimize this to:
+            // boolean shouldThrowOptimized = (uidHolder.value != uidHolder.value); // Always false
+
+            // Assert that the exception *is not* thrown, simulating the buggy optimization.
+            // This is the opposite of what a correct implementation would do if `originalUid != uidHolder.value`.
+            // The test passes if the exception is *not* thrown, indicating the problematic optimization.
+            assertFalse("Exception should not have been thrown due to overzealous optimization", shouldThrow);
+
+            // The original bug also had a recursive call: `if (uid < 0.5) { doStuff(); }`
+            // This adds complexity and potential for stack overflow if not handled.
+            // For the purpose of demonstrating the variable confusion, we can omit
+            // the recursive call or make it conditional to avoid infinite loops in tests.
+            // If we include it, we need a mechanism to stop recursion.
+            // A simple way is to limit the depth or use a fixed number of iterations.
+            // For this specific bug, the core issue is in the `if (_uid !== uid)` check.
+        }
+    };
+
+    // Initial setup to ensure reset() is called at least once before doStuff()
+    reset.run();
+    // Call doStuff to trigger the problematic comparison
+    doStuff.accept(null);
+}

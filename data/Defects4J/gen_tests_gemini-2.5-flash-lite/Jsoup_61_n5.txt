@@ -1,0 +1,63 @@
+public void testCssClassCaseSensitivity() {
+    final String htmlStr = "<!DOCTYPE HTML PUBLIC '-//W3C//DTD HTML 4.01 Transitional//EN' 'http://www.w3.org/TR/html4/loose.dtd'>\n"
+        + "<HTML>\n"
+        + "  <HEAD>\n"
+        + "    <FORM Method='POST' name='Form' Action='Action'>\n"
+        + "      <TABLE Class='Lst'>\n"
+        + "        <TR Class='Lst'>\n"
+        + "          <TH Class='Lst'>Header 1</TH>\n"
+        + "          <TH Class='Lst'>Header 2</TH>\n"
+        + "          <TH Class='Lst'>Header 3</TH>\n"
+        + "        </TR>\n"
+        + "        <TR Class='Lst1'>\n"
+        + "          <TD Class='Lst'>Cell 1</TD>\n"
+        + "          <TD Class='Lst'>Cell 2</TD>\n"
+        + "          <TD Class='Lst'>Cell 3</TD>\n"
+        + "        </TR>\n"
+        + "      </TABLE>\n"
+        + "    </FORM>\n"
+        + "  </BODY>\n"
+        + "</HTML>";
+    final Document htmlDoc = Jsoup.parse(htmlStr, "");
+
+    // The original bug report stated that this selector did NOT work as expected.
+    // The test asserts that it *does* work, implying the bug is fixed or the
+    // original report was mistaken about the behavior of this selector.
+    // If the test fails, it means the behavior is still inconsistent.
+    final Element tableWithClassSelector = htmlDoc.select("html > body > form table.Lst").first();
+    assertNotNull("Table should be found using 'table.Lst' selector", tableWithClassSelector);
+    assertEquals("Lst", tableWithClassSelector.attr("class"));
+
+    // This selector was reported to work.
+    final Element tableWithAttributeSelector = htmlDoc.select("html > body > form table[class=Lst]").first();
+    assertNotNull("Table should be found using 'table[class=Lst]' selector", tableWithAttributeSelector);
+    assertEquals("Lst", tableWithAttributeSelector.attr("class"));
+
+    // Add a test case to specifically check for case sensitivity if that was the core issue.
+    // If the class attribute was 'lst' (lowercase), the original report implied
+    // 'table.Lst' would fail to find it, but 'table[class=Lst]' might also fail
+    // depending on implementation.
+    final String htmlStrLower = "<!DOCTYPE HTML PUBLIC '-//W3C//DTD HTML 4.01 Transitional//EN' 'http://www.w3.org/TR/html4/loose.dtd'>\n"
+        + "<HTML>\n"
+        + "  <HEAD>\n"
+        + "    <FORM Method='POST' name='Form' Action='Action'>\n"
+        + "      <TABLE Class='lst'>\n" // Lowercase class
+        + "      </TABLE>\n"
+        + "    </FORM>\n"
+        + "  </HEAD>\n"
+        + "</HTML>";
+    final Document htmlDocLower = Jsoup.parse(htmlStrLower, "");
+
+    // Based on the bug report, this should NOT find the table.
+    final Element tableWithLowerClassSelector = htmlDocLower.select("html > body > form table.Lst").first();
+    assertNull("Table with lowercase class 'lst' should NOT be found by 'table.Lst' selector if case-sensitive", tableWithLowerClassSelector);
+
+    // Based on the bug report, this might or might not find the table depending on attribute selector behavior.
+    // Assuming standard CSS behavior, attribute selectors are case-sensitive by default.
+    final Element tableWithLowerAttributeSelector = htmlDocLower.select("html > body > form table[class=Lst]").first();
+    assertNull("Table with lowercase class 'lst' should NOT be found by 'table[class=Lst]' selector if case-sensitive", tableWithLowerAttributeSelector);
+
+    // If the intention was case-INSENSITIVE matching for class selectors,
+    // then the original report implies 'table.Lst' should have matched 'table.lst'.
+    // The test here confirms that standard CSS class selector behavior (case-sensitive) is observed.
+}

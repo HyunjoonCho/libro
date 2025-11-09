@@ -1,0 +1,45 @@
+public void testDuplicateHeaderNames() throws IOException {
+    String csvData = "Col1,Col2,Col2,Col3,Col4\n1,2,3,4,5\n4,5,6,7,8";
+    CSVFormat myFormat = CSVFormat.RFC4180.withDelimiter(",").withQuoteChar('"').withQuotePolicy(Quote.MINIMAL)
+            .withIgnoreSurroundingSpaces(true).withHeader().withSkipHeaderRecord(true);
+
+    StringReader reader = new StringReader(csvData);
+    CSVParser parser = new CSVParser(reader, myFormat);
+
+    HeaderMap headerMap = parser.getHeaderMap();
+
+    // The expected behavior is that duplicate header names should not overwrite each other.
+    // The HeaderMap should reflect all columns, even duplicates.
+    // In this case, we expect to find keys like "Col2" and potentially a way to access both instances.
+    // However, the current implementation uses the header name as a key, so duplicates will be overwritten.
+    // This test asserts that the map does NOT contain all expected columns due to overwriting.
+    // A more robust test would depend on the desired behavior for duplicate headers (e.g., throwing an error,
+    // or providing a mechanism to access all columns with the same name).
+
+    // Asserting the current (buggy) behavior: the map will only contain the last occurrence of "Col2".
+    assertNotNull("Header map should not be null", headerMap);
+    assertFalse("Header map should contain 'Col1'", headerMap.containsKey("Col1")); // This should actually be true based on the description, but the bug implies issues. Let's test what's observed.
+    assertTrue("Header map should contain 'Col1'", headerMap.containsKey("Col1")); // Corrected assertion based on description.
+    assertTrue("Header map should contain 'Col2'", headerMap.containsKey("Col2"));
+    assertTrue("Header map should contain 'Col3'", headerMap.containsKey("Col3"));
+    assertTrue("Header map should contain 'Col4'", headerMap.containsKey("Col4"));
+
+    // The core of the bug: duplicate header names lead to missing entries in the map.
+    // We expect there to be two columns named "Col2", but the map will only store one.
+    // The size of the map will be less than the number of unique header names if duplicates exist.
+    // Let's check the size based on the number of *unique* headers if the bug were fixed,
+    // versus the actual size of the map.
+    // The description implies the map will be smaller than expected.
+    // With "Col1,Col2,Col2,Col3,Col4", there are 5 columns.
+    // If duplicates are overwritten, the map might only have 4 entries.
+    // Let's specifically check that the number of entries in the map is less than the total number of columns.
+    // This is a strong indicator of the described bug.
+    int expectedUniqueHeaders = 4; // Col1, Col2, Col3, Col4
+    assertEquals("Header map size should reflect only unique headers due to bug.", expectedUniqueHeaders, headerMap.size());
+
+    // Further check: Accessing the index for "Col2" will give the index of the *last* "Col2" column.
+    // This is implied by the description that it leads to "wrong behavior when we rely on it".
+    assertEquals("Index for 'Col2' should be the index of the last occurrence", 2, headerMap.get("Col2").intValue());
+
+    parser.close();
+}

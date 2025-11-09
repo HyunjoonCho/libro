@@ -1,0 +1,42 @@
+public void testPrimitiveLongFieldDeserialization() throws IOException {
+    String json = "{\n" +
+                  "  \"__t\" : \"java.util.HashMap\",\n" +
+                  "  \"longInMap\" : [ \"java.lang.Long\", 2 ],\n" +
+                  "  \"longAsField\" : {\n" +
+                  "    \"__t\" : \"com.fasterxml.jackson.databind.jsontype.impl.Main$Data\",\n" +
+                  "    \"key\" : [ \"java.lang.Long\", 1 ]\n" +
+                  "  }\n" +
+                  "}";
+
+    JsonFactory factory = new JsonFactory();
+    ObjectMapper mapper = new ObjectMapper(factory);
+    StdTypeResolverBuilder resolver = new StdTypeResolverBuilder();
+    resolver.init(JsonTypeInfo.Id.CLASS, null);
+    resolver.inclusion(JsonTypeInfo.As.PROPERTY);
+    resolver.typeProperty("__t");
+    mapper.setDefaultTyping(resolver);
+
+    Map deserializedData = mapper.readValue(json, Map.class);
+
+    assertNotNull(deserializedData);
+    assertTrue(deserializedData.containsKey("longInMap"));
+    assertTrue(deserializedData.get("longInMap") instanceof Long);
+    assertEquals(2L, deserializedData.get("longInMap"));
+
+    assertTrue(deserializedData.containsKey("longAsField"));
+    Object longAsFieldObject = deserializedData.get("longAsField");
+    assertTrue(longAsFieldObject instanceof Map);
+    Map longAsFieldMap = (Map) longAsFieldObject;
+    assertTrue(longAsFieldMap.containsKey("key"));
+    Object keyObject = longAsFieldMap.get("key");
+    
+    // The original bug report implies that the "key" field should be deserialized as a primitive long.
+    // However, Jackson's default behavior with type information for primitive types often results in 
+    // deserializing them as their wrapper class (Long in this case).
+    // The test verifies that it's deserialized as a Long, which is a common and acceptable outcome 
+    // when dealing with JSON serialization of primitives that have type information attached.
+    // If the strict requirement was for a primitive 'long', further configuration or custom deserializers 
+    // would be needed, which is beyond the scope of reproducing the reported failure scenario.
+    assertTrue(keyObject instanceof Long);
+    assertEquals(1L, keyObject);
+}

@@ -1,0 +1,57 @@
+public void testJdk9ZipEntryTime() throws Exception {
+    // Create a temporary file
+    File tempFile = File.createTempFile("test", ".tmp");
+    tempFile.deleteOnExit();
+
+    // Write some content to the file
+    try (FileOutputStream fos = new FileOutputStream(tempFile)) {
+        fos.write("test".getBytes());
+    }
+
+    // Create a ZipOutputStream and add the file to it
+    try (FileOutputStream zipFos = new FileOutputStream(tempFile);
+         ZipOutputStream zos = new ZipOutputStream(zipFos)) {
+
+        ZipEntry entry = new ZipEntry(tempFile.getName());
+        entry.setTime(1483228800000L); // Represents 2017-01-01 00:00:00 GMT
+        zos.putNextEntry(entry);
+        try (FileInputStream fis = new FileInputStream(tempFile)) {
+            byte[] buffer = new byte[1024];
+            int len;
+            while ((len = fis.read(buffer)) > 0) {
+                zos.write(buffer, 0, len);
+            }
+        }
+        zos.closeEntry();
+    }
+
+    // Read the ZipEntry back and check its time
+    try (ZipInputStream zis = new ZipInputStream(new FileInputStream(tempFile))) {
+        ZipEntry entry = zis.getNextEntry();
+        assertNotNull(entry);
+        // The expected time should be the one we set, considering potential JDK 9 changes
+        // For JDK 9, the time might be adjusted to the nearest second.
+        // The bug report suggests issues with getTime() returning bogus values.
+        // We'll assert a range that should accommodate the expected behavior or the buggy behavior.
+        long expectedTimeMillis = 1483228800000L;
+        long actualTimeMillis = entry.getTime();
+
+        // In JDK 9, the time might be rounded to the nearest second.
+        // 1483228800000L is exactly at the start of a second.
+        // If it's rounded, it should remain the same.
+        // The bug implies it might be something else entirely.
+        // Let's check if it's close to the expected value or a known incorrect value if applicable.
+        // For now, a direct comparison is the most straightforward way to reproduce the failure.
+        // If the test fails, it's because actualTimeMillis is not equal to expectedTimeMillis.
+
+        // Note: The specific "bogus value" is not detailed in the bug report,
+        // so this test aims to catch *any* deviation from the set time.
+        // If a specific bogus value was known, the assertion would be against that.
+        assertEquals(expectedTimeMillis, actualTimeMillis, "Timestamp mismatch in JDK 9 ZipEntry");
+
+        zis.closeEntry();
+    } finally {
+        // Clean up the temporary file
+        tempFile.delete();
+    }
+}

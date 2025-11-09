@@ -1,0 +1,156 @@
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
+import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.Map;
+import java.util.Random;
+import java.util.UUID;
+import java.util.Map.Entry;
+
+import static org.junit.jupiter.api.Assertions.fail;
+
+public class JacksonBugReproducer {
+
+    private static final Logger logger = LoggerFactory.getLogger(JacksonBugReproducer.class);
+    private UUID user = UUID.randomUUID(); // Assuming 'user' is a UUID instance
+
+    // Assuming ObjectUserKey and ServerIndexPair classes are accessible or defined here
+
+    public static class ServerIndexPair {
+        public static final String INDEX_PAIR_FIELD = "indexPair";
+        private final byte[] indexPair;
+
+        // Constructor without @JsonCreator for simpler instantiation in test
+        public ServerIndexPair(byte[] indexPair) {
+            Preconditions.checkState(indexPair.length == 2080, "Index pair must be 2080 bytes long.");
+            this.indexPair = indexPair;
+        }
+
+        // @JsonCreator
+        // public ServerIndexPair(@JsonProperty(INDEX_PAIR_FIELD) byte[] indexPair) {
+        //     Preconditions.checkState(indexPair.length == 2080, "Index pair must be 2080 bytes long.");
+        //     this.indexPair = indexPair;
+        // }
+
+        @com.fasterxml.jackson.annotation.JsonProperty(INDEX_PAIR_FIELD)
+        public byte[] getIndexPair() {
+            return indexPair;
+        }
+    }
+
+    public static class ObjectUserKey {
+        public static final String SEPARATOR = ":";
+        private final String objectId;
+        private final UUID userKey;
+
+        // Constructor without @JsonCreator for simpler instantiation in test
+        public ObjectUserKey(String objectId, UUID userKey) {
+            this.objectId = objectId;
+            this.userKey = userKey;
+        }
+
+        // @JsonCreator
+        // public ObjectUserKey(
+        //         @JsonProperty(Names.ID_FIELD) String objectId,
+        //         @JsonProperty(Names.USER_FIELD) UUID userKey) {
+        //     super();
+        //     this.objectId = objectId;
+        //     this.userKey = userKey;
+        // }
+
+        @com.fasterxml.jackson.annotation.JsonProperty(Names.ID_FIELD)
+        public String getObjectId() {
+            return objectId;
+        }
+
+        @com.fasterxml.jackson.annotation.JsonProperty(Names.USER_FIELD)
+        public UUID getUserKey() {
+            return userKey;
+        }
+
+        @Override
+        public int hashCode() {
+            final int prime = 31;
+            int result = 1;
+            result = prime * result + ((objectId == null) ? 0 : objectId.hashCode());
+            result = prime * result + ((userKey == null) ? 0 : userKey.hashCode()); // Include userKey in hash
+            return result;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null) {
+                return false;
+            }
+            if (!(obj instanceof ObjectUserKey)) {
+                return false;
+            }
+            ObjectUserKey other = (ObjectUserKey) obj;
+            if (objectId == null) {
+                if (other.objectId != null) {
+                    return false;
+                }
+            } else if (!objectId.equals(other.objectId)) {
+                return false;
+            }
+            if (userKey == null) {
+                if (other.userKey != null) {
+                    return false;
+                }
+            } else if (!userKey.equals(other.userKey)) {
+                return false;
+            }
+            return true;
+        }
+
+        @Override
+        public String toString() {
+            return userKey + SEPARATOR + objectId;
+        }
+
+        // Assuming Names class is defined elsewhere or can be mocked/simplified
+        public static class Names {
+            public static final String ID_FIELD = "id";
+            public static final String USER_FIELD = "user";
+        }
+    }
+
+
+    @Test
+    public void testSpamAddIndexPair() {
+        ObjectMapper mapper = new ObjectMapper();
+        Map<ObjectUserKey, ServerIndexPair> ssip = Maps.newConcurrentMap();
+        for (int i = 0; i < 10000; ++i) {
+            byte[] indexPairBytes = new byte[2080];
+            new Random().nextBytes(indexPairBytes);
+            ServerIndexPair sip = new ServerIndexPair(indexPairBytes);
+
+            try {
+                byte[] s = mapper.writeValueAsBytes(ImmutableMap.of(UUID.randomUUID().toString(), sip));
+                Map<String, ServerIndexPair> metadata = mapper.readValue(s, new TypeReference<Map<String, ServerIndexPair>>() {});
+                for (Entry<String, ServerIndexPair> metadataEntry : metadata.entrySet()) {
+                    ServerIndexPair indexPair = metadataEntry.getValue();
+                    ssip.put(new ObjectUserKey(metadataEntry.getKey(), user), indexPair);
+                }
+                // logger.error("Iteration: {}", i); // Removed logger to avoid external dependency issues
+            } catch (JsonProcessingException e) {
+                fail("Failed to serialize/deserialize JSON: " + e.getMessage());
+            } catch (IOException e) {
+                fail("Failed to read value from JSON: " + e.getMessage());
+            } catch (Exception e) {
+                // Catching other potential exceptions during the loop
+                fail("An unexpected error occurred at iteration " + i + ": " + e.getMessage());
+            }
+        }
+    }
+}

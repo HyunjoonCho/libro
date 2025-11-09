@@ -1,0 +1,66 @@
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.jsontype.impl.StdTypeResolverBuilder;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+public class JacksonPrimitiveLongTest {
+
+    @Test
+    public void testPrimitiveLongDeserialization() throws IOException {
+        // Create test data
+        Data data = new Data();
+        data.key = 1L; // Use Long literal to ensure it's treated as long
+        Map<String, Object> mapData = new HashMap<>();
+        mapData.put("longInMap", 2L);
+        mapData.put("longAsField", data);
+
+        // Configure Jackson to preserve types
+        JsonFactory factory = new JsonFactory();
+        ObjectMapper mapper = new ObjectMapper(factory);
+        StdTypeResolverBuilder resolver = new StdTypeResolverBuilder();
+        resolver.init(JsonTypeInfo.Id.CLASS, null);
+        resolver.inclusion(JsonTypeInfo.As.PROPERTY);
+        resolver.typeProperty("__t");
+        mapper.setDefaultTyping(resolver);
+        mapper.enable(SerializationFeature.INDENT_OUTPUT);
+
+        // Serialize
+        String json = mapper.writeValueAsString(mapData);
+
+        // Deserialize
+        // The actual test is to see if this line executes without throwing an exception
+        Map deserializedData = mapper.readValue(json, Map.class);
+
+        // Add assertions to verify the deserialized data
+        assertNotNull(deserializedData);
+        Object longInMap = deserializedData.get("longInMap");
+        assertNotNull(longInMap);
+        assertEquals(Long.class, longInMap.getClass());
+        assertEquals(2L, ((Long) longInMap).longValue());
+
+        Object longAsFieldWrapper = deserializedData.get("longAsField");
+        assertNotNull(longAsFieldWrapper);
+        assertEquals(Map.class, longAsFieldWrapper.getClass()); // Expecting a Map representation of Data
+        Map longAsFieldMap = (Map) longAsFieldWrapper;
+
+        Object keyWrapper = longAsFieldMap.get("key");
+        assertNotNull(keyWrapper);
+        // Jackson deserializes the primitive long as a Long object when type information is present
+        assertEquals(Long.class, keyWrapper.getClass());
+        assertEquals(1L, ((Long) keyWrapper).longValue());
+    }
+
+    // Dummy Data class to match the original example
+    static class Data {
+        public long key;
+    }
+}

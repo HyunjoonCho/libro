@@ -1,0 +1,85 @@
+public void testZipLocalVersionNeededToExtract() throws Exception {
+    File zipFile = File.createTempFile("test", ".zip");
+    zipFile.deleteOnExit();
+
+    ZipArchiveOutputStream zos = null;
+    try {
+        zos = new ZipArchiveOutputStream(new BufferedOutputStream(new FileOutputStream(zipFile)));
+        ZipArchiveEntry entry = new ZipArchiveEntry("test.txt");
+        entry.setMethod(ZipEntry.DEFLATED);
+        zos.putArchiveEntry(entry);
+        zos.write("test".getBytes());
+        zos.closeArchiveEntry();
+    } finally {
+        IOUtils.closeQuietly(zos);
+    }
+
+    ZipFile zip = null;
+    try {
+        zip = new ZipFile(zipFile);
+        ZipArchiveEntry localEntry = zip.getEntry("test.txt");
+        assertNotNull(localEntry);
+        // For DEFLATED method, if data descriptors are used, version needed should be 2.0
+        // If not using data descriptors, it depends on whether zip64 is required.
+        // In this scenario, buffered output stream implies data descriptors are used.
+        // Therefore, version needed to extract should be 2.0.
+        assertEquals("Local version needed to extract should be 2.0 for DEFLATED with data descriptors", 2, localEntry.getVersionNeededToExtract());
+
+        // Now check the central directory entry
+        // The central directory entry is typically created after all entries are written.
+        // The logic for central directory version needed to extract takes data descriptors into account.
+        // We need to re-read the archive to get the central directory information.
+        // This part is tricky as we are testing the output stream's behavior.
+        // A simpler test is to check the local header version directly.
+        // The bug implies the local header is incorrect.
+
+        // Let's try to simulate the condition where data descriptor is used.
+        // If the archive was created without BufferedOutputStream, it would likely not use data descriptors.
+        // The bug states that BufferedOutputStream causes data descriptors to be added.
+        // So, the test should specifically target this scenario.
+
+        // To verify the central directory, we'd need to inspect the central directory record.
+        // ZipArchiveEntry returned by zip.getEntry() usually reflects the central directory.
+        // Let's re-assert based on the central directory's perspective as per the bug description.
+        // The bug states "Local `Version Needed To Extract` does not match Central Directory".
+        // This means we need to check both.
+
+        // Re-opening and reading entries to get central directory info
+        ZipArchiveInputStream zis = null;
+        try {
+            zis = new ZipArchiveInputStream(new FileInputStream(zipFile));
+            ArchiveEntry ae;
+            while ((ae = zis.getNextEntry()) != null) {
+                if ("test.txt".equals(ae.getName())) {
+                    assertTrue(ae instanceof ZipArchiveEntry);
+                    ZipArchiveEntry centralEntry = (ZipArchiveEntry) ae;
+                    // The central directory version needed to extract should be 2.0 for DEFLATED
+                    // if data descriptors are used.
+                    assertEquals("Central directory version needed to extract should be 2.0 for DEFLATED with data descriptors", 2, centralEntry.getVersionNeededToExtract());
+
+                    // The core of the bug is that local header and central directory differ.
+                    // The test above checks the central directory version.
+                    // The assertion for the local header version is done via zip.getEntry() before this loop.
+                    // If the bug is present, zip.getEntry("test.txt").getVersionNeededToExtract() might be different.
+                    // Let's re-fetch the local entry to be explicit.
+                    ZipArchiveEntry localEntryAgain = zip.getEntry("test.txt");
+                    assertNotNull(localEntryAgain);
+                    // The value put into the local header initially is the problem.
+                    // The bug description suggests it might be INITIAL_VERSION (1) when it should be DATA_DESCRIPTOR_MIN_VERSION (2).
+                    // So, we expect the local entry's version to be 1 if the bug is present.
+                    // And the central entry's version to be 2.
+                    assertNotEquals("Local version needed to extract should NOT match Central directory version if bug is present",
+                                   localEntryAgain.getVersionNeededToExtract(), centralEntry.getVersionNeededToExtract());
+                    // Asserting the specific incorrect value for local header if the bug is present
+                    // This assumes the bug sets it to INITIAL_VERSION (1)
+                    assertEquals("Local version needed to extract is incorrectly set to 1", 1, localEntryAgain.getVersionNeededToExtract());
+                }
+            }
+        } finally {
+            IOUtils.closeQuietly(zis);
+        }
+
+    } finally {
+        IOUtils.closeQuietly(zip);
+    }
+}

@@ -1,0 +1,43 @@
+public void testClosureRemovesMathBlah() {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setLanguage(CompilerOptions.LanguageMode.ECMASCRIPT5); // Assuming Simple mode implies ECMASCRIPT5
+    options.setPrettyPrint(true);
+
+    // The code snippet that causes the issue
+    String code = "Math.blah = function(test) { test.a = 5; };\n" +
+                  "var test = new Object();\n" +
+                  "Math.blah(test);\n";
+
+    SourceFile sf = SourceFile.fromCode("test.js", code);
+    Result result = compiler.compile(sf, SourceFile.fromCode("empty.js", ""), options);
+
+    // Check that the compilation did not succeed, indicating an error or warning was triggered
+    assertTrue("Compilation should have failed or warned due to useless code detection.", result.errors.length > 0 || result.warnings.length > 0);
+
+    // Optionally, you can try to check the generated code if you want to assert it's not there.
+    // However, the core issue is that Closure *removes* it, so it won't be in the output.
+    // The presence of warnings/errors is the primary indicator of the bug.
+    // If you were to check the generated code, it would be the *absence* of the function call.
+    // String generatedCode = result.transformedCode;
+    // assertFalse("Math.blah function call should have been removed.", generatedCode.contains("Math.blah(test)"));
+
+    // The bug report specifically mentions a warning: JSC_USELESS_CODE
+    // We can check for this specific warning message.
+    boolean foundUselessCodeWarning = false;
+    for (Diagnostic error : result.errors) {
+        if (error.description.contains("JSC_USELESS_CODE")) {
+            foundUselessCodeWarning = true;
+            break;
+        }
+    }
+    if (!foundUselessCodeWarning) {
+        for (Diagnostic warning : result.warnings) {
+            if (warning.description.contains("JSC_USELESS_CODE")) {
+                foundUselessCodeWarning = true;
+                break;
+            }
+        }
+    }
+    assertTrue("Expected JSC_USELESS_CODE warning for Math.blah assignment.", foundUselessCodeWarning);
+}

@@ -1,0 +1,44 @@
+public void testImmutableMapEnumKeyDeserializerModifierIgnored() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.setDeserializerModifier(new BeanDeserializerModifier() {
+        @Override
+        @SuppressWarnings("unchecked")
+        public KeyDeserializer modifyKeyDeserializer(
+                DeserializationConfig config,
+                JavaType type,
+                KeyDeserializer deserializer) {
+            if (!type.isEnumType()) {
+                return super.modifyKeyDeserializer(config, type, deserializer);
+            }
+            return new KeyDeserializer() {
+                @Override
+                @SuppressWarnings("unchecked")
+                public Object deserializeKey(String key, DeserializationContext ctxt)
+                        throws IOException, JsonProcessingException {
+                    Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                    return Enum.valueOf(rawClass, key.toUpperCase());
+                }
+            };
+        }
+    });
+    mapper.registerModule(module);
+
+    // Test case with an enum as a key in an ImmutableMap
+    Map<MyEnum, String> map = new ImmutableMap.Builder<MyEnum, String>()
+            .put(MyEnum.VALUE1, "test1")
+            .build();
+
+    String json = mapper.writeValueAsString(map);
+    // The expected behavior is that "value1" should be deserialized to MyEnum.VALUE1
+    // If the modifier is ignored, "value1" will cause a deserialization error.
+    Map<MyEnum, String> deserializedMap = mapper.readValue(json.replace("VALUE1", "value1"), new TypeReference<Map<MyEnum, String>>() {});
+
+    assertNotNull(deserializedMap);
+    assertTrue(deserializedMap.containsKey(MyEnum.VALUE1));
+    assertEquals("test1", deserializedMap.get(MyEnum.VALUE1));
+}
+
+private enum MyEnum {
+    VALUE1, VALUE2
+}

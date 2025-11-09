@@ -1,0 +1,68 @@
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class ExternalPropertyEnumPolymorphismTest {
+
+    // Enum definition from the bug report
+    public enum Invite {
+        CONTACT,
+        EMAIL
+    }
+
+    // Base class definition from the bug report
+    public static class Base {
+        public Invite kind;
+    }
+
+    // Subclass definition from the bug report
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "kind")
+    @JsonSubTypes({
+            @JsonSubTypes.Type(value = Contact.class, name = "CONTACT"),
+            @JsonSubTypes.Type(value = Email.class, name = "EMAIL")
+    })
+    public static class Derived extends Base {
+        public String to;
+    }
+
+    // Concrete subclass 1 from the bug report
+    public static class Contact extends Derived {
+        public String name;
+    }
+
+    // Concrete subclass 2 from the bug report
+    public static class Email extends Derived {
+        public String address;
+    }
+
+    @Test
+    public void testExternalPropertyPolymorphicDeserializationWithEnum() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+
+        // JSON string that caused the issue
+        String json = "{\n" +
+                "  \"kind\": \"CONTACT\",\n" +
+                "  \"to\": {\n" +
+                "    \"name\": \"Foo\"\n" +
+                "  }\n" +
+                "}";
+
+        // Attempt to deserialize. This is where the exception occurs.
+        // The expected behavior is that it should deserialize successfully into a Contact object.
+        // The bug report indicates that it fails with "argument type mismatch" when trying to construct the Enum.
+        try {
+            Contact contact = mapper.readValue(json, Contact.class);
+            // If deserialization succeeds, assert some expected values to confirm correctness
+            assertEquals(Invite.CONTACT, contact.kind);
+            assertEquals("Foo", contact.name);
+        } catch (Exception e) {
+            // If an exception is caught, check if it's the specific "argument type mismatch"
+            // or related to enum instantiation, which would indicate the bug is reproduced.
+            // For the purpose of this test method, we'll let the test fail if any exception occurs during deserialization,
+            // as the original bug report shows a crash. A more robust test might check the exception type.
+            throw e; // Re-throw to make the test fail if deserialization is not successful
+        }
+    }
+}

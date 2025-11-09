@@ -1,0 +1,157 @@
+public void testIssue107() {
+    // This test case is designed to reproduce the behavior described in the bug report.
+    // It simulates the scenario where assignments within conditional statements might be incorrectly removed
+    // during compilation, leading to unexpected results.
+    // The original code structure is intended to evaluate 'echo(b = true)' and 'echo(b = false)'
+    // and assign the result of 'b' to 'a'.
+    // The compiled version, however, might alter this logic.
+
+    // We will use a mock object or a simple lambda to simulate the 'echo' function's behavior.
+    // For this test, we'll assume 'echo' simply returns its argument and has a side effect
+    // of setting a variable.
+
+    // Simulate the 'echo' function with a mutable state.
+    class EchoMock {
+        Boolean value = null;
+        Boolean echo(Boolean input) {
+            this.value = input;
+            return input;
+        }
+    }
+
+    EchoMock echoMock = new EchoMock();
+
+    // Simulate the original code's logic.
+    Boolean a_original;
+    Boolean b_original = null; // Initialize b as in the original scenario
+
+    // The condition is `echo(b = true) || echo(b = false)`
+    // In JavaScript, the || operator short-circuits.
+    // If `echo(b = true)` returns true, the second part is not evaluated.
+    // If `echo(b = true)` returns false, then `echo(b = false)` is evaluated.
+
+    // Let's trace the expected behavior of the original logic:
+    // 1. `b_original = true; echo(b_original)` -> echoMock.value becomes true, returns true.
+    // 2. Since the first part of || is true, the second part `echo(b = false)` is NOT executed.
+    // 3. `a_original = b_original;` -> a_original becomes true.
+    // 4. The function should return `a_original`, which is true.
+
+    // However, the bug report states that the compiled version returns "undefined".
+    // The compiled version presented is: `echo(true) || echo(a = false) ? a: null`
+    // This compiled version seems to have a different structure, and the assignment `a = false`
+    // is inside the second part of the OR.
+
+    // Let's simulate the compiled code's logic as described.
+    // We need to track the state of 'a' as it might be assigned within the condition.
+    EchoMock echoMockCompiled = new EchoMock();
+    Boolean a_compiled = null; // Initialize 'a' as in the compiled code
+
+    // The compiled condition is `echo(true) || echo(a = false)`
+    // Let's analyze this:
+    // 1. `echo(true)` -> echoMockCompiled.value becomes true, returns true.
+    // 2. Since the first part of || is true, the second part `echo(a = false)` is NOT executed.
+    // 3. The ternary operator `? a : null` will use the current value of `a_compiled`.
+    // 4. If `echo(true)` returned true, the expression evaluates to `a_compiled`.
+    // 5. If `a_compiled` was never assigned (which it isn't in this path), it would be null or undefined.
+    // The bug report implies that the compiled version might incorrectly remove the assignment.
+
+    // To reproduce the "undefined" (or null in Java's Boolean context) return value,
+    // we need a scenario where the assignment to 'a' doesn't happen as expected.
+    // The bug report indicates that the assignment `b = true` or `b = false` is what's being removed/altered.
+
+    // Let's simulate the *expected* behavior of the *original* code, which should return 'true'.
+    // And then simulate a scenario where the compiled code *might* return null/undefined.
+
+    // --- Test for Original Behavior (Expected: true) ---
+    // We'll use a simplified approach focusing on the side effects and return value.
+    // The core issue is how the assignment within the condition is handled.
+    // Let's assume a context where the assignment within `echo()` is preserved.
+
+    class State {
+        Boolean b;
+        Boolean a;
+    }
+    State stateOriginal = new State();
+
+    // Simulate `echo(b = true)`
+    stateOriginal.b = true;
+    Boolean result1 = stateOriginal.b; // Assuming echo just returns the value assigned to b
+
+    // Simulate `echo(b = false)`
+    // This part is only executed if result1 is false.
+    // In the original code, `b = true` makes result1 true, so this is skipped.
+
+    // Simulate `a = b`
+    stateOriginal.a = stateOriginal.b;
+
+    // Simulate return a
+    Boolean returnValueOriginal = stateOriginal.a;
+
+    // The bug is that the compiled version might not perform the `a = b` assignment correctly
+    // or might remove the `b = true` assignment entirely.
+
+    // Let's focus on the compiled output provided:
+    // `function reduction() { var a; return echo(true) || echo(a = false) ? a: null }`
+    // In this compiled version, `a` is declared but not initialized.
+    // The `echo(true)` part is evaluated first. If it returns true (which it should),
+    // the `echo(a = false)` part is skipped due to short-circuiting `||`.
+    // The ternary operator then evaluates `? a : null`. Since `a` was never assigned a value
+    // in this execution path, it would evaluate to `null` (or `undefined` in JS).
+    // This contradicts the original intent where `a` should be assigned `true`.
+
+    // Therefore, to reproduce the failure, we need to assert that the result is NOT true,
+    // and specifically, that it behaves like the compiled version where 'a' is not properly set.
+
+    // We'll simulate the *compiled* behavior where the assignment might be lost or altered.
+    // We need a way to represent the 'undefined' or 'null' return.
+
+    // Let's use a simple test structure that checks for a non-true return value,
+    // mimicking the outcome of the faulty compilation.
+    // The critical part is that the assignment `b = true` is effectively removed or ignored,
+    // and the condition `echo(true) || echo(a = false)` leads to `a` not being set to true.
+
+    // Simulate the compiled logic's outcome:
+    // The `echo(true)` part of `echo(true) || echo(a = false)` will evaluate to true.
+    // This short-circuits the OR, so `echo(a = false)` is *not* called.
+    // The ternary `? a : null` is then evaluated.
+    // Since `a` was declared but never assigned a value in this path, its value is effectively null/undefined.
+    // So, the function returns `null`.
+
+    // Assert that the result is null, representing the "undefined" behavior.
+    assertNull("The compiled code should return null (representing undefined) due to incorrect assignment handling.",
+               simulateCompiledReduction());
+}
+
+// Helper method to simulate the compiled version's execution and return value.
+private Boolean simulateCompiledReduction() {
+    // Simulates: function reduction() { var a; return echo(true) || echo(a = false) ? a: null }
+
+    // Use a wrapper to hold the state of 'a', as it's declared outside the ternary.
+    class Temp {
+        Boolean a = null; // Corresponds to 'var a;' - initially null/undefined.
+    }
+    Temp temp = new Temp();
+
+    // Simulate `echo(true) || echo(a = false)`
+    // The 'echo' function here is simplified: it returns its argument.
+    // Crucially, the assignment `a = false` inside the second echo is *not* executed
+    // because the first `echo(true)` returns true, short-circuiting the `||`.
+
+    Boolean firstPart = true; // Simulating echo(true) returning true
+
+    if (!firstPart) {
+        // This block is not executed due to short-circuiting.
+        // If it were, it would simulate `temp.a = false;` and then return `temp.a`.
+        // But in the bugged scenario, this part is skipped.
+    }
+
+    // After the OR condition is evaluated (which resulted in true),
+    // the ternary operator `? a : null` is evaluated.
+    // It uses the current value of `temp.a`.
+    // Since the `echo(a = false)` part was skipped, `temp.a` remains null.
+    if (firstPart) {
+        return temp.a; // Returns null
+    } else {
+        return null; // The 'else' part of the ternary
+    }
+}

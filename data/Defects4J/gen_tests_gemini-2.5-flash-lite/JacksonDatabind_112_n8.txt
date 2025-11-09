@@ -1,0 +1,59 @@
+public void testStringCollectionDeserializerFailsWithCustomCollection() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    // Assume CustomStringCollection is an immutable collection (e.g., using Guava's ImmutableList or similar)
+    // and it has a constructor that takes a Collection<String>.
+    // For this test, we'll mock a simplified version.
+    
+    // Mock class that contains the custom collection
+    class Container {
+        public CustomStringCollection strings;
+    }
+
+    // Mock custom collection
+    class CustomStringCollection extends java.util.AbstractCollection<String> {
+        private final java.util.List<String> delegate;
+
+        public CustomStringCollection(java.util.Collection<String> delegate) {
+            this.delegate = java.util.Collections.unmodifiableList(new java.util.ArrayList<>(delegate));
+        }
+        
+        // No default constructor, as per the bug description
+        
+        @Override
+        public java.util.Iterator<String> iterator() {
+            return delegate.iterator();
+        }
+
+        @Override
+        public int size() {
+            return delegate.size();
+        }
+        
+        @Override
+        public String toString() {
+            return delegate.toString();
+        }
+    }
+
+    // Registering a module to handle the custom collection
+    // In a real scenario, this might be more complex, involving custom serializers/deserializers
+    // or annotations. For this reproduction, we'll rely on Jackson's default handling
+    // and see where it breaks. The key is that CustomStringCollection lacks a no-arg constructor.
+    
+    // The input JSON that causes the failure
+    String json = "{\"strings\": [\"a\", \"b\", \"c\"]}";
+
+    // This should throw an exception because StringCollectionDeserializer is invoked
+    // and it tries to create an instance of CustomStringCollection without a no-arg constructor.
+    // The expected failure is "Cannot construct instance of `Container$1CustomStringCollection` (although at least one Creator exists): no default no-arguments constructor found"
+    
+    // We wrap the assertion in a try-catch to verify the specific exception type and message.
+    try {
+        mapper.readValue(json, Container.class);
+        fail("Expected an exception due to missing no-arg constructor for CustomStringCollection");
+    } catch (com.fasterxml.jackson.databind.JsonMappingException e) {
+        // Verify the exception message indicates the problem with the constructor
+        assertTrue(e.getMessage().contains("no default no-arguments constructor found"));
+        assertTrue(e.getMessage().contains("Container$1CustomStringCollection")); // The name of the inner class instance
+    }
+}

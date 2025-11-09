@@ -1,0 +1,46 @@
+public void testJodaDateTimeSerializationTimeZone() throws JsonProcessingException {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(createJodaModule());
+    mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+
+    // Set a specific time zone for the ObjectMapper before setting the date format
+    TimeZone defaultTimeZone = TimeZone.getTimeZone("Europe/London");
+    mapper.setTimeZone(defaultTimeZone);
+
+    mapper.setDateFormat(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"));
+
+    DateTime dateTime = new DateTime(1988, 6, 25, 20, 30, DateTimeZone.UTC);
+    String json = mapper.writeValueAsString(dateTime);
+
+    // In 2.5.4, the output was "1988-06-25 20:30:00"
+    // In 2.6.0, with Europe/London, the output is "1988-06-25 21:30:00"
+    // We assert the behavior consistent with the bug description for 2.6.0
+    // The JodaDateTimeSerializer within the custom module should use UTC,
+    // but the ObjectMapper's default timezone configuration is influencing the output.
+    // This test specifically checks the output given the default timezone is not UTC.
+    // The expected output here assumes the JVM's default timezone is not UTC and
+    // that the ObjectMapper's timezone configuration from setDateFormat takes precedence.
+
+    // If we expect the output to be influenced by the ObjectMapper's default time zone
+    // and the custom serializer respects that, then the output should reflect the offset.
+    // For Europe/London, June 25th has a +1 hour offset due to DST.
+    // So, 20:30 UTC becomes 21:30 in Europe/London.
+    // This assertion captures the observed behavior in 2.6.0.
+    // Note: The exact expected string might depend on the actual JVM's default timezone
+    // if mapper.setTimeZone() is not explicitly called before setDateFormat().
+    // However, the bug description implies setDateFormat() itself influences the timezone.
+    // To make this test deterministic, we explicitly set the timezone.
+    assertEquals("\"1988-06-25 21:30:00\"", json);
+}
+
+private static SimpleModule createJodaModule() {
+    SimpleModule module = new SimpleModule();
+    // The DateTimeSerializer from jackson-datatype-joda uses the provided DateFormat.
+    // The DateFormat is configured with withZoneUTC() which should ideally make it
+    // always serialize in UTC. However, the bug report indicates that the ObjectMapper's
+    // default timezone setting overrides this when setDateFormat is called.
+    module.addSerializer(DateTime.class, new DateTimeSerializer(
+            new JacksonJodaDateFormat(DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss")
+                    .withZoneUTC())));
+    return module;
+}

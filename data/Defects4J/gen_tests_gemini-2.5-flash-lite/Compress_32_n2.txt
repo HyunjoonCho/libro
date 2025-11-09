@@ -1,0 +1,31 @@
+public void testTarArchiveInputStream_RejectsLargeUidGid() throws IOException {
+    // Create a tar archive with a PAX header containing a large UID
+    byte[] tarHeader = new byte[1024]; // Sufficient space for PAX headers
+    // Simulate PAX header for UID >= 0x80000000
+    String paxData = " \n" + "8\0" + "uid=4294967295\n"; // 4294967295 is 0xFFFFFFFF
+    System.arraycopy(paxData.getBytes(), 0, tarHeader, 0, paxData.length());
+
+    // Create a dummy TarArchiveEntry to attach the PAX header to
+    TarArchiveEntry entry = new TarArchiveEntry("testfile.txt");
+    entry.setSize(0); // Empty file for simplicity
+
+    // Create a ByteArrayInputStream to simulate the tar archive
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    TarArchiveOutputStream taos = new TarArchiveOutputStream(baos);
+    taos.putArchiveEntry(entry);
+    taos.write(tarHeader, 0, paxData.length()); // Write PAX header
+    taos.closeArchiveEntry();
+    taos.close();
+
+    ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+    TarArchiveInputStream tais = new TarArchiveInputStream(bais);
+
+    // The next call should not throw NumberFormatException
+    TarArchiveEntry readEntry = tais.getNextTarEntry();
+    assertNotNull(readEntry);
+
+    // Verify the UID is correctly parsed as a long
+    assertEquals(4294967295L, readEntry.getUserId());
+
+    tais.close();
+}

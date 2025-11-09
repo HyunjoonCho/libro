@@ -1,0 +1,51 @@
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.NodeSet;
+import org.apache.commons.jxpath.xml.DOMSerializer;
+import org.apache.commons.jxpath.xml.JDOMSerializer;
+import org.jdom.Document;
+import org.jdom.Element;
+import org.jdom.Namespace;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class NamespaceTest {
+
+    @Test
+    public void testResetDefaultNamespace() throws Exception {
+        String xml = "<root xmlns='test111'><b:foo xmlns:b='bla'><b:bar>a</b:bar><test xmlns=''></test></b:foo></root>";
+        JDOMSerializer serializer = new JDOMSerializer();
+        Document doc = (Document) serializer.parse(xml);
+        JXPathContext context = JXPathContext.newContext(doc);
+
+        // Set the default namespace to empty for the context
+        context.setFactory(new org.apache.commons.jxpath.ri.XMLParser2JXPathContextFactory() {
+            @Override
+            public JXPathContext create() {
+                JXPathContext ctx = super.create();
+                ctx.setNamespace("",""); // This effectively resets the default namespace
+                return ctx;
+            }
+        });
+
+
+        NodeSet nodes = context.selectNodeSet("//test");
+        assertNotNull(nodes);
+        assertEquals(1, nodes.size());
+
+        // Attempting to get the path should not cause an endless loop
+        // and should produce the correct XPath.
+        // The original bug would cause an infinite loop in getPrefix
+        // or produce an incorrect path like '//b:fo/null:test'
+        Object testNode = nodes.get(0);
+        String path = context.asPath(testNode);
+
+        // Assert that the path is generated correctly without errors.
+        // The expected path depends on how JXPath resolves namespaces.
+        // Given the fix, it should correctly identify that 'test' has no namespace.
+        // A possible correct path could be '/root/b:foo/test' or similar depending on context.
+        // For this specific test, we focus on the fact that it *completes* without error
+        // and doesn't produce the incorrect 'null:' prefix.
+        assertTrue(path.contains("/test"));
+        assertFalse(path.contains("null:"));
+    }
+}

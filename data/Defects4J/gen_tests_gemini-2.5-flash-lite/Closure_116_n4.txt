@@ -1,0 +1,64 @@
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+import java.util.Collections;
+
+public class AdvancedOptimizationTest {
+
+    @Test
+    public void testErroneousOptimization() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setCompilationLevel(CompilerOptions.CompilationLevel.ADVANCED_OPTIMIZATIONS);
+        options.setPrettyPrint(true);
+
+        String inputJs = "window[\"anchor\"] = function (obj, modifiesProp) {\n" +
+                         " return (function (saved) {\n" +
+                         " return modifiesProp(obj) + saved;\n" +
+                         " })(obj[\"prop\"]);\n" +
+                         "}";
+
+        SourceFile sourceFile = SourceFile.fromCode("input.js", inputJs);
+
+        // Mock externs to avoid dependency on external files
+        SourceFile externs = SourceFile.fromCode("externs.js", "var window;");
+
+        compiler.compile(externs, Collections.singletonList(sourceFile), options);
+
+        String outputJs = compiler.toSource();
+
+        // Expected output based on the bug report's "What do you see instead?"
+        // Note: The actual output might vary slightly in formatting but the core issue
+        // of `a.prop` being used directly instead of the saved value should be present.
+        // The expected output in the bug report is:
+        // window.foo=function(a,b){return b(a)+a.prop};
+        // However, the function name is "anchor" in the input, so we adjust the expected output.
+        // Also, the original code saves `obj["prop"]` into `saved`.
+        // The problematic optimization would be to use `obj["prop"]` directly in the return.
+        String expectedOutputSnippet = "return modifiesProp(obj) + obj[\"prop\"]";
+        // The non-optimized version would look something like:
+        // window["anchor"] = function(obj, modifiesProp) {
+        //   var saved = obj["prop"];
+        //   return modifiesProp(obj) + saved;
+        // };
+        // The bug is that `saved` is replaced by `obj["prop"]` directly.
+
+        // Due to the complexity of exact string matching with advanced optimizations
+        // and potential formatting differences, we'll check for the presence of the
+        // problematic pattern.
+        assert outputJs.contains(expectedOutputSnippet) : "Expected optimization error pattern not found. Output: " + outputJs;
+
+        // A more robust test would involve running the compiled JS and checking its behavior,
+        // but for reproducing the *compiler's* erroneous optimization, checking the output
+        // string for the specific anti-pattern is sufficient.
+        // The bug report states the output is:
+        // window.foo=function(a,b){return b(a)+a.prop};
+        // Translating to the actual function name and property:
+        String expectedProblematicPattern = "return modifiesProp(obj) + obj[\"prop\"]";
+        assert outputJs.contains(expectedProblematicPattern) :
+                "The optimization incorrectly replaced the saved 'prop' value. Expected to find '" + expectedProblematicPattern + "' in compiled output. Actual output: " + outputJs;
+    }
+}

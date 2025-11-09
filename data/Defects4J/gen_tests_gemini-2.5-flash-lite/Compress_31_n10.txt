@@ -1,0 +1,268 @@
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.ArchiveInputStream;
+import org.apache.commons.compress.archivers.ArchiveException;
+import org.junit.Test;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.fail;
+
+public class TarArchiveInputStreamTest {
+
+    @Test
+    public void testInvalidTarHeader() {
+        // Construct a minimal invalid .tgz content that triggers the error.
+        // The error message "Invalid byte 0 at offset 5 in '05412\u000011' len=8"
+        // suggests a malformed header. We'll create a byte array that mimics this.
+        // A tar header is 512 bytes. We need to simulate the start of a header
+        // that would cause TarUtils.parseOctal to fail.
+        // The problematic part seems to be at offset 5.
+        // Let's create a header that starts with something that looks like
+        // an octal number but is invalid.
+
+        // A valid tar header typically starts with a name, followed by mode, uid, gid, size, etc.
+        // The error "Invalid byte 0 at offset 5" indicates that the byte at offset 5
+        // is not a valid octal digit.
+        // The string '05412' followed by a null byte and then '11' is suspicious.
+        // Let's try to create a header that has this pattern.
+
+        // A simplified tar header structure:
+        // offset 0-99: filename
+        // offset 100-107: mode (octal)
+        // offset 108-115: uid (octal)
+        // offset 116-123: size (octal)
+        // ...
+
+        // The error points to offset 5 within the header, which is usually part of the filename.
+        // The string '05412\u000011' is 8 bytes.
+        // This implies that the parser is trying to interpret something as octal at offset 5.
+
+        // Let's create a byte array representing a tar header.
+        // We need to ensure it's 512 bytes long and contains the problematic sequence.
+        byte[] header = new byte[512];
+        // Fill with nulls initially
+        for (int i = 0; i < 512; i++) {
+            header[i] = (byte) '0'; // Default to '0' to avoid other errors initially
+        }
+
+        // Inject the problematic sequence at offset 5
+        String problematicString = "05412\u000011"; // This is 8 bytes
+        byte[] problematicBytes = problematicString.getBytes(StandardCharsets.US_ASCII); // Assuming ASCII for tar headers
+        System.arraycopy(problematicBytes, 0, header, 5, problematicBytes.length);
+
+        // The error "Error detected parsing the header" comes from TarArchiveInputStream.getNextTarEntry
+        // which calls TarArchiveEntry.parseTarHeader.
+        // TarUtils.parseOctal is called. The error "Invalid byte 0 at offset 5" refers to the byte
+        // at offset 5 within the *field* being parsed by parseOctal, not the overall header.
+        // The string "05412\u000011" is likely part of a field that is expected to be octal.
+        // In a tar header, fields like mode, uid, gid, size are octal.
+        // Let's assume this problematic string is part of the 'size' field or similar.
+
+        // To trigger the exception, we need to feed this malformed header into the stream.
+        // Since it's a .tgz file, we'd normally have a GZIPInputStream.
+        // For simplicity in testing, we can bypass GZIP and create a TarArchiveInputStream
+        // directly from a byte array containing a malformed tar header.
+        // The `TarArchiveInputStream` expects a stream that *contains* tar data.
+        // The error occurs when `getNextTarEntry` tries to read and parse the header.
+
+        // Let's simulate a tar stream with a malformed header.
+        // We need a full 512-byte header block.
+        // Let's try to construct a header that would lead to this.
+        // The error message is: "Invalid byte 0 at offset 5 in '05412\u000011' len=8"
+        // This means that `TarUtils.parseOctal` was called with a buffer that,
+        // when examined from offset 5, contains a null byte, and the total length
+        // being considered is 8.
+
+        // Let's create a header block where a field that should be octal
+        // contains this malformed data. For example, the size field.
+        // A tar header block:
+        // 0-99: Name
+        // 100-107: Mode (octal)
+        // 108-115: UID (octal)
+        // 116-123: GID (octal)
+        // 124-135: Size (octal) - This is a common place for issues.
+
+        byte[] tarHeader = new byte[512];
+        // Fill with nulls
+        for (int i = 0; i < 512; i++) {
+            tarHeader[i] = (byte) '\0';
+        }
+
+        // Filename (e.g., "testfile")
+        String filename = "testfile";
+        System.arraycopy(filename.getBytes(StandardCharsets.US_ASCII), 0, tarHeader, 0, filename.length());
+
+        // Mode (e.g., 0644) - must be octal
+        String mode = "0644";
+        byte[] modeBytes = mode.getBytes(StandardCharsets.US_ASCII);
+        for (int i = 0; i < modeBytes.length; i++) {
+            tarHeader[100 + i] = modeBytes[i];
+        }
+
+        // UID (e.g., 0000001)
+        String uid = "0000001";
+        byte[] uidBytes = uid.getBytes(StandardCharsets.US_ASCII);
+        for (int i = 0; i < uidBytes.length; i++) {
+            tarHeader[108 + i] = uidBytes[i];
+        }
+
+        // GID (e.g., 0000001)
+        String gid = "0000001";
+        byte[] gidBytes = gid.getBytes(StandardCharsets.US_ASCII);
+        for (int i = 0; i < gidBytes.length; i++) {
+            tarHeader[116 + i] = gidBytes[i];
+        }
+
+        // Size (e.g., 10 bytes) - Let's try to make this problematic.
+        // The error message "Invalid byte 0 at offset 5 in '05412\u000011' len=8"
+        // suggests that a field of length 8 is being parsed as octal, and at its offset 5,
+        // there's a null byte.
+        // Let's try to put '05412\u000011' into the size field. This is exactly 8 bytes.
+        // The size field starts at offset 124 and has a length of 12 bytes.
+        // So, the problematic string '05412\u000011' would occupy offsets 124 to 131.
+        // The parser `TarUtils.parseOctalOrBinary` is likely called on a buffer
+        // starting at offset 124, with length 12.
+        // When it tries to parse '05412\u000011', the null byte at index 5 (relative to the start of the string)
+        // causes the issue.
+
+        String badSizeOctal = "05412\u000011"; // 8 bytes.
+        byte[] badSizeBytes = badSizeOctal.getBytes(StandardCharsets.US_ASCII);
+        System.arraycopy(badSizeBytes, 0, tarHeader, 124, badSizeBytes.length);
+
+        // Ensure the end of the header is null-terminated correctly for octal fields.
+        tarHeader[133] = '\0'; // Null terminator for size field
+
+        // The last byte of the header field is a null byte.
+        // The tar format specifies fields are null-padded or null-terminated.
+        // The size field is 12 bytes long. The actual octal value is usually right-aligned
+        // and null-padded.
+        // The error message is very specific. Let's re-read it:
+        // "Invalid byte 0 at offset 5 in '05412\u000011' len=8"
+        // This means `parseOctal` was called on a buffer of length 8.
+        // The problematic string itself is 8 bytes long.
+        // This suggests that the field being parsed might be exactly 8 bytes long in this context,
+        // or the parser is looking at a sub-part of a larger field.
+
+        // Let's consider the possibility that the error message is slightly misleading,
+        // or refers to an internal buffer.
+        // The `TarUtils.parseOctal(byte[] buffer, int offset, int length)` method is called.
+        // If `length` is 8, and `buffer` contains `05412\u000011` starting at `offset`,
+        // then `buffer[offset + 5]` is `\u0000`, which is invalid for octal.
+
+        // Let's try to place this exact 8-byte string into a field that is parsed as octal.
+        // The size field is 12 bytes. It's usually padded with nulls.
+        // Example: "00000000010" for size 10.
+        // If the size field was corrupt and looked like:
+        // `05412\u000011` followed by `\0\0` to fill the 12 bytes.
+        // Then, when `TarUtils.parseOctal` is called on a segment of this, it might fail.
+
+        // Let's try to create a tar archive containing just this malformed header.
+        // We need a minimal valid tar archive structure.
+        // A tar archive consists of records of 512 bytes.
+        // The first record is the header.
+        // Subsequent records are file data.
+        // An entry is terminated by two null records (1024 null bytes).
+
+        // We will create a byte array that represents a single tar entry with a malformed header.
+        // We don't need actual file data for this test, just the header.
+
+        byte[] malformedTarHeaderBlock = new byte[512];
+        // Fill with null bytes
+        for (int i = 0; i < 512; i++) {
+            malformedTarHeaderBlock[i] = (byte) '\0';
+        }
+
+        // Let's put a filename
+        String entryName = "corrupt_entry";
+        System.arraycopy(entryName.getBytes(StandardCharsets.US_ASCII), 0, malformedTarHeaderBlock, 0, entryName.length());
+
+        // Set a dummy mode (octal)
+        String dummyMode = "0644";
+        byte[] modeBytesDummy = dummyMode.getBytes(StandardCharsets.US_ASCII);
+        for (int i = 0; i < modeBytesDummy.length; i++) {
+            malformedTarHeaderBlock[100 + i] = modeBytesDummy[i];
+        }
+
+        // Set dummy UID and GID
+        String dummyId = "0000001";
+        byte[] idBytesDummy = dummyId.getBytes(StandardCharsets.US_ASCII);
+        System.arraycopy(idBytesDummy, 0, malformedTarHeaderBlock, 108, idBytesDummy.length);
+        System.arraycopy(idBytesDummy, 0, malformedTarHeaderBlock, 116, idBytesDummy.length);
+
+        // Now, the critical part: the size field.
+        // The error message "Invalid byte 0 at offset 5 in '05412\u000011' len=8"
+        // strongly suggests that a field that is supposed to be octal is being parsed,
+        // and within that field, at a specific offset, a null byte is encountered where an octal digit is expected.
+        // The string '05412\u000011' is 8 bytes long.
+        // This implies that `TarUtils.parseOctal` might be called with `length = 8`.
+        // The size field in tar is 12 bytes long, and it's an octal representation of the file size.
+        // Let's try to corrupt the size field to match the error message.
+        // We'll place the '05412\u000011' string into the size field.
+        // The size field starts at offset 124 and is 12 bytes long.
+        // Tar format: '0' followed by octal digits, padded with nulls.
+        // e.g., "00000000010" for size 10.
+        // The error implies that the parser is trying to parse a field where the 6th byte (offset 5) is null.
+
+        // Let's construct the 12-byte size field to contain the problematic data.
+        // We need to ensure the field is null-terminated correctly.
+        // If the problematic string is '05412\u000011', it occupies the first 8 bytes of the size field.
+        // The remaining 4 bytes should be null padding.
+        String sizeFieldContent = "05412\u000011\0\0\0"; // This is 12 bytes
+        byte[] sizeFieldBytes = sizeFieldContent.getBytes(StandardCharsets.US_ASCII);
+        System.arraycopy(sizeFieldBytes, 0, malformedTarHeaderBlock, 124, sizeFieldBytes.length);
+
+        // Ensure the end of the header block is null. Tar headers are 512 bytes.
+        // The last byte should be null.
+        malformedTarHeaderBlock[511] = (byte) '\0';
+
+        // Now, we need to create an InputStream from this malformed header block.
+        // Since the bug is in `TarArchiveInputStream.getNextTarEntry`, we can feed it this data.
+        // We don't need GZIP for this specific error, as it happens during tar header parsing.
+        // We can wrap the byte array in a ByteArrayInputStream.
+
+        ByteArrayInputStream bais = new ByteArrayInputStream(malformedTarHeaderBlock);
+
+        // Create a TarArchiveInputStream. The bug report mentions .tgz, which implies GZIP.
+        // However, the error occurs *after* GZIP decompression, during tar parsing.
+        // So, we can test `TarArchiveInputStream` directly with malformed tar data.
+        // If the bug was in GZIP handling, we'd need to simulate that.
+        // The stack trace shows `TarArchiveInputStream.getNextTarEntry` is where it fails.
+
+        try (ArchiveInputStream ais = new TarArchiveInputStream(bais)) {
+            // Attempt to get the next entry. This is where the exception is expected.
+            ArchiveEntry entry = ais.getNextEntry();
+            // If we reach here, the test failed to reproduce the bug.
+            fail("Expected IOException due to malformed tar header, but got an entry.");
+        } catch (IOException e) {
+            // Check if the exception is the expected one.
+            // The original error was "java.io.IOException: Error detected parsing the header"
+            // caused by "java.lang.IllegalArgumentException: Invalid byte 0 at offset 5 in '05412\u000011' len=8".
+            // The TarArchiveInputStream wraps the IllegalArgumentException in an IOException.
+            if (e.getMessage() != null && e.getMessage().contains("Error detected parsing the header")) {
+                // Successfully reproduced the error.
+                // We can optionally check the cause as well for more specificity.
+                Throwable cause = e.getCause();
+                assertNotNull("Exception should have a cause", cause);
+                if (!(cause instanceof IllegalArgumentException)) {
+                    fail("Expected cause to be IllegalArgumentException, but was " + cause.getClass().getName());
+                }
+                IllegalArgumentException iae = (IllegalArgumentException) cause;
+                if (!iae.getMessage().contains("Invalid byte 0 at offset 5 in '05412\\u000011' len=8")) {
+                    fail("Expected IllegalArgumentException message to contain 'Invalid byte 0 at offset 5 in \'05412\\u000011\' len=8', but got: " + iae.getMessage());
+                }
+                // Test passes if we caught the specific exception.
+                return;
+            } else {
+                // Caught an IOException, but not the expected one. Re-throw or fail.
+                fail("Caught an IOException, but not the expected 'Error detected parsing the header': " + e.getMessage());
+            }
+        } catch (ArchiveException e) {
+            // TarArchiveInputStream might throw ArchiveException in some cases.
+            fail("Expected IOException, but got ArchiveException: " + e.getMessage());
+        }
+    }
+}

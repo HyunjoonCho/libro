@@ -1,0 +1,72 @@
+public void testUmlautDirectoryInWinZip() throws Exception {
+    // Create a dummy zip file with WinZip containing a directory with an umlaut
+    // This requires creating a temporary zip file. For simplicity in this example,
+    // we'll assume such a file exists at a known path or can be created programmatically.
+    // In a real test, you might use ZipArchiveOutputStream to create this.
+
+    // Let's simulate the problematic entry structure.
+    // WinZip with Unicode flag on might create an entry name like "ä\\file.txt"
+    // instead of "ä/file.txt" and might not correctly identify "ä\\" as a directory.
+
+    // For demonstration, let's create a ZipArchiveOutputStream and add entries.
+    // In a real test, you would read from a pre-existing problematic zip.
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    ZipArchiveOutputStream zaos = new ZipArchiveOutputStream(baos);
+
+    // Add a directory entry with an umlaut, simulating WinZip's behavior
+    ArchiveEntry umlautDirEntry = new ZipArchiveEntry("umlautä\\");
+    zaos.putArchiveEntry(umlautDirEntry);
+    zaos.closeArchiveEntry();
+
+    // Add a file entry within that directory
+    ArchiveEntry fileEntry = new ZipArchiveEntry("umlautä\\file.txt");
+    zaos.putArchiveEntry(fileEntry);
+    zaos.write("content".getBytes());
+    zaos.closeArchiveEntry();
+
+    // Add a normal directory entry
+    ArchiveEntry normalDirEntry = new ZipArchiveEntry("normaldir/");
+    zaos.putArchiveEntry(normalDirEntry);
+    zaos.closeArchiveEntry();
+
+    // Add a file entry within the normal directory
+    ArchiveEntry normalFileEntry = new ZipArchiveEntry("normaldir/normalfile.txt");
+    zaos.putArchiveEntry(normalFileEntry);
+    zaos.write("content".getBytes());
+    zaos.closeArchiveEntry();
+
+    zaos.finish();
+    zaos.close();
+
+    ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+    ArchiveInputStream ais = new ArchiveStreamFactory().createArchiveInputStream(ArchiveEntry.ZIP, bais);
+
+    // Test the umlaut directory entry
+    ArchiveEntry entry1 = ais.getNextEntry();
+    assertNotNull(entry1);
+    // The problematic behavior is that it might not be recognized as a directory
+    // and the name might contain backslashes.
+    assertTrue("Directory entry should be recognized as a directory", entry1.isDirectory());
+    assertEquals("umlautä/", entry1.getName()); // Expecting forward slash normalization
+
+    // Test the file entry within the umlaut directory
+    ArchiveEntry entry2 = ais.getNextEntry();
+    assertNotNull(entry2);
+    assertFalse("File entry should not be recognized as a directory", entry2.isDirectory());
+    assertEquals("umlautä/file.txt", entry2.getName()); // Expecting forward slash normalization
+
+    // Test the normal directory entry
+    ArchiveEntry entry3 = ais.getNextEntry();
+    assertNotNull(entry3);
+    assertTrue("Normal directory entry should be recognized as a directory", entry3.isDirectory());
+    assertEquals("normaldir/", entry3.getName());
+
+    // Test the file entry within the normal directory
+    ArchiveEntry entry4 = ais.getNextEntry();
+    assertNotNull(entry4);
+    assertFalse("Normal file entry should not be recognized as a directory", entry4.isDirectory());
+    assertEquals("normaldir/file.txt", entry4.getName());
+
+    assertNull(ais.getNextEntry()); // Ensure no more entries
+    ais.close();
+}

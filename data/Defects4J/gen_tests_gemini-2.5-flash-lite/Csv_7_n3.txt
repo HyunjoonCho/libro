@@ -1,0 +1,39 @@
+public void testHeaderMapWithDuplicateColumns() throws IOException {
+    String csvData = "Col1,Col2,Col2,Col3,Col4\n" +
+                     "1,2,3,4,5\n" +
+                     "4,5,6,7,8";
+
+    CSVFormat myFormat = CSVFormat.RFC4180.withDelimiter(",")
+                                       .withQuoteChar('"')
+                                       .withQuotePolicy(CSVFormat.Quote.MINIMAL)
+                                       .withIgnoreSurroundingSpaces(true)
+                                       .withHeader()
+                                       .withSkipHeaderRecord(true);
+
+    StringReader reader = new StringReader(csvData);
+    CSVParser parser = new CSVParser(reader, myFormat);
+
+    // The header map should contain all columns, even duplicates.
+    // The default behavior is to overwrite, so we expect only the last "Col2" to be present.
+    // This test asserts the *current* (buggy) behavior, which is that the map will only have one "Col2".
+    // A better fix would involve HeaderMap storing indices or a list of indices for duplicate names.
+    Map<String, Integer> headerMap = parser.getHeaderMap();
+
+    assertNotNull("Header map should not be null", headerMap);
+    assertEquals("Header map should contain 4 entries (Col1, Col2, Col3, Col4) due to duplicate overwriting", 4, headerMap.size());
+    assertTrue("Header map should contain Col1", headerMap.containsKey("Col1"));
+    assertTrue("Header map should contain Col2", headerMap.containsKey("Col2"));
+    assertTrue("Header map should contain Col3", headerMap.containsKey("Col3"));
+    assertTrue("Header map should contain Col4", headerMap.containsKey("Col4"));
+
+    // Specifically check the indices, demonstrating the overwrite.
+    // The first Col2 is at index 1, the second is at index 2.
+    // The map will store the index of the *last* occurrence.
+    assertEquals("Index for Col1 should be 0", Integer.valueOf(0), headerMap.get("Col1"));
+    assertEquals("Index for Col2 should be 2 (the last occurrence)", Integer.valueOf(2), headerMap.get("Col2"));
+    assertEquals("Index for Col3 should be 3", Integer.valueOf(3), headerMap.get("Col3"));
+    assertEquals("Index for Col4 should be 4", Integer.valueOf(4), headerMap.get("Col4"));
+
+
+    parser.close();
+}

@@ -1,0 +1,45 @@
+public void testJodaDateTimeTimeZoneSerialization() throws JsonProcessingException {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(createJodaModule());
+    mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+
+    // Store the original default time zone
+    TimeZone originalTimeZone = TimeZone.getDefault();
+
+    try {
+        // Set a specific time zone that is not UTC
+        TimeZone.setDefault(TimeZone.getTimeZone("Europe/London"));
+
+        // Re-create the mapper with the new default time zone
+        mapper = new ObjectMapper();
+        mapper.registerModule(createJodaModule());
+        mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+        mapper.setDateFormat(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"));
+
+        DateTime dateTime = new DateTime(1988, 6, 25, 20, 30, DateTimeZone.UTC);
+        String json = mapper.writeValueAsString(dateTime);
+
+        // In 2.5.4, the output is "1988-06-25 20:30:00" (UTC)
+        // In 2.6.0, the output is "1988-06-25 21:30:00" (Europe/London offset)
+        // The bug is that the default time zone is applied when it shouldn't be.
+        // We expect the UTC representation if the underlying serializer is correctly configured.
+        // However, to reproduce the *failure*, we check for the incorrect output.
+        // The actual expected value depends on the version, but the failure is that it's not UTC.
+        // We will assert against the value that indicates the failure (non-UTC).
+        // For Europe/London, the offset on that date was +1 hour.
+        assertThat(json, is("\"1988-06-25 21:30:00\"")); // This asserts the failure behavior in 2.6.0+
+
+    } finally {
+        // Restore the original default time zone
+        TimeZone.setDefault(originalTimeZone);
+    }
+}
+
+// Helper method to create the Joda module, as used in the original example
+private SimpleModule createJodaModule() {
+    SimpleModule module = new SimpleModule();
+    module.addSerializer(DateTime.class, new DateTimeSerializer(
+            new JacksonJodaDateFormat(DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss")
+                    .withZoneUTC())));
+    return module;
+}

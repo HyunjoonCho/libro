@@ -1,0 +1,34 @@
+public void testZipVersionNeededToExtract() throws IOException {
+    File zipFile = File.createTempFile("test", ".zip");
+    zipFile.deleteOnExit();
+
+    ZipArchiveOutputStream zaos = null;
+    try {
+        zaos = new ZipArchiveOutputStream(zipFile);
+        zaos.setMethod(ZipEntry.DEFLATED);
+
+        ZipArchiveEntry entry = new ZipArchiveEntry("test.txt");
+        entry.setSize(100);
+        zaos.putArchiveEntry(entry);
+        OutputStream entryOutputStream = zaos;
+        for (int i = 0; i < 100; i++) {
+            entryOutputStream.write(i);
+        }
+        zaos.closeArchiveEntry();
+        zaos.finish();
+
+        try (ZipArchiveInputStream tais = new ZipArchiveInputStream(new FileInputStream(zipFile))) {
+            ZipArchiveEntry archiveEntry = tais.getNextZipEntry();
+            assertNotNull(archiveEntry);
+            // The version needed to extract in the local file header should be 20 (0x14) for DEFLATED
+            // and the version in the central directory should also be 20.
+            // The bug implies these might differ if data descriptors are used.
+            assertEquals(20, archiveEntry.getVersionNeededToExtract());
+        }
+    } finally {
+        if (zaos != null) {
+            zaos.close();
+        }
+        zipFile.delete();
+    }
+}

@@ -1,0 +1,61 @@
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import com.google.javascript.jscomp.CheckLevel;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class JsCompilerTest {
+
+    @Test
+    public void testWeirdObjectLiteralInvalidPropertyError() {
+        String jsCode = "
+            function temp1(opt_data) {
+              return opt_data.text;
+            }
+
+            function temp2(opt_data) {
+              function __inner() {
+                return temp1(opt_data.activity);
+              }
+              return __inner();
+            }
+
+            function temp3(opt_data) {
+              return 'n: ' + opt_data.n + ', t: ' + opt_data.text + '.';
+            }
+
+            function callee() {
+              var output = temp3({
+                n: 0,
+                text: 'a string',
+                b: true
+              });
+              alert(output);
+            }
+
+            callee();
+        ";
+
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setCompilationLevel(CompilerOptions.CompilationLevel.ADVANCED_OPTIMIZATIONS);
+        options.setWarningLevel(JsMessage.Severity.ERROR, CheckLevel.ERROR);
+        options.addSpecificError(JsError.ACCESS_CONTROLS);
+        options.addSpecificError(JsError.CHECK_TYPES);
+        options.addSpecificError(JsError.CHECK_VARS);
+
+        SourceFile sourceFile = SourceFile.fromCode("repro.js", jsCode);
+        compiler.compile(null, sourceFile, options);
+
+        // The expected error message is related to parameter type mismatch.
+        // The exact wording might change slightly between compiler versions,
+        // but the core issue should be detectable.
+        // We are asserting that *an* error occurred, and checking if the
+        // error message is related to the expected problem.
+        assertEquals(1, compiler.getErrors().size());
+        assertTrue(compiler.getErrors().get(0).getMessage().contains("actual parameter 1 of temp3 does not match formal parameter"));
+        assertTrue(compiler.getErrors().get(0).getMessage().contains("found : {b: boolean, n: number, text: (string|undefined)}"));
+        assertTrue(compiler.getErrors().get(0).getMessage().contains("required: {b: boolean, n: number, text: string}"));
+    }
+}

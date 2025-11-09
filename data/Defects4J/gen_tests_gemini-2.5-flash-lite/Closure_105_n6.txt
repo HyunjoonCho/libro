@@ -1,0 +1,183 @@
+public void testArrayJoinMungedIncorrectly() {
+    // Original code snippet provided in the bug report
+    String originalCode = "$.fn.hasClass = function(selector) {\n return ( this.length > 0 ? \n!( ( ['', this[0].className, ''].join(' ') ).indexOf( ['', selector, \n''].join(' ') ) == -1 )\n : false );\n};\n";
+
+    // The munged code snippet provided in the bug report
+    String mungedCode = "$.fn.hasClass=function(a){return this.length>0? (\"\"+this[0].className).indexOf(\"\"+a)!=-1:false};";
+
+    // We need to simulate the behavior of the join(' ') and indexOf comparison.
+    // The core issue is how the join method with a space separator affects the outcome,
+    // especially when dealing with potential leading/trailing spaces or empty strings.
+
+    // Let's create a scenario that would highlight the difference.
+    // The bug implies that the munged version incorrectly handles certain cases
+    // due to the simplified string concatenation and indexOf.
+
+    // Scenario 1: Class name with leading/trailing spaces and selector matching
+    String className = "  some-class  ";
+    String selector = "some-class";
+
+    // Simulate the original logic's intent:
+    // ( ['', this[0].className, ''].join(' ') )
+    // This would result in "  some-class  " (leading/trailing spaces from the array elements,
+    // and spaces from the join, but the join with an empty string and the class name
+    // effectively preserves the original spacing).
+    // Then, indexOf( ['', selector, ''].join(' ') ) which is indexOf("some-class")
+    // The original code checks if indexOf is NOT -1.
+    // However, the actual original code is `!(... == -1)`, which means it checks if the index is NOT -1.
+    // So, it returns true if the selector is found.
+
+    // Let's re-evaluate the original logic more carefully:
+    // ( ['', this[0].className, ''].join(' ') ) -> "  some-class  "
+    // ( ['', selector, ''].join(' ') ) -> "some-class"
+    // "  some-class  ".indexOf("some-class") -> 2 (index where "some-class" starts)
+    // 2 == -1 is false.
+    // !(false) is true. So it should return true.
+
+    // Now, simulate the munged logic:
+    // ("" + this[0].className) -> "  some-class  "
+    // ("" + a) -> "some-class"
+    // "  some-class  ".indexOf("some-class") -> 2
+    // 2 != -1 is true. So it should return true.
+
+    // The description suggests the munging is incorrect. The example provided
+    // might not fully capture the bug, or the description of the munging is
+    // slightly off. Let's focus on the core difference: the `join(' ')`
+    // vs. direct string concatenation and potential impact on `indexOf`.
+
+    // The bug report implies that the `join(' ')` adds an extra space that
+    // might alter the `indexOf` result in a way that the simpler concatenation doesn't.
+    // Let's try to construct a case where the `join(' ')` behavior is distinct.
+
+    // Consider the case where the selector itself might contain spaces, or
+    // if the class names have multiple spaces.
+    // The original code: `['', className, ''].join(' ')`
+    // If className is "class1 class2", this becomes " class1 class2 ".
+    // The selector: `['', selector, ''].join(' ')`
+    // If selector is "class1", this becomes "class1".
+    // indexOf("class1") would be 1. `!(1 == -1)` is true.
+
+    // Munged code: `("" + className)` -> "class1 class2"
+    // `("" + selector)` -> "class1"
+    // indexOf("class1") would be 0. `0 != -1` is true.
+
+    // The critical part seems to be how `join(' ')` affects the string.
+    // Let's assume the intent of the original `join(' ')` was to ensure
+    // that the selector is matched as a whole word, by adding delimiters.
+    // The `['', className, ''].join(' ')` creates a string like " classname ".
+    // The `['', selector, ''].join(' ')` creates a string like " selector ".
+    // Then `indexOf` is used.
+
+    // Let's try to reproduce the described failure: "Array Join Munged Incorrectly".
+    // The description states that `join(' ')` is munged into something else.
+    // The core difference is the explicit use of `join(' ')` to create padded strings.
+
+    // Let's simulate the *intended* behavior of the original code and see if the munged code fails.
+    // The original code seems to be trying to check if `selector` exists as a "word" within `className`.
+    // The padding with empty strings and joining with a space is a common (though perhaps convoluted)
+    // way to achieve this, ensuring that a partial match at the beginning or end of `className` isn't
+    // mistaken for a full match, especially if `className` itself doesn't have leading/trailing spaces.
+
+    // Let's assume the original code works correctly for a case where the selector
+    // is at the beginning or end of the class string, or is a substring of another class name.
+
+    // Case 1: Selector is a substring of another class name.
+    // Original: className = "my-class another-class", selector = "class"
+    // `['', "my-class another-class", ''].join(' ')` -> " my-class another-class "
+    // `['', "class", ''].join(' ')` -> " class "
+    // " my-class another-class ".indexOf(" class ") -> -1 (correctly not found as a distinct class)
+    // `!( -1 == -1 )` -> `!(true)` -> `false` (Correct)
+
+    // Munged: `("" + "my-class another-class")` -> "my-class another-class"
+    // `("" + "class")` -> "class"
+    // "my-class another-class".indexOf("class") -> 3 (found as a substring)
+    // `3 != -1` -> `true` (Incorrect)
+
+    // This scenario seems to fit the description of the bug. The munged code incorrectly
+    // identifies "class" as a class name when it's just a substring.
+
+    String className1 = "my-class another-class";
+    String selector1 = "class";
+
+    // Original logic simulation
+    String paddedClassName1 = ['', className1, ''].join(' '); // Simulating JavaScript's join
+    String paddedSelector1 = ['', selector1, ''].join(' ');   // Simulating JavaScript's join
+    boolean originalResult1 = !(paddedClassName1.indexOf(paddedSelector1) == -1);
+
+    // Munged logic simulation
+    String mungedClassName1 = "" + className1;
+    String mungedSelector1 = "" + selector1;
+    boolean mungedResult1 = mungedClassName1.indexOf(mungedSelector1) != -1;
+
+    assertFalse("Original code should not find 'class' as a distinct class in 'my-class another-class'", originalResult1);
+    assertTrue("Munged code incorrectly finds 'class' as a distinct class in 'my-class another-class'", mungedResult1);
+
+    // Case 2: Selector at the beginning.
+    // Original: className = "my-class", selector = "my-class"
+    // `['', "my-class", ''].join(' ')` -> " my-class "
+    // `['', "my-class", ''].join(' ')` -> " my-class "
+    // " my-class ".indexOf(" my-class ") -> 1
+    // `!( 1 == -1 )` -> `!(false)` -> `true` (Correct)
+
+    // Munged: `("" + "my-class")` -> "my-class"
+    // `("" + "my-class")` -> "my-class"
+    // "my-class".indexOf("my-class") -> 0
+    // `0 != -1` -> `true` (Correct)
+
+    // This case doesn't show a difference. The key is the substring matching.
+
+    // Let's try another substring case.
+    // Original: className = "my-class", selector = "my"
+    // `['', "my-class", ''].join(' ')` -> " my-class "
+    // `['', "my", ''].join(' ')` -> " my "
+    // " my-class ".indexOf(" my ") -> 1
+    // `!( 1 == -1 )` -> `!(false)` -> `true` (Correct)
+
+    // Munged: `("" + "my-class")` -> "my-class"
+    // `("" + "my")` -> "my"
+    // "my-class".indexOf("my") -> 0
+    // `0 != -1` -> `true` (Correct)
+
+    // The issue seems to be specifically when the selector is a substring of another
+    // class name *and* the padding in the original code prevents a false positive.
+    // The original code's `join(' ')` on `['', className, '']` effectively creates
+    // ` " " + className + " " `.
+    // And `['', selector, ''].join(' ')` creates ` " " + selector + " " `.
+    // So the original check is: `(" " + className + " ").indexOf(" " + selector + " ") != -1`
+
+    // Let's re-verify the original logic:
+    // `!( ( ['', this[0].className, ''].join(' ') ).indexOf( ['', selector, ''].join(' ') ) == -1 )`
+    // This is equivalent to:
+    // `( ['', this[0].className, ''].join(' ') ).indexOf( ['', selector, ''].join(' ') ) != -1`
+
+    // Let `className = "my-class another-class"` and `selector = "class"`.
+    // `['', "my-class another-class", ''].join(' ')` results in `" my-class another-class "`
+    // `['', "class", ''].join(' ')` results in `" class "`
+    // `" my-class another-class ".indexOf(" class ")` is `-1`.
+    // So the original code returns `false`.
+
+    // Now the munged code:
+    // `("" + this[0].className)` -> `"my-class another-class"`
+    // `("" + selector)` -> `"class"`
+    // `"my-class another-class".indexOf("class")` is `3`.
+    // So the munged code returns `true`.
+
+    // This confirms the scenario where the munged code fails.
+
+    String classNameToTest = "my-class another-class";
+    String selectorToTest = "class";
+
+    // Simulate the original code's behavior
+    String paddedClassName = " " + classNameToTest + " "; // Simulating ['', className, ''].join(' ')
+    String paddedSelector = " " + selectorToTest + " ";   // Simulating ['', selector, ''].join(' ')
+    boolean originalBehavior = paddedClassName.indexOf(paddedSelector) != -1;
+
+    // Simulate the munged code's behavior
+    String mungedClassName = classNameToTest;
+    String mungedSelector = selectorToTest;
+    boolean mungedBehavior = mungedClassName.indexOf(mungedSelector) != -1;
+
+    // The bug is that the munged behavior is INCORRECTLY true, while the original was correctly false.
+    assertFalse("Original code should return false for substring match", originalBehavior);
+    assertTrue("Munged code incorrectly returns true for substring match", mungedBehavior);
+}

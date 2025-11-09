@@ -1,0 +1,60 @@
+public void testJsonIdentityReferenceClassOnly() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.enable(SerializationFeature.INDENT_OUTPUT);
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class, property = "id")
+    @JsonIdentityReference(alwaysAsId = true)
+    class ReallyAlwaysAsId {
+        public int value;
+
+        public ReallyAlwaysAsId() {
+            this(0);
+        }
+
+        public ReallyAlwaysAsId(int v) {
+            value = v;
+        }
+    }
+
+    class AlwaysAsId {
+        @JsonIdentityReference(alwaysAsId = true)
+        public ReallyAlwaysAsId ref = new ReallyAlwaysAsId(13);
+    }
+
+    @JsonPropertyOrder(alphabetic = true)
+    class ReallyAlwaysContainer {
+        public AlwaysAsId a = new AlwaysAsId();
+        public ReallyAlwaysAsId b = new ReallyAlwaysAsId(13);
+    }
+
+    ReallyAlwaysContainer container = new ReallyAlwaysContainer();
+    String json = mapper.writeValueAsString(container);
+
+    // The expected behavior is that both 'a' and 'b' should be serialized as IDs.
+    // The actual behavior based on the bug report is that 'a' (class-level annotation only)
+    // might not be serialized as an ID, while 'b' (property-level annotation) is.
+    // We expect the output to show IDs for both references.
+    // Since ObjectIdGenerators.IntSequenceGenerator starts from 1, the first object
+    // gets ID 1 and the second gets ID 2.
+    // The bug report indicates that 'a' might be serialized as the full object,
+    // but the fix should make it serialize as an ID.
+
+    // Assert that both 'a' and 'b' are represented by their IDs.
+    // The exact JSON structure will depend on how the ObjectMapper handles nested objects
+    // and property order. Based on the description, we expect IDs.
+    // Let's assume a structure like: {"a": 1, "b": 2} or similar, where the values are integers.
+
+    // A more robust test would parse the JSON and check the types of the values.
+    // However, for reproducing the failure as described, checking the string output
+    // that *should* contain only IDs is sufficient.
+
+    // The original test case had: assertEquals("{\"a\":1,\"b\":2}", json);
+    // This implies the expectation was that both would be serialized as IDs.
+    // If the bug is present, the output might look like:
+    // {"a":{"id":1,"value":13},"b":2} or {"a":1,"b":13} (if b is not handled correctly)
+    // The fix should result in: {"a":1,"b":2}
+
+    // We will assert against the expected correct output after the fix.
+    // The test case in the bug report itself asserts this, so we'll use it.
+    assertEquals("{\"a\":1,\"b\":2}", json);
+}

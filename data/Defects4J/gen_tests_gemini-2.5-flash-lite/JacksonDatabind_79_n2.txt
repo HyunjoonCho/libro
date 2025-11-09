@@ -1,0 +1,36 @@
+public void testJsonIdentityReferenceClassOnly() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.setAnnotationIntrospector(new JacksonAnnotationIntrospector() {
+        @Override
+        public ObjectIdInfo findObjectIdInfo(Annotated ann) {
+            if (ann.getRawType().equals(ReallyAlwaysAsId.class)) {
+                return new ObjectIdInfo(new QName("id"), ReallyAlwaysAsId.class, ObjectIdGenerators.IntSequenceGenerator.class, null);
+            }
+            return super.findObjectIdInfo(ann);
+        }
+
+        @Override
+        public ObjectIdInfo findObjectReferenceInfo(Annotated accessor, ObjectIdInfo defaultInfo) {
+            if (accessor.getRawType().equals(ReallyAlwaysAsId.class)) {
+                return defaultInfo.withAlwaysAsId(true);
+            }
+            return super.findObjectReferenceInfo(accessor, defaultInfo);
+        }
+    });
+
+    @JsonIdentityInfo(generator=ObjectIdGenerators.IntSequenceGenerator.class, property="id")
+    @JsonIdentityReference(alwaysAsId=true)
+    static class ReallyAlwaysAsId {
+        public int value;
+        public ReallyAlwaysAsId(int v) { value = v; }
+        public ReallyAlwaysAsId() { this(0); }
+    }
+
+    @JsonPropertyOrder(alphabetic=true)
+    static class ReallyAlwaysContainer {
+        public ReallyAlwaysAsId b = new ReallyAlwaysAsId(13);
+    }
+
+    String json = mapper.writeValueAsString(new ReallyAlwaysContainer());
+    assertEquals("{\"b\":1}", json);
+}

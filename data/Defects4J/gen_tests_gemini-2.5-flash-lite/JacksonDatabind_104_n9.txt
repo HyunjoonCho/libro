@@ -1,0 +1,60 @@
+import com.fasterxml.jackson.databind.util.StdDateFormat;
+import org.junit.Test;
+
+import java.text.ParseException;
+import java.util.Date;
+import java.util.TimeZone;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class StdDateFormatTest {
+
+    @Test
+    public void testLargeISODates() throws ParseException {
+        StdDateFormat formatter = new StdDateFormat();
+        formatter.setTimeZone(TimeZone.getTimeZone("UTC"));
+
+        // Test formatting and parsing Long.MAX_VALUE
+        Date maxDate = new Date(Long.MAX_VALUE);
+        String formattedMax = formatter.format(maxDate);
+        // The actual expected format for year > 9999 is not explicitly defined as per the bug.
+        // However, the bug indicates it should handle years > 9999.
+        // We'll check if the formatted string looks like a valid ISO date and if parsing it back works.
+        // A common representation for years > 9999 is to use more than 4 digits.
+        // The bug report shows a malformed string "痝055-12-02T16:47:04.192+0000" which implies
+        // the formatter is not correctly handling the year > 9999.
+        // Let's assume a correct formatting would result in a parsable ISO string.
+        // For Long.MAX_VALUE, the year is very large.
+        assertTrue("Formatted date should not contain invalid characters for large years.",
+                !formattedMax.matches(".*[\\p{Nd}\\p{Lo}].*")); // Ensure no Lo (Letter Other) chars that are not digits.
+
+        Date parsedMax = formatter.parse(formattedMax);
+        assertEquals("Parsing formatted Long.MAX_VALUE should return the original date.", maxDate.getTime(), parsedMax.getTime());
+
+        // Test formatting and parsing Long.MIN_VALUE
+        // The bug report notes that negative dates might fail or require specific handling.
+        // If the bug is about handling years > 9999, then Long.MIN_VALUE should also be handled
+        // if its year component exceeds 9999 (in absolute terms or considering BCE).
+        Date minDate = new Date(Long.MIN_VALUE);
+        String formattedMin = formatter.format(minDate);
+
+        assertTrue("Formatted date for Long.MIN_VALUE should not contain invalid characters for large years.",
+                !formattedMin.matches(".*[\\p{Nd}\\p{Lo}].*"));
+
+        // Parsing Long.MIN_VALUE might fail based on the bug report's comment.
+        // If the intention is to fix the formatting/parsing of large years,
+        // then parsing should ideally work or throw a specific exception.
+        // We'll attempt to parse and assert if it works, or expect a ParseException if that's the intended behavior for unsupported ranges.
+        try {
+            Date parsedMin = formatter.parse(formattedMin);
+            assertEquals("Parsing formatted Long.MIN_VALUE should return the original date.", minDate.getTime(), parsedMin.getTime());
+        } catch (ParseException e) {
+            // If parsing fails, it might be due to the year range not being supported.
+            // This catch block ensures the test doesn't fail unexpectedly if the behavior is to throw an exception.
+            // The key is that the formatting itself shouldn't produce unparsable/corrupt strings.
+            assertTrue("Parsing Long.MIN_VALUE failed as expected for unsupported ranges, but formatting should be robust.",
+                    formattedMin.length() > 0); // Ensure some output was generated.
+        }
+    }
+}

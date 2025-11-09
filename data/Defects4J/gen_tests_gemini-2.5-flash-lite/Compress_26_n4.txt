@@ -1,0 +1,91 @@
+public void testSkipDoesNotSkipFullBuffer() throws IOException {
+    byte[] data = new byte[8192];
+    new Random().nextBytes(data);
+    ByteArrayInputStream bais = new ByteArrayInputStream(data);
+    // Use a stream that might not skip the full amount requested, like CipherInputStream
+    // For testing purposes, we'll simulate this behavior by wrapping a stream
+    // that returns less than requested from skip(). A simple way to do this
+    // is to use a BufferedInputStream and then manually control its internal buffer.
+    // However, a more direct simulation for testing the IOUtils logic is to create
+    // a mock stream.
+    InputStream mockStream = new FilterInputStream(bais) {
+        private int bytesReadInCurrentSkip = 0;
+        private long totalSkipped = 0;
+        private final int MAX_SKIP_PER_CALL = 4096; // Simulate skipping less than requested
+
+        @Override
+        public long skip(long n) throws IOException {
+            if (n <= 0) {
+                return 0;
+            }
+            long actualSkip = Math.min(n, MAX_SKIP_PER_CALL - bytesReadInCurrentSkip);
+            if (actualSkip <= 0) {
+                 // If we can't skip more in this buffer, read one byte to force buffer refill
+                 // and reset the count for the next skip.
+                 int byteRead = super.read();
+                 if (byteRead == -1) return 0;
+                 bytesReadInCurrentSkip = 0;
+                 actualSkip = Math.min(n, MAX_SKIP_PER_CALL - bytesReadInCurrentSkip);
+            }
+
+            long skipped = super.skip(actualSkip);
+            if (skipped > 0) {
+                bytesReadInCurrentSkip += skipped;
+                totalSkipped += skipped;
+            }
+            return skipped;
+        }
+
+        @Override
+        public int read() throws IOException {
+            bytesReadInCurrentSkip = 0; // Reset on actual read
+            return super.read();
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            bytesReadInCurrentSkip = 0; // Reset on actual read
+            return super.read(b, off, len);
+        }
+    };
+
+    long numToSkip = 6000; // Request to skip more than MAX_SKIP_PER_CALL
+    long totalBytesToProcess = data.length;
+    long remaining = totalBytesToProcess;
+    long skippedSoFar = 0;
+
+    while (remaining > 0) {
+        long skipped = IOUtils.skip(mockStream, remaining);
+        if (skipped == 0) {
+            // This is the condition that the bug report highlights - IOUtils.skip returning 0
+            // when more data is available but the underlying skip implementation couldn't
+            // advance. The fix should involve reading a byte to force the stream to advance.
+            // For the purpose of reproducing the failure, we assert that this loop *should* continue
+            // if there's data left, and if it breaks prematurely, it's a failure.
+            // The problematic behavior is if skipped is 0 and remaining > 0.
+            // In a real test, we'd assert that the stream *can* still read data after this point.
+            // To reproduce the *failure*, we need to show that the loop might break incorrectly.
+            // The provided description implies the loop breaks when skipped == 0.
+            // Let's assume the test context is within a class that has access to IOUtils.
+            // The core issue is the break condition.
+            break; // Simulate the break from the original IOUtils code.
+        }
+        skippedSoFar += skipped;
+        remaining -= skipped;
+    }
+
+    // The failure occurs if skippedSoFar is less than totalBytesToProcess
+    // when the loop breaks due to skipped == 0 (which we simulated above).
+    // A successful run would mean skippedSoFar == totalBytesToProcess.
+    // To *reproduce* the failure, we need to show that skippedSoFar is *not* totalBytesToProcess
+    // under the conditions described.
+    // Let's assert that we didn't skip everything, implying the loop broke prematurely.
+    assertTrue("IOUtils.skip should have continued if data was available, but it stopped prematurely.", skippedSoFar < totalBytesToProcess);
+
+    // Further check: ensure there's still data to read after the loop breaks.
+    // This confirms that the stream wasn't actually at the end.
+    // We need to reset the mock stream or use a new one for this check.
+    // For simplicity in reproducing the failure *within the loop's logic*,
+    // the above assertion is sufficient. If we wanted to test the *fix*,
+    // we'd ensure the loop continues and skips all data.
+}

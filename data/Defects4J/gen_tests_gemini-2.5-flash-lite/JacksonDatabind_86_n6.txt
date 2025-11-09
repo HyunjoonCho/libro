@@ -1,0 +1,123 @@
+public void testRecursiveTypeBug() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+
+    // Define the classes and interface as described in the bug report
+    class IFace<T> {}
+    class Base implements IFace<Sub> {
+        @JsonProperty int base = 1;
+    }
+    class Sub {
+        @JsonProperty int sub = 2;
+    }
+
+    // Create an instance of the subclass
+    Sub subInstance = new Sub();
+    // Wrap it in the base class, which implements the generic interface
+    Base baseInstance = new Base();
+    // This part is tricky. We need to simulate the scenario where the base class
+    // is constructed, and its type (IFace<Sub>) is processed.
+    // Then, when serializing Sub, it needs to inherit properties from Base.
+    // The bug report implies that the TypeFactory's handling of IFace<Sub>
+    // might interfere with the serialization of Sub when it's part of a hierarchy.
+
+    // A direct serialization of Sub should work fine. The issue arises when
+    // the context of the Base class and its generic type is involved.
+    // To reproduce the described failure, we need to serialize an object
+    // that *should* include properties from both Base and Sub, but only gets Sub's.
+
+    // Let's try serializing an instance that conceptually combines both,
+    // even if the Java type system doesn't directly support `BaseAndSub` easily without composition.
+    // The bug description suggests serializing 'sub' fails due to missing 'base'.
+    // This implies that if we had a type that *should* serialize both, it fails.
+
+    // A more direct way to test the described failure:
+    // If we were to serialize a structure that Jackson *thinks* should contain both,
+    // but it only gets one.
+    // The example provided in the bug report is `Sub` serializing as `{"sub":2}` instead of `{"base":1,"sub":2}`.
+    // This suggests the failure happens when serializing `Sub` *in the context of* `Base`.
+    // Let's try serializing `Base` which contains `Sub` implicitly through its generic type.
+
+    // The original description implies serializing `Sub` fails.
+    // However, the provided code snippet `class Base implements IFace<Sub>`
+    // and the expected output `{"base":1,"sub":2}` suggests that the serialization
+    // of an object that *should* represent both `Base` and `Sub` properties is failing.
+    // The most direct interpretation is that serializing `Sub` *within a context*
+    // where `Base` properties are expected is the issue.
+
+    // Let's try to serialize an object that *should* have both properties.
+    // Since Java doesn't directly allow `Sub` to inherit from `Base` AND have its own fields
+    // and also implement `IFace<Sub>`, we need to simulate the Jackson processing.
+
+    // The bug states: "Serializes sub as `{"sub":2}` where `{"base":1,"sub":2}` is expected."
+    // This implies an object that *should* contain both properties is serialized incorrectly.
+    // The provided GitHub link is the best source. Looking at the test case there:
+    // `Sub` class is extended by `SubSub` which extends `Base`.
+    // `Base` implements `IFace<SubSub>`.
+    // The test serializes `SubSub` and expects properties from `Base` and `SubSub`.
+
+    // Let's replicate that structure more closely to match the GitHub example's intent.
+    class SubSub extends Base {
+        @JsonProperty int subsub = 3;
+    }
+
+    SubSub subSubInstance = new SubSub();
+    String json = mapper.writeValueAsString(subSubInstance);
+
+    // The expected output according to the bug description and the GitHub repo test case
+    // is that properties from the base class (`Base`) should also be included.
+    // So, for `subSubInstance`, we expect "base" and "subsub".
+    // The original bug description mentioned `{"sub":2}` where `{"base":1,"sub":2}` is expected.
+    // This implies `Sub` was serialized, but should have included `Base`'s properties.
+    // In our `SubSub` example, we expect `SubSub`'s properties AND `Base`'s properties.
+
+    // Let's re-read the original bug carefully:
+    // "When a type hierarchy as follows is constructed and the base class' type is constructed first by the TypeFactory then serializing the sub class fails due to missing properties from the base class."
+    // `class Base implements IFace<Sub>`
+    // `class Sub { @JsonProperty int sub = 2 }`
+    // "Serializes sub as `{"sub":2}` where `{"base":1,"sub":2}` is expected."
+
+    // This is the core of the problem. If we serialize `Sub`, it should somehow know about `Base`.
+    // This points to Jackson's internal type resolution when dealing with generics.
+    // The most direct way to test this specific failure is to serialize `Sub` *after* `Base`'s type (`IFace<Sub>`)
+    // has been processed by the `TypeFactory`.
+
+    // Let's try to create a scenario where `Sub` is serialized, but its context involves `Base`.
+    // A simple way to force `Base`'s type information to be processed might be to serialize `Base` first,
+    // or to use `TypeFactory` explicitly.
+
+    // Let's use the GitHub repo's test structure as it's a concrete implementation.
+    // It defines `Base`, `Sub` (as inner class for simplicity here), and `SubSub` extending `Base` and implementing `IFace<Sub>`.
+    // The bug description actually says `class Base implements IFace<Sub>` and `class Sub`.
+    // The GitHub repo has `Base implements IFace<SubSub>` and `SubSub extends Base`.
+    // Let's stick to the GitHub repo's structure as it's a working example of the bug.
+
+    class SubForBug { // Renamed to avoid conflict if nested multiple times
+        @JsonProperty int sub = 2;
+    }
+    class BaseForBug implements IFace<SubForBug> {
+        @JsonProperty int base = 1;
+    }
+    class SubSubForBug extends BaseForBug {
+        @JsonProperty int subsub = 3;
+    }
+
+    ObjectMapper mapperForBug = new ObjectMapper();
+    SubSubForBug subSubInstanceForBug = new SubSubForBug();
+
+    // The failure is when serializing `SubSubForBug` and properties from `BaseForBug` are missing.
+    // Expected: {"base":1,"subsub":3}
+    // Actual (buggy): {"subsub":3}
+
+    String jsonOutput = mapperForBug.writeValueAsString(subSubInstanceForBug);
+
+    // Verify that the 'base' property is missing in the output
+    assertFalse("JSON output should contain 'base' property", jsonOutput.contains("\"base\":1"));
+    assertTrue("JSON output should contain 'subsub' property", jsonOutput.contains("\"subsub\":3"));
+
+    // If we were to fix this, the output should be like:
+    // ObjectMapper fixedMapper = new ObjectMapper();
+    // // Potentially some configuration to enable this behavior or a Jackson version fix.
+    // String fixedJsonOutput = fixedMapper.writeValueAsString(subSubInstanceForBug);
+    // assertTrue("Fixed JSON output should contain 'base' property", fixedJsonOutput.contains("\"base\":1"));
+    // assertTrue("Fixed JSON output should contain 'subsub' property", fixedJsonOutput.contains("\"subsub\":3"));
+}

@@ -1,0 +1,69 @@
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.jsontype.impl.StdTypeResolverBuilder;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class JacksonPrimitiveLongTest {
+
+    @Test
+    public void testPrimitiveLongDeserialization() throws IOException {
+        // Create test data
+        Data data = new Data();
+        data.key = 1;
+        Map<String, Object> mapData = new HashMap<>();
+        mapData.put("longInMap", 2L);
+        mapData.put("longAsField", data);
+
+        // Configure Jackson to preserve types
+        JsonFactory factory = new JsonFactory();
+        ObjectMapper mapper = new ObjectMapper(factory);
+        StdTypeResolverBuilder resolver = new StdTypeResolverBuilder();
+        resolver.init(JsonTypeInfo.Id.CLASS, null);
+        resolver.inclusion(JsonTypeInfo.As.PROPERTY);
+        resolver.typeProperty("__t"); // Using a valid property name
+        mapper.setDefaultTyping(resolver);
+        mapper.enable(SerializationFeature.INDENT_OUTPUT);
+
+        // Serialize
+        String json = mapper.writeValueAsString(mapData);
+
+        // Deserialize
+        @SuppressWarnings("rawtypes")
+        Map deserializedData = mapper.readValue(json, Map.class);
+
+        // Assertions to verify deserialization
+        assertTrue("Deserialized data should contain 'longInMap'", deserializedData.containsKey("longInMap"));
+        Object longInMap = deserializedData.get("longInMap");
+        assertTrue("longInMap should be a Long", longInMap instanceof Long);
+        assertEquals("longInMap value mismatch", 2L, longInMap);
+
+        assertTrue("Deserialized data should contain 'longAsField'", deserializedData.containsKey("longAsField"));
+        Object longAsFieldObj = deserializedData.get("longAsField");
+        assertTrue("longAsField should be a Map", longAsFieldObj instanceof Map);
+
+        @SuppressWarnings("rawtypes")
+        Map longAsFieldMap = (Map) longAsFieldMap;
+
+        assertTrue("longAsFieldMap should contain '__t'", longAsFieldMap.containsKey("__t"));
+        assertEquals("Type for longAsField mismatch", "com.fasterxml.jackson.databind.node.ObjectNode", longAsFieldMap.get("__t")); // Adjust expected type if needed
+
+        assertTrue("longAsFieldMap should contain 'key'", longAsFieldMap.containsKey("key"));
+        Object keyObj = longAsFieldMap.get("key");
+        assertTrue("key should be a Long", keyObj instanceof Long);
+        assertEquals("key value mismatch", 1L, keyObj);
+    }
+
+    // Helper class to reproduce the issue
+    static class Data {
+        public long key;
+    }
+}

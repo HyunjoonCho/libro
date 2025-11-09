@@ -1,0 +1,36 @@
+public void testUmlautDirectoryInWinzip() throws Exception {
+    // Create a temporary zip file with a directory containing an umlaut
+    File zipFile = File.createTempFile("umlaut_test", ".zip");
+    zipFile.deleteOnExit();
+
+    try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(zipFile))) {
+        // Add a directory entry with an umlaut
+        ZipEntry dirEntry = new ZipEntry("umlaut_dir/");
+        zos.putNextEntry(dirEntry);
+        zos.closeEntry();
+
+        // Add a file entry within the umlaut directory
+        ZipEntry fileEntry = new ZipEntry("umlaut_dir/file.txt");
+        zos.putNextEntry(fileEntry);
+        zos.write("test content".getBytes());
+        zos.closeEntry();
+    }
+
+    // Attempt to read the zip file using ArchiveInputStream
+    try (ArchiveInputStream ais = new ArchiveStreamFactory().createArchiveInputStream(ArchiveEntryType.ZIP, new FileInputStream(zipFile))) {
+        ArchiveEntry entry;
+        boolean foundUmlautDir = false;
+        while ((entry = ais.getNextEntry()) != null) {
+            if (entry.getName().equals("umlaut_dir/")) {
+                assertFalse("Umlaut directory should be marked as a directory", entry.isDirectory());
+                foundUmlautDir = true;
+            }
+            if (entry.getName().equals("umlaut_dir/file.txt")) {
+                assertEquals("File name in umlaut directory has incorrect separators", "umlaut_dir/file.txt", entry.getName());
+            }
+        }
+        assertTrue("Umlaut directory entry was not found", foundUmlautDir);
+    } finally {
+        zipFile.delete();
+    }
+}

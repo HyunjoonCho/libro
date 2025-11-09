@@ -1,0 +1,35 @@
+public void testExternalTypeIdBeforePojo() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.addAbstractTypeResolver(new SimpleAbstractTypeResolver() {
+        @Override
+        public JavaType resolveAbstractType(final TypeResolutionContext context,
+                                            final JavaType type) throws UnresolvedForwardReference {
+            if (type.getRawClass().equals(MyInterface.class)) {
+                return context.resolve (MyConcreteClass.class);
+            }
+            return null;
+        }
+    });
+    mapper.registerModule(module);
+    mapper.enable(MapperFeature.USE_ANNOTATIONS);
+    mapper.setAnnotationIntrospector(new JacksonAnnotationIntrospector() {
+        @Override
+        public String findTypeIdResolver(final AnnotatedClass ac) {
+            return "com.fasterxml.jackson.databind.module.SimpleTypeResolver";
+        }
+        @Override
+        public String findTypeName(final AnnotatedClass ac) {
+            return "mytype";
+        }
+    });
+    mapper.setSubtypes(new NamedType(MyConcreteClass.class, "mytype"));
+    String json = "{\n" +
+            "  \"@type\": \"mytype\",\n" +
+            "  \"name\": \"test\"\n" +
+            "}";
+    MyInterface result = mapper.readValue(json, MyInterface.class);
+    assertNotNull(result);
+    assertTrue(result instanceof MyConcreteClass);
+    assertEquals("test", ((MyConcreteClass) result).getName());
+}

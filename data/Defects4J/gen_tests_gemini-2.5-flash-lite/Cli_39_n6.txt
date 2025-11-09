@@ -1,0 +1,35 @@
+public void testOptionParserExistingFileValue() throws ParseException, IOException {
+    Options options = new Options();
+    options.addOption(Option.builder("f").hasArg().type(FileInputStream.class).build());
+    CommandLineParser parser = new DefaultParser();
+
+    // Test with a non-existent file - should throw an exception
+    String[] argsNonExistent = {"-f", "nonExistentFile.txt"};
+    try {
+        CommandLine cline = parser.parse(options, argsNonExistent);
+        // If we reach here, it means the file existence check failed
+        fail("Expected an exception for non-existent file.");
+    } catch (MissingArgumentException e) {
+        // This is not the expected exception, but indicates an issue
+        fail("Expected a different exception type for file not found.");
+    } catch (ParseException e) {
+        // This is the expected exception if the file doesn't exist and the check is implemented
+        assertTrue(e.getMessage().contains("nonExistentFile.txt"));
+    }
+
+    // Test with an existent file (create a dummy file for this)
+    File tempFile = File.createTempFile("commons-cli-test", ".txt");
+    tempFile.deleteOnExit(); // Ensure the temp file is cleaned up
+    String[] argsExistent = {"-f", tempFile.getAbsolutePath()};
+    CommandLine clineExistent = parser.parse(options, argsExistent);
+    Object parsedValue = clineExistent.getParsedOptionValue("f");
+    assertNotNull("Parsed value should not be null for an existing file.", parsedValue);
+    assertTrue("Parsed value should be of type FileInputStream.", parsedValue instanceof FileInputStream);
+
+    // Close the stream to avoid resource leaks
+    try {
+        ((FileInputStream) parsedValue).close();
+    } catch (IOException e) {
+        // Ignore, cleanup is more important
+    }
+}

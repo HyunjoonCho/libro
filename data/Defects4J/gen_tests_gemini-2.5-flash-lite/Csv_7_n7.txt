@@ -1,0 +1,26 @@
+public void testDuplicateHeaderMap() throws IOException {
+    String csvData = "Col1,Col2,Col2,Col3,Col4\n1,2,3,4,5\n4,5,6,7,8";
+    CSVFormat myFormat = CSVFormat.RFC4180.withDelimiter(",").withQuoteChar('"').withQuotePolicy(Quote.MINIMAL)
+            .withIgnoreSurroundingSpaces(true).withHeader().withSkipHeaderRecord(true);
+
+    Reader in = new StringReader(csvData);
+    Mapping a = myFormat.parse(in);
+    HeaderMap map = a.getHeaderMap();
+
+    // The expected behavior based on the bug description is that duplicate headers
+    // will overwrite each other, leading to a smaller map than expected.
+    // We expect 'Col2' to map to the index of the *last* occurrence.
+    assertEquals(4, map.size()); // Col1, Col2 (last), Col3, Col4
+    assertEquals(0, map.get("Col1").intValue());
+    assertEquals(2, map.get("Col2").intValue()); // Should be the index of the second 'Col2'
+    assertEquals(3, map.get("Col3").intValue());
+    assertEquals(4, map.get("Col4").intValue());
+
+    // Also verify that accessing the first 'Col2' column data is incorrect
+    // as it will likely retrieve data from the second 'Col2' column.
+    CSVRecord record = a.iterator().next();
+    assertEquals("1", record.get("Col1"));
+    assertEquals("3", record.get("Col2")); // This will be the value from the second Col2 column
+    assertEquals("4", record.get("Col3"));
+    assertEquals("5", record.get("Col4"));
+}

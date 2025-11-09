@@ -1,0 +1,110 @@
+public void testSoundexHWRule() {
+    Soundex soundex = new Soundex();
+    // According to the Soundex algorithm, adjacent letters with the same code
+    // are coded once, unless separated by a vowel.
+    // Letters separated by 'H' or 'W' are also coded once.
+    // The bug description implies that the current implementation incorrectly
+    // handles cases where the second of two same-coded consonants is separated
+    // by 'H' or 'W'.
+    // Example: "Ashcraft" should be A261.
+    // A -> A (0)
+    // s -> 2
+    // h -> ignored
+    // c -> 2 (same as s, separated by h, so ignored)
+    // r -> 6
+    // a -> ignored (vowel)
+    // f -> 1
+    // t -> 3 (ignored, only 4 digits)
+    // Expected: A261
+    // The bug description suggests a failure in handling the 'c' after 'h'.
+    // Let's test a case that would specifically trigger the described issue.
+    // If we have two consonants mapping to the same code separated by 'H' or 'W',
+    // the second consonant should be ignored.
+    // Example: "Pfister" -> P236. P=0, f=1, i=vowel, s=2, t=3, e=vowel, r=6.
+    // Example: "Tymczak" -> T522. T=3, y=vowel, m=5, c=2, z=2, a=vowel, k=2.
+    // According to the rule, the 'z' should be ignored because it's separated
+    // from 'c' by 'a' (a vowel), and 'k' should be ignored because it's separated
+    // from 'z' by 'a' (a vowel).
+    // Let's construct a case where the bug might manifest.
+    // Consider "Robert" -> R163. R=0, o=vowel, b=1, e=vowel, r=6, t=3.
+    // Consider "Rupert" -> R163. R=0, u=vowel, p=1, e=vowel, r=6, t=3.
+    // The bug description points to Soundex.getMappingCode() line 191.
+    // This line seems to be checking the previous character's mapping code.
+    // Let's assume the bug is that it incorrectly ignores a character if the
+    // *two* previous characters were H or W, regardless of their mapping code.
+    // A more direct interpretation of the description: "a character that is preceded by two characters that are either H or W, is not encoded, regardless of what the last consonant was."
+    // This implies a lookahead or a specific check for HH or WW.
+    // Let's test "Ashcraft" which is a common example.
+    // A=0, s=2, h=ignore, c=2, r=6, a=ignore, f=1, t=3.
+    // Expected: A261.
+    // If the bug is as described, it might fail on this.
+    // Let's consider a simpler case to isolate the H/W rule.
+    // "Bh" -> B000. B=1, h=ignore.
+    // "Bwh" -> B000. B=1, w=ignore, h=ignore.
+    // "Bhh" -> B000. B=1, h=ignore, h=ignore.
+    // The rule is: "If two or more letters with the same number are adjacent in the original name (before step 1), only retain the first letter; also two letters with the same number separated by 'h' or 'w' are coded as a single number, whereas such letters separated by a vowel are coded twice."
+    // So, 'Ashcraft': A, s=2, h=ignore, c=2. Since 's' and 'c' have the same code (2) and are separated by 'h', 'c' should be ignored.
+    // This means the expected output for Ashcraft is indeed A261.
+    // The bug report implies that the code might incorrectly ignore 'c' even if it wasn't the same code as 's', or it might incorrectly *encode* 'c' when it shouldn't.
+    // The description states: "a character that is preceded by two characters that are either H or W, is not encoded, regardless of what the last consonant was."
+    // This is a bit confusing. Let's re-read the Soundex rule: "two letters with the same number separated by 'h' or 'w' are coded as a single number".
+    // This means if we have Code(X) == Code(Y) and they are separated by H or W, we only encode one of them.
+    // Let's try a name where this rule is critical.
+    // "Edvige" -> E312. E=0, d=3, v=1, i=vowel, g=2, e=vowel.
+    // "Edwige" -> E312. E=0, d=3, w=ignore, i=vowel, g=2, e=vowel.
+    // "Edhige" -> E312. E=0, d=3, h=ignore, i=vowel, g=2, e=vowel.
+    // The bug is likely related to the interaction between H/W and same-coded letters.
+    // A common test case for Soundex is "Ashcraft".
+    // A (keep)
+    // s (2)
+    // h (ignore)
+    // c (2) - Same code as 's', separated by 'h'. Should be ignored.
+    // r (6)
+    // a (ignore)
+    // f (1)
+    // t (3) - Last consonant, ignored as code length is met.
+    // Expected: A261
+    // If the implementation fails here, it might produce A226.
+    // Let's test this specific case.
+    assertEquals("A261", soundex.soundex("Ashcraft"));
+    // Let's consider another case based on the description's specific wording:
+    // "a character that is preceded by two characters that are either H or W, is not encoded, regardless of what the last consonant was."
+    // This sounds like it might be incorrectly applying a rule about H/W.
+    // Let's try a name that has 'H' or 'W' followed by another 'H' or 'W'.
+    // Example: "Ashwharton"
+    // A (keep)
+    // s (2)
+    // h (ignore)
+    // w (ignore)
+    // h (ignore)
+    // a (ignore)
+    // r (6)
+    // t (3)
+    // o (ignore)
+    // n (5)
+    // Expected: A263
+    // If the buggy code incorrectly ignores 'r' because it follows 'wh', it would be wrong.
+    // The description is key: "a character that is preceded by two characters that are either H or W, is not encoded, regardless of what the last consonant was."
+    // This means if we have `...[H or W][H or W][Character to encode]...`
+    // The `[Character to encode]` might be incorrectly skipped.
+    // Let's try to construct a name that fits this.
+    // Suppose we have a consonant, then H, then H, then another consonant with the same code.
+    // Example: "Bhhb"
+    // B (keep)
+    // h (ignore)
+    // h (ignore)
+    // b (1) - The code should check if 'b' should be encoded.
+    // The rule says "a character that is preceded by two characters that are either H or W, is not encoded".
+    // So, if the code sees 'h' then 'h', it skips the next character.
+    // This means 'b' would be skipped.
+    // Expected: B000
+    assertEquals("B000", soundex.soundex("Bhhb"));
+    // Let's try with W: "Bwwb"
+    assertEquals("B000", soundex.soundex("Bwwb"));
+    // Let's try mixed: "Bhwbb"
+    assertEquals("B000", soundex.soundex("Bhwbb"));
+    // Let's try "Ashwharton" again to see if it passes with the fix.
+    // A, s=2, h=ignore, w=ignore, h=ignore, a=ignore, r=6, t=3, o=ignore, n=5
+    // Expected: A263
+    assertEquals("A263", soundex.soundex("Ashwharton"));
+}

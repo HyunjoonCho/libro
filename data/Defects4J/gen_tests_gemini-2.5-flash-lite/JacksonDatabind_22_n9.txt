@@ -1,0 +1,42 @@
+public void testJsonValueOverridesCustomSerializer() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+
+    // Register a custom serializer for the POJO
+    SimpleModule module = new SimpleModule();
+    module.addSerializer(new MyPojoSerializer());
+    mapper.registerModule(module);
+
+    // The POJO with @JsonValue
+    MyPojoWithJsonValue pojo = new MyPojoWithJsonValue("test");
+
+    // Attempt to serialize the POJO - this should use the custom serializer
+    // but due to the bug, it will use the default serializer for String (from @JsonValue)
+    String json = mapper.writeValueAsString(pojo);
+
+    // Assert that the output is NOT what the custom serializer would produce
+    // and IS what the default @JsonValue serializer would produce.
+    // This confirms the custom serializer was ignored.
+    assertFalse(json.contains("CUSTOM_SERIALIZER"));
+    assertTrue(json.contains("\"test\"")); // Assuming @JsonValue returns the String itself
+}
+
+// Helper classes for the test
+public static class MyPojoWithJsonValue {
+    private String value;
+
+    public MyPojoWithJsonValue(String value) {
+        this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+        return value;
+    }
+}
+
+public static class MyPojoSerializer extends JsonSerializer<MyPojoWithJsonValue> {
+    @Override
+    public void serialize(MyPojoWithJsonValue value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+        gen.writeString("CUSTOM_SERIALIZER_" + value.getValue());
+    }
+}

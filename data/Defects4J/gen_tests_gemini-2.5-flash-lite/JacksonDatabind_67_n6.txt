@@ -1,0 +1,72 @@
+public void testMapKeyDeserializerModifiersIgnored() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    SimpleModule module = new SimpleModule();
+    module.setDeserializerModifier(new BeanDeserializerModifier() {
+        @Override
+        @SuppressWarnings("unchecked")
+        public KeyDeserializer modifyKeyDeserializer(
+                DeserializationConfig config,
+                JavaType type,
+                KeyDeserializer deserializer) {
+            if (!type.isEnumType()) {
+                return super.modifyKeyDeserializer(config, type, deserializer);
+            }
+            return new KeyDeserializer() {
+                @Override
+                @SuppressWarnings("unchecked")
+                public Object deserializeKey(String key, DeserializationContext ctxt)
+                        throws IOException, JsonProcessingException {
+                    Class<? extends Enum> rawClass = (Class<Enum<?>>) type.getRawClass();
+                    return Enum.valueOf(rawClass, key.toUpperCase());
+                }
+            };
+        }
+    });
+    mapper.registerModule(module);
+
+    // Test case with an enum as a map key
+    // Assuming an enum like: enum MyEnum { VALUE1, VALUE2 }
+    // The input should deserialize "value1" to MyEnum.VALUE1
+    // This test assumes such an enum exists and is accessible.
+    // For a self-contained test, we'd define a local enum.
+
+    // Define a local enum for the test
+    enum TestEnum {
+        VALUE1, VALUE2
+    }
+
+    // Create a map where the key is the enum
+    Map<TestEnum, String> mapInput = new HashMap<>();
+    mapInput.put(TestEnum.VALUE1, "someValue");
+
+    // Serialize the map to JSON
+    String json = mapper.writeValueAsString(mapInput);
+
+    // The key in the JSON should be lowercase if the modifier is ignored
+    // and uppercase if the modifier is working.
+    // The bug report implies the modifier is ignored, so it might expect "value1"
+    // and fail to deserialize.
+    // The fix should allow "value1" to be deserialized correctly.
+
+    // We expect the deserializer to handle "value1" correctly and map it to TestEnum.VALUE1
+    Map<String, String> jsonMap = mapper.readValue(json, Map.class);
+    String enumKeyString = jsonMap.keySet().iterator().next();
+
+    // If the modifier is not working, the key will remain as is (e.g., "VALUE1")
+    // If the modifier is working, it should be able to handle lowercase input.
+    // The bug is that the modifier is *ignored* for enums, so it will use the default
+    // enum deserializer which requires exact case matching.
+
+    // Let's simulate the input that *should* work if the modifier was applied.
+    // The bug report indicates the modifier is not called for enums.
+    // So, if we send "value1" as the key, it should fail with the original code.
+    // The test should therefore assert that it *can* deserialize lowercase.
+
+    String jsonWithLowercaseKey = "{\"value1\": \"someValue\"}";
+    Map<TestEnum, String> deserializedMap = mapper.readValue(jsonWithLowercaseKey, new TypeReference<Map<TestEnum, String>>() {});
+
+    assertNotNull(deserializedMap);
+    assertEquals(1, deserializedMap.size());
+    assertTrue(deserializedMap.containsKey(TestEnum.VALUE1));
+    assertEquals("someValue", deserializedMap.get(TestEnum.VALUE1));
+}

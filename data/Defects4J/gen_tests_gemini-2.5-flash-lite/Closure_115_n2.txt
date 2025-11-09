@@ -1,0 +1,43 @@
+public void testAdvancedOptimizationsSideEffect() {
+    String inputJs = "window[\"anchor\"] = function (obj, modifiesProp) {" +
+                     " return (function (saved) {" +
+                     " return modifiesProp(obj) + saved;" +
+                     " })(obj[\"prop\"]);" +
+                     "}";
+    String externsJs = "var window; window.prop;";
+
+    CompilerOptions options = new CompilerOptions();
+    options.setLanguageIn(Language.ECMASCRIPT5);
+    options.setLanguageOut(Language.ECMASCRIPT5);
+    options.setPrettyPrint(true);
+    options.setCodingConvention(new ClosureCodingConvention());
+    options.setCompilationLevel(CompilationLevel.ADVANCED_OPTIMIZATIONS);
+    options.setWarningLevel(DiagnosticGroups.VERBOSE);
+
+    Compiler compiler = new Compiler();
+    compiler.init(new PrintStream(new ByteArrayOutputStream()), new PrintStream(new ByteArrayOutputStream()), compilerOptions);
+
+    SourceFile externsFile = SourceFile.fromCode("window.js", externsJs);
+    SourceFile inputFile = SourceFile.fromCode("input.js", inputJs);
+
+    compiler.compile(externsFile, inputFile, options);
+
+    String outputJs = compiler.toSource();
+
+    // The expected output is a bit tricky to assert directly because the function name might change.
+    // However, the core issue is that obj["prop"] should be saved before modifiesProp is called.
+    // We can check if the saved variable is used after the call.
+    // A simpler check for this specific bug is to see if the original structure with the IIFE is preserved
+    // or if the side-effecting call happens before the original value is used.
+    // The buggy output: window.foo=function(a,b){return b(a)+a.prop};
+    // The correct output: window.foo=function(a,b){var HOLD=a.prop;return b(a)+HOLD};
+
+    // Let's check if the variable 'saved' (or a similar temporary variable) is introduced.
+    // This is a heuristic and might break with future compiler changes, but it targets the described bug.
+    assertTrue(outputJs.contains("var HOLD=") || outputJs.contains("var saved="),
+               "Expected a temporary variable to hold the original property value, but it was not found. Output: " + outputJs);
+
+    // Also check that the original property is accessed *before* the function call in the return statement.
+    // This is harder to assert precisely without more complex AST parsing.
+    // For this specific test, the presence of the temporary variable is a strong indicator.
+}

@@ -1,0 +1,129 @@
+public void testTarArchiveInputStream_uidGidTooLargeForInt() throws IOException {
+    // Create a dummy TAR entry with a UID that is too large for an int
+    // 4294967295 is 0xFFFFFFFF, the maximum value for an unsigned 32-bit integer
+    String paxHeader = "uid=4294967295\u0000gid=4294967295\u0000";
+    byte[] headerBytes = new byte[512];
+    // Simulate the PAX header structure
+    headerBytes[0] = 0x75; // 'u'
+    headerBytes[1] = 0x65; // 'e'
+    headerBytes[2] = 0x78; // 'x'
+    headerBytes[3] = 0x74; // 't'
+    headerBytes[4] = 0x20; // ' '
+    headerBytes[5] = 0x64; // 'd'
+    headerBytes[6] = 0x61; // 'a'
+    headerBytes[7] = 0x74; // 't'
+    headerBytes[8] = 0x61; // 'a'
+    headerBytes[9] = 0x00; // null terminator
+    // Copy PAX header data into the main header
+    System.arraycopy(paxHeader.getBytes(), 0, headerBytes, 10, paxHeader.length());
+
+    // Simulate a TAR entry that has PAX headers
+    TarArchiveEntry entry = new TarArchiveEntry("dummy.txt");
+    entry.setSize(0);
+    entry.setModTime(System.currentTimeMillis());
+    entry.setGroupId(0); // Placeholder
+    entry.setUserId(0); // Placeholder
+
+    // Create a ByteArrayInputStream to simulate the TAR file
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    TarArchiveOutputStream taos = new TarArchiveOutputStream(baos);
+    taos.putArchiveEntry(entry);
+    taos.closeArchiveEntry();
+    taos.finish();
+
+    // Now, simulate reading this entry with a potentially problematic TarArchiveInputStream
+    ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+    TarArchiveInputStream tais = new TarArchiveInputStream(bais);
+
+    // We need to manually set up the stream to read the PAX header
+    // This is a bit of a hack to reproduce the scenario described in the bug
+    // In a real scenario, the stream would naturally encounter the PAX header.
+    // Here, we'll create a mock entry and then try to process PAX headers.
+
+    // Create a dummy entry that we'll pretend is the one with the large UID/GID
+    TarArchiveEntry mockEntry = new TarArchiveEntry("test.txt");
+    mockEntry.setSize(100); // Dummy size
+
+    // Create a byte array representing the PAX extended header block
+    // The structure is: length of block (octal), type (x), data, null terminator
+    // For uid=4294967295, length is 12 (octal 014)
+    // For gid=4294967295, length is 12 (octal 014)
+    // Total block length for uid: 12 + 1 + 12 + 1 = 26 (octal 032)
+    // Total block length for gid: 12 + 1 + 12 + 1 = 26 (octal 032)
+    // Let's assume a single PAX block for simplicity in this test, containing both.
+    // GNU tar example: \071\070uid=4294967295\071\070gid=4294967295\0\0
+    // The first two bytes are the length of the extended header record in octal.
+    // 4294967295 in octal is 37777777777.
+    // Let's construct a PAX header that would lead to the NumberFormatException.
+    // The bug report mentions "429496729", which is 0x80000000.
+    // Let's use a value that is definitely too large for int but valid for unsigned int.
+    String largeUid = "4294967294"; // 0xFFFFFFFE
+    String largeGid = "4294967294"; // 0xFFFFFFFE
+
+    // Construct a minimal PAX header block for testing
+    // The format is: <record size><null><keyword><null><value><null>
+    // The record size is the length of the rest of the block in octal.
+    // For "uid=4294967294", the string is 14 characters. Add null terminator.
+    // Record size for uid: 14 + 1 = 15 (octal 017)
+    // Record size for gid: 14 + 1 = 15 (octal 017)
+    // Let's assume a single PAX block that contains both, separated by nulls.
+    // Block: <record size><null><keyword1><null><value1><null><keyword2><null><value2><null>
+    // Example: "26\0uid\04294967294\0gid\04294967294\0"
+    // Length of "uid=4294967294": 1 + 14 = 15. Add null: 16.
+    // Length of "gid=4294967294": 1 + 14 = 15. Add null: 16.
+    // Total for two entries: 16 + 16 = 32.
+    // Record size should be 32 in octal, which is 26.
+    byte[] paxData = ("26\0uid\0" + largeUid + "\0gid\0" + largeGid + "\0").getBytes();
+
+    // We need to place this PAX data in the stream as if it were an extended header entry.
+    // This is tricky to simulate directly without modifying TarArchiveInputStream itself for testing.
+    // A more direct approach is to mock the behavior that leads to the parsing.
+    // The bug occurs within `applyPaxHeadersToCurrentEntry`.
+    // Let's simulate a call to that method with problematic key-value pairs.
+
+    // Create a dummy TarArchiveEntry to modify
+    TarArchiveEntry currentEntry = new TarArchiveEntry("test.tar");
+
+    // Simulate the Map of PAX headers
+    Map<String, String> paxHeaders = new HashMap<>();
+    paxHeaders.put("uid", largeUid);
+    paxHeaders.put("gid", largeGid);
+
+    // Create an instance of TarArchiveInputStream to call the internal method
+    // We need to make TarArchiveInputStream accessible, which might require reflection
+    // or a testable version of the class. For simplicity, let's assume we can instantiate it.
+    // A better approach is to create a mock TarArchiveInputStream that returns this map
+    // when getPaxHeaders() is called.
+
+    // Let's try to use reflection to call the protected method.
+    try {
+        TarArchiveInputStream mockTais = new TarArchiveInputStream(new ByteArrayInputStream(new byte[0])); // Dummy stream
+        Method applyPaxHeadersMethod = TarArchiveInputStream.class.getDeclaredMethod("applyPaxHeadersToCurrentEntry", TarArchiveEntry.class, Map.class);
+        applyPaxHeadersMethod.setAccessible(true);
+
+        // Execute the method with our problematic headers
+        applyPaxHeadersMethod.invoke(mockTais, currentEntry, paxHeaders);
+
+        // If we reach here, it means Integer.parseInt did not throw a NumberFormatException.
+        // This test should fail if the exception is thrown.
+        // We assert that the values were *not* set correctly if the exception was avoided,
+        // or that they *were* set correctly if the fix is applied and no exception is thrown.
+        // The goal is to *reproduce the failure*, so we expect a NumberFormatException.
+        fail("Expected NumberFormatException for large UID/GID");
+
+    } catch (InvocationTargetException e) {
+        // Check if the underlying cause is NumberFormatException
+        Throwable cause = e.getCause();
+        if (cause instanceof NumberFormatException) {
+            // This is the expected failure, so the test passes by catching it.
+            // We can optionally check the message to be more specific.
+            assertTrue(cause.getMessage().contains(largeUid) || cause.getMessage().contains(largeGid));
+        } else {
+            // Re-throw if it's an unexpected exception
+            throw new RuntimeException(e);
+        }
+    } catch (Exception e) {
+        // Handle other reflection-related exceptions
+        throw new RuntimeException(e);
+    }
+}

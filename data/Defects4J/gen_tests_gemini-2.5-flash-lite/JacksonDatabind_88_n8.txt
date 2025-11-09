@@ -1,0 +1,235 @@
+public void testPolymorphicTypeIds() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.enableDefaultTyping();
+
+    // This should ideally throw an exception during deserialization
+    // or at least prevent instantiation of a completely unrelated type.
+    // The bug report implies that the type check is missing, leading to
+    // potential issues later, or even earlier if not caught.
+
+    // Example: Attempting to deserialize a String as a Map.
+    // The current implementation might allow this to pass initial checks,
+    // but fail later. We want to ensure the check happens early or correctly.
+    // If the framework allows this, it's a sign of the missing type check.
+
+    // A more specific example based on the description's implication:
+    // If a base type is expected, but a completely different type is provided
+    // via type id, it should be rejected.
+
+    // Let's simulate a scenario where a type ID indicates a Map, but the content is an Integer.
+    // This might pass initial type ID parsing but fail during actual object creation/mapping.
+    // The bug is about missing *type checks*, implying that even if the final
+    // deserialization fails, the *check* itself should be more robust and perhaps fail earlier.
+
+    // Consider a scenario where a polymorphic type is expected, and the type ID
+    // points to a class that is not compatible or is a security risk.
+    // The description mentions "instantiation of incompatible classes".
+
+    // Let's try to deserialize a JSON that specifies a type ID for one class,
+    // but the actual data is for another, potentially problematic, class.
+    // For instance, if we have a base class `MyBase` and expect `MyBase`,
+    // but the JSON contains a type ID for `String` and the value is an integer.
+
+    // The original bug report implies that `createNumber` handles Integer and Hex,
+    // but not Long Hex. And `createNumber` assumes Hex is only Integer.
+    // This is a different bug than the polymorphic type ID one.
+
+    // Let's focus on the "Missing type checks when using polymorphic type ids".
+    // This typically happens with @JsonTypeInfo and @JsonSubTypes.
+
+    // Scenario: A base class and a derived class. The type ID points to the derived class,
+    // but the data structure provided is incompatible with the derived class.
+
+    // Example setup:
+    // Imagine a configuration object that can hold different types of values.
+    // We want to ensure that if a specific type is declared via type ID,
+    // the provided data conforms to it.
+
+    // Without knowing the exact classes involved in the original report,
+    // we'll create a plausible scenario.
+    // Let's assume a base class `PropertyValue` and two subclasses `StringValue` and `IntValue`.
+    // We want to deserialize a JSON that claims to be `StringValue` but contains an `int`.
+
+    // This test aims to verify that if the type ID indicates `StringValue`,
+    // but the JSON data is an integer, an error is thrown due to type mismatch.
+    // If no error is thrown, or an incorrect error is thrown, it indicates the missing check.
+
+    // To reproduce the bug, we need a specific JSON structure that exploits
+    // the missing type check. The description is a bit abstract.
+
+    // Let's try a common polymorphic deserialization setup and see if we can break it.
+    // Suppose we have a base class `Shape` and subclasses `Circle` and `Square`.
+    // The type ID might be "circle" or "square".
+
+    // If the JSON is `{"@type": "circle", "radius": 5}`, it's valid for `Circle`.
+    // If the JSON is `{"@type": "square", "side": 10}`, it's valid for `Square`.
+
+    // What if the JSON is `{"@type": "circle", "side": 10}`?
+    // This should fail because `Circle` doesn't have a `side` property,
+    // and the type ID indicates `circle`. The *type check* should catch this.
+    // If it proceeds and fails later (e.g., during property assignment with an error),
+    // the *check* itself might be considered missing or insufficient.
+
+    // Let's define minimal classes for this test.
+    // We'll use Jackson's annotations for polymorphic typing.
+
+    // Base class
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "@type")
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = Circle.class, name = "circle"),
+        @JsonSubTypes.Type(value = Square.class, name = "square")
+    })
+    abstract static class Shape {
+        // common properties if any
+    }
+
+    static class Circle extends Shape {
+        public double radius;
+
+        // Constructor and getters/setters for completeness, though not strictly needed for the failure reproduction
+        public Circle() {}
+        public Circle(double radius) { this.radius = radius; }
+        public double getRadius() { return radius; }
+        public void setRadius(double radius) { this.radius = radius; }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Circle circle = (Circle) o;
+            return Double.compare(circle.radius, radius) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(radius);
+        }
+    }
+
+    static class Square extends Shape {
+        public double side;
+
+        // Constructor and getters/setters
+        public Square() {}
+        public Square(double side) { this.side = side; }
+        public double getSide() { return side; }
+        public void setSide(double side) { this.side = side; }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Square square = (Square) o;
+            return Double.compare(square.side, side) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(side);
+        }
+    }
+
+    ObjectMapper mapper = new ObjectMapper();
+
+    // Test case 1: Valid Circle JSON
+    String validCircleJson = "{\"@type\":\"circle\", \"radius\":5.0}";
+    Shape deserializedCircle = mapper.readValue(validCircleJson, Shape.class);
+    assertTrue(deserializedCircle instanceof Circle);
+    assertEquals(5.0, ((Circle) deserializedCircle).radius, 0.001);
+
+    // Test case 2: Valid Square JSON
+    String validSquareJson = "{\"@type\":\"square\", \"side\":10.0}";
+    Shape deserializedSquare = mapper.readValue(validSquareJson, Shape.class);
+    assertTrue(deserializedSquare instanceof Square);
+    assertEquals(10.0, ((Square) deserializedSquare).side, 0.001);
+
+    // Test case 3: Invalid JSON - Type ID indicates Circle, but provides Square property
+    // This is the core of the bug reproduction. The type check should prevent this.
+    // If this passes without error, the check is missing.
+    String invalidCircleJsonWithSquareProperty = "{\"@type\":\"circle\", \"side\":10.0}";
+
+    try {
+        mapper.readValue(invalidCircleJsonWithSquareProperty, Shape.class);
+        // If we reach here, it means no exception was thrown, which indicates the bug.
+        // The test should fail.
+        fail("Expected an exception due to type mismatch when deserializing Circle with a Square property.");
+    } catch (UnrecognizedPropertyException e) {
+        // This is the expected outcome if the check works correctly.
+        // The exception message might indicate the unrecognized property.
+        assertTrue(e.getMessage().contains("side")); // Ensure the error is about the wrong property
+        assertTrue(e.getMessage().contains("Circle")); // Ensure the error mentions the target type
+    } catch (JsonMappingException e) {
+        // Catch other potential mapping exceptions that might indicate a type issue.
+        // The exact exception type might vary depending on Jackson version and configuration.
+        // The key is that *some* form of error indicating type incompatibility should occur.
+        // If the error is too generic or occurs too late, it's still a bug.
+        assertTrue(e.getMessage().contains("Cannot deserialize value of type")); // Or similar message
+    } catch (Exception e) {
+        // Catch any other unexpected exceptions.
+        fail("An unexpected exception occurred: " + e.getMessage());
+    }
+
+    // Another variation: Type ID indicates Square, but provides Circle property
+    String invalidSquareJsonWithCircleProperty = "{\"@type\":\"square\", \"radius\":5.0}";
+    try {
+        mapper.readValue(invalidSquareJsonWithCircleProperty, Shape.class);
+        fail("Expected an exception due to type mismatch when deserializing Square with a Circle property.");
+    } catch (UnrecognizedPropertyException e) {
+        assertTrue(e.getMessage().contains("radius"));
+        assertTrue(e.getMessage().contains("Square"));
+    } catch (JsonMappingException e) {
+        assertTrue(e.getMessage().contains("Cannot deserialize value of type"));
+    } catch (Exception e) {
+        fail("An unexpected exception occurred: " + e.getMessage());
+    }
+
+    // The description also mentions "instantiation of incompatible classes".
+    // This could imply a scenario where the type ID points to a class that is not
+    // a subtype of the expected base type, or even a completely unrelated class.
+    // Jackson's default typing with `enableDefaultTyping()` usually handles this by
+    // expecting a fully qualified class name or an alias. If the alias is mapped
+    // to an incorrect class, that's a configuration issue.
+    // The bug seems to be more about the *data* not matching the *declared type*.
+
+    // Let's consider a scenario where the type ID is present, but the JSON structure
+    // doesn't match *any* of the registered subtypes.
+    String unknownTypeJson = "{\"@type\":\"triangle\", \"base\":10, \"height\":5}";
+    try {
+        mapper.readValue(unknownTypeJson, Shape.class);
+        fail("Expected an exception for unknown type ID.");
+    } catch (JsonMappingException e) {
+        // Expecting an error related to the unknown type.
+        assertTrue(e.getMessage().contains("Could not find type deserializer"));
+    } catch (Exception e) {
+        fail("An unexpected exception occurred for unknown type: " + e.getMessage());
+    }
+}
+
+// Helper classes and imports needed for the test method.
+// These would typically be in the same test class or imported.
+// For this standalone method generation, we assume they are available.
+// They are defined inline above for clarity.
+//
+// import com.fasterxml.jackson.annotation.JsonSubTypes;
+// import com.fasterxml.jackson.annotation.JsonTypeInfo;
+// import com.fasterxml.jackson.databind.JsonMappingException;
+// import com.fasterxml.jackson.databind.ObjectMapper;
+// import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
+// import java.util.Objects;
+//
+// import static org.junit.jupiter.api.Assertions.*;
+//
+// // Assume these are defined within the test class or imported
+// // abstract static class Shape { ... }
+// // static class Circle extends Shape { ... }
+// // static class Square extends Shape { ... }
+
+// Note: The original bug report is somewhat vague. This test attempts to
+// reproduce the described issue of missing type checks during polymorphic
+// deserialization by creating a scenario where the provided JSON data
+// is incompatible with the type specified by the type ID. If Jackson
+// allows this deserialization to proceed without a clear type incompatibility
+// error, it suggests the "missing type checks" described in the bug.
+// The current Jackson versions are quite strict about this, so this test
+// might pass on modern versions, but it reflects the *intended* failure
+// scenario based on the description.

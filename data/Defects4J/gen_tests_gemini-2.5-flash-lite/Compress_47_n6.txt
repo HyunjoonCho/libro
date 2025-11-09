@@ -1,0 +1,53 @@
+public void testZipArchiveInputStreamCompressedSizeUnknown() throws IOException {
+    ZipArchiveEntry entry = new ZipArchiveEntry("test.txt");
+    entry.setMethod(ZipMethod.BZIP2.getCode());
+    entry.setSize(100); // Actual size
+    entry.setCompressedSize(ArchiveEntry.SIZE_UNKNOWN); // Compressed size unknown
+
+    // Mocking the underlying input stream to return the entry and then some data
+    InputStream mockInputStream = new ByteArrayInputStream(new byte[200]);
+    ArchiveInputStream mockArchiveInputStream = createMock(ArchiveInputStream.class);
+    expect(mockArchiveInputStream.getNextEntry()).andReturn(entry).anyTimes();
+    // We need to mock the read() method of the underlying stream that will be wrapped
+    // by BoundedInputStream, but since getNextZipEntry is called before BoundedInputStream
+    // is created, we cannot directly mock the stream that will be passed to it.
+    // Instead, we'll rely on the fact that ZipArchiveInputStream will try to read from 'in'
+    // after getNextZipEntry returns, and if 'in' is null, it will throw NPE.
+
+    // The actual test logic is in the ZipArchiveInputStream constructor and getNextZipEntry method.
+    // We need to simulate the scenario where getNextZipEntry is called and compressed size is unknown.
+    // We will create a ZipArchiveInputStream with a mock entry and expect it to handle
+    // the unknown compressed size gracefully or throw a specific exception.
+
+    // Since the bug is about getNextZipEntry not setting 'current.in' when compressed size is unknown,
+    // we will test that by calling getNextZipEntry and then attempting to read from the stream
+    // which should result in a NullPointerException if the bug is present.
+
+    // Create a ZipArchiveInputStream with a dummy input stream that will be read from.
+    // The content of this stream doesn't matter much for this specific test as we are
+    // focusing on the state after getNextZipEntry.
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    ZipArchiveOutputStream zaos = new ZipArchiveOutputStream(baos);
+    zaos.putArchiveEntry(entry);
+    zaos.write(new byte[100]);
+    zaos.closeArchiveEntry();
+    zaos.close();
+
+    ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+    ZipArchiveInputStream zis = new ZipArchiveInputStream(bais);
+
+    // Call getNextZipEntry to trigger the logic
+    ZipArchiveEntry returnedEntry = (ZipArchiveEntry) zis.getNextEntry();
+
+    // Now, attempt to read from the stream. If current.in was not set, this should throw NPE.
+    // The expected behavior is that this should throw an exception indicating the compressed size is unknown.
+    // However, the bug report states it leads to NPE. So we'll assert for NPE.
+    try {
+        zis.read();
+        fail("Expected NullPointerException because compressed size is unknown for BZIP2");
+    } catch (NullPointerException e) {
+        // Expected behavior based on the bug description
+    } finally {
+        zis.close();
+    }
+}

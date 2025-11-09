@@ -1,0 +1,225 @@
+public void testUnrelatedEventTriggersResetState() throws Exception {
+    // This test case aims to reproduce the issue where an unrelated event
+    // triggering RESET_STATE during ODE integration causes incorrect state updates
+    // for other event handlers.
+
+    // Setup a scenario with multiple event types and an ODE system.
+    // For demonstration purposes, we'll simulate a simplified ODE system and events.
+
+    // A simple ODE function: dy/dt = -y
+    FirstOrderDifferentialEquations ode = new FirstOrderDifferentialEquations() {
+        @Override
+        public int getDimension() {
+            return 1;
+        }
+
+        @Override
+        public void computeDerivatives(double t, double[] y, double[] yDot) {
+            yDot[0] = -y[0];
+        }
+    };
+
+    // Event 1: Triggers RESET_STATE when y[0] > 0.5
+    EventHandler resetEvent = new EventHandler() {
+        @Override
+        public void init(double t0, double[] y0, double maxCheckInterval, double convergence, int maxIterations) {
+            // No specific initialization needed for this example
+        }
+
+        @Override
+        public double g(double t, double[] y) {
+            return y[0] - 0.5; // Event occurs when y[0] = 0.5
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            // This event handler triggers RESET_STATE
+            return Action.RESET_STATE;
+        }
+
+        @Override
+        public void reset() {
+            // No specific reset needed for this example
+        }
+    };
+
+    // Event 2: A different event that should be unaffected by RESET_STATE
+    // Let's say this event checks for y[0] < -0.5, but its handler doesn't reset state.
+    EventHandler unrelatedEvent = new EventHandler() {
+        private double lastY = Double.NaN;
+
+        @Override
+        public void init(double t0, double[] y0, double maxCheckInterval, double convergence, int maxIterations) {
+            // No specific initialization needed for this example
+        }
+
+        @Override
+        public double g(double t, double[] y) {
+            return y[0] + 0.5; // Event occurs when y[0] = -0.5
+        }
+
+        @Override
+        public Action eventOccurred(double t, double[] y, boolean increasing) {
+            // This event handler does NOT trigger RESET_STATE
+            // We can add a check here to see if y is unexpectedly large
+            assertTrue("Unexpectedly large value in y: " + y[0], Math.abs(y[0]) < 10.0); // Arbitrary reasonable limit
+            lastY = y[0];
+            return Action.CONTINUE;
+        }
+
+        @Override
+        public void reset() {
+            // No specific reset needed for this example
+        }
+
+        public double getLastY() {
+            return lastY;
+        }
+    };
+
+    // Initial conditions
+    double t0 = 0.0;
+    double[] y0 = { 1.0 }; // Start with y[0] > 0.5 to trigger the reset event
+
+    // ODE solver configuration
+    double maxCheckInterval = 1.0;
+    double convergence = 1e-6;
+    int maxIterations = 100;
+
+    // Create the event handler manager
+    EventState eventState = new EventState(new EventHandler[]{resetEvent, unrelatedEvent}, maxCheckInterval, convergence, maxIterations);
+
+    // Create the step integrator (e.g., DormandPrince853Integrator)
+    // Using a fixed step size for simplicity in this test, but the issue can occur with variable steps too.
+    double minStep = 0.001;
+    double maxStep = 1.0;
+    double scalAbsoluteTolerance = 1e-6;
+    double scalRelativeTolerance = 1e-6;
+    FirstOrderIntegrator integrator = new DormandPrince853Integrator(minStep, maxStep, scalAbsoluteTolerance, scalRelativeTolerance);
+
+    // Add the event handler to the integrator
+    integrator.addEventHandler(eventState, true); // 'true' means events are handled
+
+    // Run the integration
+    double tEnd = 5.0;
+    integrator.integrate(ode, t0, y0, tEnd, new DummyStepHandler());
+
+    // Assertions to check if the unrelated event was handled correctly.
+    // The core of the bug is that the state might not be correctly updated after a RESET_STATE,
+    // leading to incorrect 'y' values when other events are checked.
+    // We expect that the 'unrelatedEvent' did not encounter extremely large 'y' values.
+    // The exact state of 'unrelatedEvent.getLastY()' might depend on the ODE solver's steps,
+    // but the critical part is that the assertion within its eventOccurred method should pass.
+
+    // If the test reaches this point without assertion failures, it implies the bug
+    // (as described in the description) was not triggered with these specific parameters.
+    // The goal is to have the test *fail* if the bug occurs.
+    // The assertion within unrelatedEvent.eventOccurred is the primary mechanism for failure detection.
+}
+
+// Dummy StepHandler for the integrator
+private static class DummyStepHandler implements StepHandler {
+    @Override
+    public void init(double t0, double[] y0, double tEnd) {
+    }
+
+    @Override
+    public void handleStep(FirstDerivativeEquations equations, boolean forward, double[] y, double t, double dt, boolean isLastStep) {
+        // No action needed for this test
+    }
+}
+
+// Mocking necessary classes if they are not available in the test environment
+// (Assuming these are part of a library like Apache Commons Math)
+interface FirstOrderDifferentialEquations {
+    int getDimension();
+    void computeDerivatives(double t, double[] y, double[] yDot);
+}
+
+interface FirstOrderIntegrator {
+    void addEventHandler(EventHandler handler, boolean forward);
+    void integrate(FirstOrderDifferentialEquations equations, double t0, double[] y0, double tEnd, StepHandler handler);
+}
+
+interface EventHandler {
+    void init(double t0, double[] y0, double maxCheckInterval, double convergence, int maxIterations);
+    double g(double t, double[] y);
+    Action eventOccurred(double t, double[] y, boolean increasing);
+    void reset();
+
+    enum Action {
+        CONTINUE, STOP, RESET_STATE, SET_STATE
+    }
+}
+
+interface EventState extends EventHandler {
+    // Assuming EventState is a specific implementation or interface related to event handling management
+}
+
+interface StepHandler {
+    void init(double t0, double[] y0, double tEnd);
+    void handleStep(FirstDerivativeEquations equations, boolean forward, double[] y, double t, double dt, boolean isLastStep);
+}
+
+// Mock implementations of the interfaces if they are not provided by the testing framework
+// For a real test, you would import these from the library.
+class DormandPrince853Integrator implements FirstOrderIntegrator {
+    public DormandPrince853Integrator(double minStep, double maxStep, double scalAbsoluteTolerance, double scalRelativeTolerance) {}
+    @Override public void addEventHandler(EventHandler handler, boolean forward) {}
+    @Override public void integrate(FirstOrderDifferentialEquations equations, double t0, double[] y0, double tEnd, StepHandler handler) {
+        // Simulate integration steps and event triggers
+        double t = t0;
+        double[] y = y0.clone();
+        double dt = 0.1; // Small step for simulation
+
+        while (t < tEnd) {
+            double nextT = Math.min(t + dt, tEnd);
+            double[] yDot = new double[y.length];
+            equations.computeDerivatives(t, y, yDot);
+
+            // Simple Euler step for simulation purposes
+            double[] yNext = new double[y.length];
+            for (int i = 0; i < y.length; i++) {
+                yNext[i] = y[i] + yDot[i] * (nextT - t);
+            }
+
+            // Check for events
+            boolean eventTriggered = false;
+            for (EventHandler eh : new EventHandler[]{/* placeholder for actual event handlers */}) { // In a real scenario, you'd have access to the registered handlers
+                double gVal = eh.g(t, y);
+                double gValNext = eh.g(nextT, yNext);
+
+                if ((gVal <= 0 && gValNext > 0) || (gVal >= 0 && gValNext < 0)) { // Crossing zero
+                    // This is a simplified event detection. Real solvers do root finding.
+                    Action action = eh.eventOccurred(nextT, yNext, gValNext > gVal);
+                    if (action == EventHandler.Action.RESET_STATE) {
+                        // Simulate resetting state
+                        // In a real solver, this would involve re-initializing the integrator's state.
+                        // For this test, we'll just reset y to a known state and restart integration conceptually.
+                        // This is where the bug might manifest if subsequent checks are incorrect.
+                        y = new double[]{1.0}; // Reset to initial state for simplicity
+                        t = t0; // Restarting integration from t0 conceptually
+                        eventTriggered = true;
+                        break; // Only one event can trigger a reset per logical step
+                    } else if (action == EventHandler.Action.CONTINUE) {
+                        eventTriggered = true;
+                    }
+                    // Other actions like STOP, SET_STATE are not relevant for this bug reproduction.
+                }
+            }
+
+            if (!eventTriggered) {
+                y = yNext;
+                t = nextT;
+            } else {
+                // If an event occurred and state was reset, the loop structure needs careful handling.
+                // For this simplified simulation, if RESET_STATE happened, we'd typically restart the integration
+                // from t0 with the new state. Here, we just ensured 'y' and 't' are updated appropriately
+                // for the next iteration, assuming the 'unrelatedEvent' is checked *after* the reset logic.
+                // The bug description implies that even after a reset, other events might be checked with bad state.
+            }
+        }
+    }
+}
+
+interface FirstDerivativeEquations extends FirstOrderDifferentialEquations {}

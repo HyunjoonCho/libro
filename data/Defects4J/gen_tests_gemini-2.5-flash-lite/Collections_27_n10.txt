@@ -1,0 +1,64 @@
+import org.apache.commons.collections.functors.InvokerTransformer;
+import org.junit.Test;
+
+import java.io.*;
+import java.lang.reflect.InvocationTargetException;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.junit.Assert.fail;
+
+public class InvokerTransformerRCEExploit {
+
+    @Test
+    public void testArbitraryRemoteCodeExecution() {
+        try {
+            // Malicious payload: create a Transformer that will execute a command
+            InvokerTransformer maliciousTransformer = new InvokerTransformer("toString", null, null);
+
+            // Create a map that will be serialized and then deserialized
+            // The readObject method of AnnotationInvocationHandler will call entrySet() and get()
+            // on the deserialized map. If the map contains a malicious entry,
+            // the InvokerTransformer will be invoked.
+            Map<String, Object> map = new HashMap<>();
+            map.put("foo", maliciousTransformer); // This will trigger the exploit
+
+            // Serialize the malicious map
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            ObjectOutputStream oos = new ObjectOutputStream(bos);
+            oos.writeObject(map);
+            oos.close();
+
+            // Deserialize the malicious map
+            ByteArrayInputStream bis = new ByteArrayInputStream(bos.toByteArray());
+            ObjectInputStream ois = new ObjectInputStream(bis);
+
+            // This is the crucial part: deserializing the object that triggers the exploit
+            // In a real-world scenario, this would happen on a vulnerable server
+            // when it receives a malicious serialized object.
+            // We are simulating this by calling readObject on a specially crafted input stream.
+            // We expect this to throw an exception because the maliciousTransformer's
+            // toString method will be called with a RuntimeException.
+            // If it *doesn't* throw an exception, or throws a different one, it means
+            // the exploit was not triggered as expected.
+            try {
+                ois.readObject();
+                fail("Expected an exception to be thrown due to arbitrary code execution.");
+            } catch (RuntimeException e) {
+                // This is the expected outcome if the exploit is successful and
+                // the InvokerTransformer attempts to execute code that results in a RuntimeException.
+                // For example, if the invoked method was "exec" on a Runtime object.
+                // In this simplified test, we are just checking if *any* RuntimeException occurs
+                // during the deserialization process, which indicates the transformer was invoked.
+                System.out.println("Successfully caught expected RuntimeException: " + e.getMessage());
+            } catch (Exception e) {
+                fail("Caught an unexpected exception: " + e.getClass().getName() + " - " + e.getMessage());
+            } finally {
+                ois.close();
+            }
+
+        } catch (IOException e) {
+            fail("IOException during serialization/deserialization: " + e.getMessage());
+        }
+    }
+}

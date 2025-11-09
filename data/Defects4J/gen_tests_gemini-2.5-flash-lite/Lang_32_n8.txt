@@ -1,0 +1,59 @@
+public void testToStringStyleThreadLocalLeak() throws Exception {
+    // This test aims to reproduce a potential memory leak scenario by
+    // forcing the loading and use of ToStringStyle in a way that might
+    // trigger the thread-local issue in container environments.
+    // A true memory leak test is complex and often requires runtime analysis
+    // tools (like heap dumps) rather than a simple unit test.
+    // This test focuses on the *usage pattern* that could lead to the leak.
+
+    // We'll simulate multiple threads accessing ToStringStyle, as this is
+    // where the thread-local would be problematic if not managed.
+    // In a real container environment, these threads might be request threads.
+
+    final int numberOfThreads = 5;
+    ExecutorService executor = Executors.newFixedThreadPool(numberOfThreads);
+    List<Future<?>> futures = new ArrayList<>();
+
+    for (int i = 0; i < numberOfThreads; i++) {
+        futures.add(executor.submit(() -> {
+            ToStringStyle style = ToStringStyle.DEFAULT_STYLE;
+            Object obj = new Object() {
+                @Override
+                public String toString() {
+                    // Force the use of ToStringStyle and potentially trigger thread-local access
+                    return new ReflectionToStringBuilder(this, style).toString();
+                }
+            };
+            // Call toString() to ensure the builder and style are used.
+            obj.toString();
+        }));
+    }
+
+    // Wait for all threads to complete their execution.
+    for (Future<?> future : futures) {
+        try {
+            future.get();
+        } catch (InterruptedException | ExecutionException e) {
+            fail("Thread execution failed: " + e.getMessage());
+        }
+    }
+
+    // Shutdown the executor
+    executor.shutdown();
+    try {
+        if (!executor.awaitTermination(1, TimeUnit.SECONDS)) {
+            executor.shutdownNow();
+        }
+    } catch (InterruptedException e) {
+        executor.shutdownNow();
+        Thread.currentThread().interrupt();
+    }
+
+    // The actual leak detection is not possible within a standard JUnit test.
+    // This test verifies that the code can be executed by multiple threads
+    // without immediate exceptions, which is a prerequisite for the leak scenario.
+    // A real fix would involve ensuring the thread-local is cleared or not used
+    // in a way that persists references.
+    // If the bug is present, the environment might experience a leak upon repeated
+    // execution or in a long-running container.
+}

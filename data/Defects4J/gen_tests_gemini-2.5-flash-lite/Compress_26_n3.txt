@@ -1,0 +1,116 @@
+public void testSkipDoesNotAlwaysSkip() throws IOException {
+    byte[] data = new byte[1024];
+    new Random().nextBytes(data);
+    ByteArrayInputStream bais = new ByteArrayInputStream(data);
+    CipherInputStream cis = new CipherInputStream(bais, new NullCipher()); // Using NullCipher for simplicity
+    IOUtils.skip(cis, 512);
+    // The actual check here would depend on how we can verify the stream position after skipping.
+    // For a CipherInputStream, direct position checking might not be straightforward.
+    // A common way to test this is to read a few bytes and assert they are not the ones we expected
+    // if skipping failed partially. However, for this specific bug, the core issue is that
+    // skip() might return less than requested without EOF, which is what the bug describes.
+    // We can simulate this by creating a scenario where skip returns 0 prematurely.
+    // A more robust test would involve a mock CipherInputStream that controls the skip behavior.
+
+    // For demonstration, let's assume we can mock or create a stream that behaves like the described CipherInputStream
+    // For a real test, you'd likely need a mock object for CipherInputStream or a more controlled test stream.
+    // The following is a conceptual representation of the failure point.
+
+    InputStream failingStream = new InputStream() {
+        private long bytesToSkip = 512;
+        private long totalSkipped = 0;
+
+        @Override
+        public long skip(long n) throws IOException {
+            if (bytesToSkip > 0 && n > 0) {
+                long actualSkip = Math.min(n, bytesToSkip);
+                bytesToSkip -= actualSkip;
+                totalSkipped += actualSkip;
+                // Simulate CipherInputStream behavior: return less than n, even if not EOF
+                if (actualSkip < n && n > 1) { // Simulate premature return
+                    return actualSkip;
+                }
+                return actualSkip;
+            }
+            return 0;
+        }
+
+        @Override
+        public int read() throws IOException {
+            // Not relevant for this skip test
+            return -1;
+        }
+    };
+
+    // Now, attempt to skip using IOUtils.skip on this simulated stream
+    long initialSkipAmount = 512;
+    long skipped = IOUtils.skip(failingStream, initialSkipAmount);
+
+    // The bug is that IOUtils.skip might stop prematurely.
+    // If the failingStream is designed to return less than 'initialSkipAmount' without reaching EOF,
+    // and IOUtils.skip breaks the loop upon receiving 0, it would fail to skip the full amount.
+    // In this simulated case, `skipped` will be less than `initialSkipAmount` due to the logic in `skip()`.
+    // IOUtils.skip's internal loop condition `if (skipped == 0) { break; }` is problematic if `skip()` returns 0 *before* EOF.
+    // A better test would assert that `IOUtils.skip` *eventually* skips the full amount, even if the underlying stream's `skip` method is inefficient.
+    // The bug description implies `IOUtils.skip` itself doesn't handle the partial skip return correctly, leading to an incomplete skip.
+
+    // To truly reproduce the *failure*, we need to show that `IOUtils.skip` returns *less* than requested
+    // and doesn't continue attempting to skip the remainder.
+    // The provided snippet in the bug report suggests that `IOUtils.skip` might exit early if `skip()` returns 0.
+    // However, the `skip()` method in the bug description returns `skipped` and then checks `if (skipped == 0)`.
+    // This implies that if `skip()` returns a non-zero value (even if less than requested), the loop *should* continue.
+    // The critical part of the bug seems to be that `CipherInputStream.skip()` *can* return a value less than requested *without* EOF,
+    // and the original `IOUtils.skip` might not have handled this gracefully or efficiently.
+
+    // Let's refine the test to directly target the behavior described:
+    // Create a stream that returns less than requested from skip() and doesn't signal EOF.
+    // Then verify that IOUtils.skip manages to skip the *entire* intended amount.
+    // The failure is that it might *not* skip the entire amount if the underlying skip is inefficient or returns 0 prematurely.
+
+    // Based on the description, the issue is that IOUtils.skip might stop before reaching the target.
+    // Let's simulate a stream where skip() returns 0 after some bytes, and IOUtils.skip breaks.
+    InputStream faultySkipStream = new InputStream() {
+        private long bytesRemaining = 1000;
+        private long skippedSoFar = 0;
+
+        @Override
+        public int read() throws IOException {
+            if (bytesRemaining > 0) {
+                bytesRemaining--;
+                return 'a'; // Dummy data
+            }
+            return -1; // EOF
+        }
+
+        @Override
+        public long skip(long n) throws IOException {
+            if (n <= 0) {
+                return 0;
+            }
+            // Simulate CipherInputStream: skip only a portion, then return 0
+            if (skippedSoFar < 500) {
+                long toSkip = Math.min(n, 500 - skippedSoFar);
+                skippedSoFar += toSkip;
+                bytesRemaining -= toSkip; // Consume bytes from underlying stream conceptually
+                // Simulate returning less than n, and then potentially 0 on next call if n is large enough
+                if (toSkip < n) {
+                    return toSkip;
+                }
+                return toSkip;
+            } else {
+                // After skipping 500, simulate returning 0, which IOUtils.skip might interpret as EOF
+                // or a reason to stop.
+                return 0;
+            }
+        }
+    };
+
+    long totalToSkip = 1000;
+    long expectedSkipped = 1000;
+    long actualSkipped = IOUtils.skip(faultySkipStream, totalToSkip);
+
+    // The assertion should reflect the *expected* behavior of a correct skip implementation,
+    // which is to skip the full amount. The failure is that `actualSkipped` might be less than `totalToSkip`.
+    // If the test fails, it means `actualSkipped` is less than `expectedSkipped`.
+    assertTrue("IOUtils.skip should have skipped the full amount", actualSkipped >= expectedSkipped);
+}

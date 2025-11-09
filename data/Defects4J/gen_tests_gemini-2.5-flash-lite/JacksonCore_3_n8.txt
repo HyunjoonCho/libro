@@ -1,0 +1,26 @@
+public void testCurrInputRowStartInitialization() throws Exception {
+    byte[] inputBytes = "{\"key\": \"value\"}".getBytes("UTF-8");
+    IOContext ctxt = new IOContext(null, null, false);
+    ObjectCodec codec = null;
+    BytesToNameCanonicalizer sym = BytesToNameCanonicalizer.createRoot();
+    
+    // Create parser with a non-zero start position
+    UTF8StreamJsonParser parser = new UTF8StreamJsonParser(ctxt, 0, new ByteArrayInputStream(inputBytes), codec, sym, inputBytes, 10, inputBytes.length, false);
+    
+    // Manually advance the parser to a point where column calculation would be affected
+    parser.nextToken(); 
+    parser.nextToken(); 
+    parser.nextToken(); 
+
+    try {
+        // Trigger an exception that would use column calculation
+        parser.nextIntValue(-1); 
+    } catch (JsonParseException e) {
+        // Check if the column number in the exception is as expected, considering the initial start offset
+        // The expected column should be related to the inputPtr and currInputRowStart.
+        // If currInputRowStart is not initialized correctly, the column will be wrong.
+        // The exact expected value depends on the state of the parser, but the test is to ensure it's not 0
+        // if the start was non-zero.
+        assertTrue("Column number should not be 1 if start was non-zero and parsing occurred", e.getLocation().getColumnNr() > 1);
+    }
+}

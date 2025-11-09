@@ -1,0 +1,84 @@
+public void testAdvancedOptimization() {
+    String inputJs = "window[\"anchor\"] = function (obj, modifiesProp) {\n" +
+                     " return (function (saved) {\n" +
+                     " return modifiesProp(obj) + saved;\n" +
+                     " })(obj[\"prop\"]);\n" +
+                     "}";
+    String externsJs = "var window; window.anchor = function(obj, modifiesProp) {};";
+    CompilerOptions options = new CompilerOptions();
+    options.setLanguage(CompilerOptions.LanguageMode.ECMASCRIPT5);
+    options.setCompilationLevel(CompilationLevel.ADVANCED_OPTIMIZATIONS);
+    options.setPrettyPrint(true);
+
+    Compiler compiler = new Compiler();
+    compiler.init(new PassFactory[]{}, new CompilerOptions[]{options});
+
+    SourceFile input = SourceFile.fromCode("input.js", inputJs);
+    SourceFile externs = SourceFile.fromCode("window.js", externsJs);
+
+    Result result = compiler.compile(externs, input, options);
+
+    assertEquals("Compilation failed.", State.NORMAL, result.deploymentState);
+    String outputJs = compiler.toSource();
+
+    // The expected output is a bit tricky because the exact variable names might change.
+    // We'll check for the semantic meaning: that the original value of obj.prop is preserved
+    // and used in the addition after the modifiesProp call.
+    // Original code: modifiesProp(obj) + saved (where saved is obj.prop)
+    // Optimized code: modifiesProp(obj) + obj.prop (This is the bug, obj.prop is potentially modified)
+    // Expected correct code: modifiesProp(obj) + original_obj_prop
+    // The test case provided in the bug report suggests the optimized code is:
+    // window.foo=function(a,b){return b(a)+a.prop};
+    // This implies that the original value of a.prop was NOT saved and reused.
+    // The test needs to verify that the compiler DID NOT perform this incorrect optimization.
+
+    // The minimal reproduction case is tricky to assert directly with string matching due to potential
+    // variable renaming. A more robust test would involve AST comparison or checking specific
+    // transformations. However, based on the bug report's expected vs. actual, we can infer
+    // that the problematic optimization involves removing the saving of `obj["prop"]` into `saved`.
+
+    // Let's try to assert that the output code *still* contains a mechanism to preserve the original `obj.prop` value.
+    // The original structure is `(function(saved){ return modifiesProp(obj) + saved; })(obj["prop"]);`
+    // The bug is that `saved` is not correctly used or is optimized away.
+    // The expected output in the bug report `window.foo=function(a,b){return b(a)+a.prop};` is the buggy one.
+    // The *correct* output should preserve the temporary variable.
+
+    // Let's check if the output still contains the IIFE structure that saves the property.
+    // This is a weak check, but might catch the specific optimization described.
+    assertTrue("Output should still contain the IIFE for saving the property.", outputJs.contains("(function(saved){"));
+    assertTrue("Output should still contain the IIFE for saving the property.", outputJs.contains("})(obj[\"prop\"])"));
+
+    // A more direct check based on the provided example:
+    // The bug is that the original value of obj.prop is *not* saved and reused.
+    // The buggy output uses `a.prop` directly in the return statement *after* `b(a)` is called,
+    // implying the original value might have been lost or overwritten.
+    // The correct behavior is to add the *original* `obj.prop` to the result of `modifiesProp(obj)`.
+
+    // Given the minimal JS, the output should look something like:
+    // window.anchor = function(obj, modifiesProp) {
+    //   var saved = obj.prop;
+    //   return modifiesProp(obj) + saved;
+    // };
+    // If it becomes:
+    // window.anchor = function(obj, modifiesProp) {
+    //   return modifiesProp(obj) + obj.prop; // Buggy
+    // };
+
+    // Assert that the output does NOT match the buggy pattern directly.
+    // This is hard to do without knowing variable names.
+    // Let's assume the bug report's "What do you see instead?" is the exact output pattern we need to avoid.
+    // window.foo=function(a,b){return b(a)+a.prop};
+    // In our case, window.anchor = function(obj, modifiesProp) { return modifiesProp(obj) + obj.prop; };
+    assertFalse("Output should not be the buggy version: modifiesProp(obj) + obj.prop",
+                outputJs.contains("return modifiesProp(obj) + obj.prop"));
+    assertFalse("Output should not be the buggy version: modifiesProp(obj) + obj[\"prop\"]",
+                outputJs.contains("return modifiesProp(obj) + obj[\"prop\"]"));
+
+    // The actual fix should result in something like:
+    // window.anchor = function(obj, modifiesProp) {
+    //   var saved = obj.prop; // or similar variable name
+    //   return modifiesProp(obj) + saved;
+    // };
+    // We can check for the presence of a variable assignment followed by addition.
+    assertTrue("Output should contain a saved variable being added.", outputJs.contains("return modifiesProp(obj) + saved"));
+}

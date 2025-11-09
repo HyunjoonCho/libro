@@ -1,0 +1,280 @@
+public void testPrimitiveTypeRefinement() throws Exception {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.registerModule(new JaxbAnnotationModule());
+
+    // Test case 1: Primitive int overridden by Integer
+    class PrimitiveIntBean {
+        public int value;
+    }
+    class IntegerWrapperBean {
+        public Integer value;
+    }
+
+    // Simulating a scenario where a primitive int might be expected but an Integer is provided
+    // Or vice-versa. The core issue is how type refinements handle this.
+    // The bug report implies that the current handling is incorrect or non-existent.
+    // We need to create a test that would fail if the refinement is not handled as expected.
+
+    // Let's assume the expected behavior is that if a primitive is expected,
+    // and a wrapper is provided, it should still work, or vice versa.
+    // The problem description suggests that this is not happening gracefully.
+
+    // A concrete test case to expose the problem:
+    // If we have a field of type 'int' and try to deserialize JSON that provides an Integer,
+    // it should ideally succeed. If it fails, the bug is reproduced.
+
+    String jsonInt = "{\"value\": 10}";
+    PrimitiveIntBean beanWithInt = mapper.readValue(jsonInt, PrimitiveIntBean.class);
+    assertNotNull(beanWithInt);
+    assertEquals(10, beanWithInt.value); // This should pass if Jackson handles it
+
+    String jsonInteger = "{\"value\": 10}";
+    IntegerWrapperBean beanWithInteger = mapper.readValue(jsonInteger, IntegerWrapperBean.class);
+    assertNotNull(beanWithInteger);
+    assertEquals(Integer.valueOf(10), beanWithInteger.value); // This should pass
+
+    // The tricky part is when the *type* of the field in the Java class
+    // is different but conceptually the same (primitive vs wrapper).
+    // The bug report is about "type refinements". This implies a scenario
+    // where Jackson might try to "refine" a type.
+
+    // Let's consider a scenario where a JAXB annotation might influence this.
+    // The bug report is linked to jackson-module-jaxb-annotations.
+
+    // Example from the linked issue (slightly adapted for clarity):
+    // Assume a class with an `int` property and another with an `Integer` property.
+    // If the module tries to "refine" types, how does it handle this primitive/wrapper mismatch?
+    // The bug indicates it doesn't handle it well.
+
+    // Let's create a scenario where a generic type might be involved,
+    // and the refinement logic is triggered.
+
+    // If Jackson's type resolution, possibly influenced by JAXB annotations,
+    // fails to reconcile `int` and `Integer` when determining the correct type,
+    // a test attempting to deserialize might fail.
+
+    // A test that would likely fail if the issue is present:
+    // Attempting to deserialize a JSON that could be interpreted as either
+    // a primitive or a wrapper, into a field that is the "other" type.
+
+    // Scenario: Deserialize JSON into a field typed as 'int', where the JSON value
+    // might be represented as a wrapper type internally by the parser before
+    // assignment.
+    // Or, deserialize into an 'Integer' field with JSON that is clearly primitive.
+
+    // The description states: "Some legacy code may try refinements in this axis".
+    // This suggests a mechanism where types are being adjusted. If this mechanism
+    // doesn't account for primitive/wrapper differences, it breaks.
+
+    // Let's try to serialize and deserialize a simple bean with an `int` field.
+    // The failure would occur if the serialization/deserialization process
+    // using JAXB annotations incorrectly handles the `int` primitive.
+
+    class MyBean {
+        @com.fasterxml.jackson.annotation.JsonProperty("theInt")
+        public int theInt;
+    }
+
+    String jsonValue = "{\"theInt\": 5}";
+    MyBean bean = mapper.readValue(jsonValue, MyBean.class);
+    assertNotNull(bean);
+    assertEquals(5, bean.theInt); // This test should pass if the issue is fixed.
+                                 // If it fails, it means the primitive int isn't handled correctly.
+
+    // Consider the opposite: a field typed as Integer.
+    class MyBeanWrapper {
+        @com.fasterxml.jackson.annotation.JsonProperty("theInt")
+        public Integer theInt;
+    }
+    String jsonValueWrapper = "{\"theInt\": 5}";
+    MyBeanWrapper beanWrapper = mapper.readValue(jsonValueWrapper, MyBeanWrapper.class);
+    assertNotNull(beanWrapper);
+    assertEquals(Integer.valueOf(5), beanWrapper.theInt); // Should also pass if handled.
+
+    // The core of the bug is likely in the type refinement logic *within* the JAXB module
+    // when it tries to resolve or unify types. If it encounters a primitive `int`
+    // and expects an `Integer` (or vice versa) due to JAXB annotations or other context,
+    // and it doesn't have a rule for this, it might throw an error or behave unexpectedly.
+
+    // A test that might fail if type refinement is faulty:
+    // Suppose we have a generic type that resolves to `int` or `Integer`.
+    // The JAXB module's type resolution needs to be robust.
+
+    // Let's simulate a situation where a type is ambiguous or needs refinement.
+    // The bug implies that `int` and `Integer` are treated as fundamentally different
+    // in a way that breaks refinement.
+
+    // If the `JaxbAnnotationModule` has a `TypeResolver` or similar mechanism
+    // that doesn't correctly map `int` to `Integer` or vice versa during refinement,
+    // deserialization could fail.
+
+    // A test case that specifically targets the "refinement" aspect:
+    // If the module tries to determine the "most specific" or "widest" type,
+    // and it doesn't consider `int` and `Integer` equivalent for refinement purposes.
+
+    // Let's assume a hypothetical scenario where a JAXB annotation might lead to type ambiguity.
+    // For instance, if `@XmlElement` is used and Jackson infers a type, and the JAXB module
+    // tries to "refine" it.
+
+    // The simplest way to reproduce the *failure* is to trigger the code path
+    // that is expected to handle this refinement and observe it failing.
+    // Without knowing the exact internal logic, we can infer based on the description.
+
+    // The description mentions:
+    // 1. "Just ignore primitive/wrapper override, return original type as is"
+    // 2. "Allow wrapper to "refine" primitive, return wrapper."
+
+    // This implies a scenario where a type *is* being overridden or refined.
+    // If the default Jackson deserialization handles `int` and `Integer` fine,
+    // the problem must be specific to how the `JaxbAnnotationModule` interferes
+    // or adds its own type resolution logic.
+
+    // Let's try a scenario where a field is annotated and its type might be inferred.
+    // If the inferred type is `int` but the actual data implies `Integer`, or vice versa,
+    // and the module's refinement fails.
+
+    // A test that might expose the problem:
+    // Using a field with a primitive `int` and expecting it to be correctly populated
+    // from JSON that might be parsed as an `Integer` object first by Jackson's core.
+    // If the `JaxbAnnotationModule`'s refinement logic doesn't bridge this gap,
+    // it could lead to a `ClassCastException` or similar.
+
+    // Let's create a bean with a primitive int field and annotate it in a way
+    // that might trigger JAXB-related type handling.
+    // The bug description is a bit abstract, so we'll construct a plausible scenario.
+
+    // Consider a scenario where the module might try to unify types based on JAXB metadata.
+    // If it sees `int` and then tries to resolve it to a more specific type like `Integer`,
+    // but fails because it's not a direct subtype.
+
+    // Test case: Deserialize a JSON object into a bean that has a primitive `int` field.
+    // The failure would be an exception during deserialization if the type refinement
+    // logic in the JAXB module doesn't correctly handle the primitive/wrapper relationship.
+    // If `mapper.readValue` throws an exception related to type mismatch or casting,
+    // this test would reproduce the bug.
+
+    // We need a specific JAXB annotation that might trigger this.
+    // The issue description is vague about *which* JAXB annotations cause this.
+    // However, the core problem is the handling of `int` vs `Integer`.
+
+    // Let's assume a simple case where Jackson's default behavior is fine,
+    // but the JAXB module's added logic breaks it.
+    // The bug report implies that `createNumber` in `NumberUtils` has a similar issue,
+    // but this bug is about `jackson-module-jaxb-annotations`.
+
+    // The most direct interpretation: Jackson *tries* to refine the type,
+    // and in doing so, it fails to map `int` to `Integer` (or vice versa) correctly.
+    // This would typically manifest as a `ClassCastException` or `IllegalArgumentException`
+    // during deserialization.
+
+    // Let's craft a test that attempts to deserialize a JSON value into a primitive `int` field
+    // where the JSON value is clearly an integer. If the JAXB module's type refinement
+    // logic is flawed, it might throw an error.
+
+    // Test bean with a primitive int field.
+    class PrimitiveFieldBean {
+        public int primitiveField;
+    }
+
+    // Test bean with an Integer wrapper field.
+    class WrapperFieldBean {
+        public Integer wrapperField;
+    }
+
+    // JSON representing an integer.
+    String intJson = "{\"primitiveField\": 123}";
+    String intJsonWrapper = "{\"wrapperField\": 123}";
+
+    // Test 1: Deserialize into a primitive field.
+    // This *should* work with standard Jackson. If the JAXB module breaks it,
+    // the test will fail.
+    try {
+        PrimitiveFieldBean beanPrimitive = mapper.readValue(intJson, PrimitiveFieldBean.class);
+        assertNotNull(beanPrimitive);
+        assertEquals(123, beanPrimitive.primitiveField);
+    } catch (Exception e) {
+        // If an exception occurs here, it suggests the JAXB module's type handling
+        // for primitive ints is broken.
+        // This catch block isn't strictly necessary for reproducing the failure,
+        // as the assertion failure or uncaught exception would do that.
+        // However, it helps illustrate where the problem might lie.
+        throw e; // Re-throw to fail the test
+    }
+
+    // Test 2: Deserialize into a wrapper field.
+    // This also *should* work with standard Jackson.
+    try {
+        WrapperFieldBean beanWrapper = mapper.readValue(intJsonWrapper, WrapperFieldBean.class);
+        assertNotNull(beanWrapper);
+        assertEquals(Integer.valueOf(123), beanWrapper.wrapperField);
+    } catch (Exception e) {
+        // If an exception occurs here, it suggests the JAXB module's type handling
+        // for Integer wrappers is broken (less likely for this specific bug, but possible).
+        throw e; // Re-throw to fail the test
+    }
+
+    // The bug report implies that the *refinement* process is the issue.
+    // This means there's a step where Jackson (or the module) tries to determine
+    // the "best" or "correct" type, and this step fails for primitive/wrapper pairs.
+
+    // Let's consider a scenario where JAXB annotations force a type resolution.
+    // If a field is annotated with `@XmlElement` and Jackson infers `int`,
+    // but the module's logic expects `Integer` due to some JAXB context,
+    // and the refinement fails.
+
+    // The provided bug report is quite high-level. The most direct way to reproduce
+    // a failure related to type refinement between primitives and wrappers is to
+    // attempt deserialization where such a refinement *would* be expected to occur,
+    // and observe an error.
+
+    // The failure description implies that `int` and `Integer` are *not* handled
+    // interchangeably during type refinement. So, if Jackson's internal type resolution
+    // relies on this refinement, and it fails, a `ClassCastException` is likely.
+
+    // Let's try serializing a primitive `int` and deserializing it into an `Integer` field,
+    // and vice versa, using the JAXB module. The failure occurs if this process throws an exception.
+
+    // Bean with primitive int.
+    class PrimitiveBean {
+        public int value;
+    }
+
+    // Bean with Integer wrapper.
+    class WrapperBean {
+        public Integer value;
+    }
+
+    PrimitiveBean primBean = new PrimitiveBean();
+    primBean.value = 42;
+
+    WrapperBean wrapBean = new WrapperBean();
+    wrapBean.value = 42;
+
+    // Serialize primitive bean, deserialize into wrapper bean.
+    String jsonFromPrimitive = mapper.writeValueAsString(primBean);
+    try {
+        WrapperBean deserializedWrapper = mapper.readValue(jsonFromPrimitive, WrapperBean.class);
+        assertNotNull(deserializedWrapper);
+        assertEquals(Integer.valueOf(42), deserializedWrapper.value); // Should pass if resolved correctly
+    } catch (Exception e) {
+        // If this fails, the type refinement for primitive -> wrapper is broken.
+        throw e;
+    }
+
+    // Serialize wrapper bean, deserialize into primitive bean.
+    String jsonFromWrapper = mapper.writeValueAsString(wrapBean);
+    try {
+        PrimitiveBean deserializedPrimitive = mapper.readValue(jsonFromWrapper, PrimitiveBean.class);
+        assertNotNull(deserializedPrimitive);
+        assertEquals(42, deserializedPrimitive.value); // Should pass if resolved correctly
+    } catch (Exception e) {
+        // If this fails, the type refinement for wrapper -> primitive is broken.
+        throw e;
+    }
+
+    // The bug report is about "type refinements". This suggests that the module
+    // might be using a type resolution strategy that is too strict regarding
+    // primitive vs. wrapper types. If the strategy fails to unify them, an error occurs.
+    // The test above attempts to trigger this unification and expects it to succeed.
+    // If it fails with an exception, the bug is reproduced.
+}

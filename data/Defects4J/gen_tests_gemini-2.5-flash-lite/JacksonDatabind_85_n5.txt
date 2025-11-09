@@ -1,0 +1,35 @@
+@Test
+    public void testIssue107() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+        module.addSerializer(Date.class, new JsonSerializer<Date>() {
+            @Override
+            public void serialize(Date value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+                gen.writeString("custom_format");
+            }
+        });
+        mapper.registerModule(module);
+
+        Date date = new Date();
+        String result = mapper.writeValueAsString(date);
+
+        // The bug causes the serializer to ignore the configured format and use ISO8601
+        // This assertion checks that the output is NOT the custom format.
+        // A successful fix would mean the output IS the custom format.
+        assertFalse(result.contains("custom_format"));
+
+        // To demonstrate the bug more directly, let's try to serialize with a specific format
+        // and verify it's ignored.
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
+        class CustomDateContainer {
+            public Date date = date;
+        }
+
+        String resultWithAnnotation = mapper.writeValueAsString(new CustomDateContainer());
+
+        // The bug is that even with @JsonFormat, it falls back to ISO8601.
+        // A correct implementation would use the pattern "yyyy-MM-dd HH:mm:ss".
+        // This assertion checks that the output is NOT using the annotated pattern.
+        // A successful fix would mean the output IS using the annotated pattern.
+        assertFalse(resultWithAnnotation.contains("yyyy-MM-dd"));
+    }

@@ -1,0 +1,66 @@
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.SourceFile;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+
+public class JsCompilerTest {
+
+    @Test
+    public void testPublicTagPreventsCompression() {
+        Compiler compiler = new Compiler();
+        CompilerOptions options = new CompilerOptions();
+        options.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT3);
+        options.setPreferSingleQuotes(true);
+        options.setRenameVariableOnlyAscii(false);
+        options.setPrettyPrint(true);
+        options.setClosurePass(false);
+        options.setCheckGlobalThis(false);
+        options.setVariableRenaming(CompilerOptions.RenamingPolicy.ALL);
+        options.setPropertyRenaming(CompilerOptions.RenamingPolicy.ALL);
+
+        String code = "var Glow = {};\n" +
+                      "/** @public */ Glow.versions = [1,2,3];\n" +
+                      "Glow.showVersions = function() { alert(Glow.versions); }\n" +
+                      "window['Glow'] = Glow;\n" +
+                      "Glow['versions'] = Glow.versions;\n" +
+                      "Glow['showVersions'] = Glow.showVersions;";
+
+        SourceFile input = SourceFile.fromCode("input.js", code);
+        compiler.compile(input, SourceFile.fromCode("empty.js", ""), options);
+
+        String compiledCode = compiler.toSource();
+
+        // The expected output is tricky to assert precisely due to pretty printing variations.
+        // We'll check for the key elements: Glow.versions is still Glow.versions and
+        // the function references Glow.versions.
+        // The original bug report's desired output had an unnecessary line: Glow.versions = Glow.versions;
+        // We'll assert based on the fix described in the bug report.
+
+        // Assert that Glow.versions is not renamed.
+        assertTrue(compiledCode.contains("Glow.versions = [1, 2, 3];"));
+
+        // Assert that the function references the original Glow.versions.
+        // The function might be renamed to Glow.b, but it should reference Glow.versions.
+        assertTrue(compiledCode.contains("Glow.b = function() { alert(Glow.versions) }") ||
+                   compiledCode.contains("Glow.showVersions = function() { alert(Glow.versions) }"));
+
+        // The line Glow['versions'] = Glow.versions; might be optimized away or kept.
+        // The line Glow['showVersions'] = Glow.showVersions; will likely be transformed.
+    }
+
+    // Helper method to assert that a string contains another string
+    private void assertTrue(boolean condition) {
+        if (!condition) {
+            throw new AssertionError("Expected condition to be true");
+        }
+    }
+
+    // Helper method to assert that two strings are equal
+    private void assertEquals(String expected, String actual) {
+        if (!expected.equals(actual)) {
+            throw new AssertionError("Expected <" + expected + "> but was <" + actual + ">");
+        }
+    }
+}

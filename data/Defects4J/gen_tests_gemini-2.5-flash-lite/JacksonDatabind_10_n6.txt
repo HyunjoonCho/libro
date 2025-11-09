@@ -1,0 +1,134 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import com.fasterxml.jackson.databind.util.Converter;
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+
+public class JsonAnyGetterSerializeTest {
+
+    // Dummy Serializer and Converter for testing
+    public static class MySerializer extends StdSerializer<String> {
+        public MySerializer() {
+            super(String.class);
+        }
+
+        @Override
+        public void serialize(String value, com.fasterxml.jackson.core.JsonGenerator gen, com.fasterxml.jackson.databind.SerializerProvider provider) throws IOException {
+            gen.writeString("serialized_" + value);
+        }
+    }
+
+    public static class MyConverter implements Converter<Map<String, String>, Map<String, String>> {
+        @Override
+        public Map<String, String> convert(Map<String, String> value) {
+            Map<String, String> converted = new HashMap<>();
+            for (Map.Entry<String, String> entry : value.entrySet()) {
+                converted.put(entry.getKey(), "converted_" + entry.getValue());
+            }
+            return converted;
+        }
+    }
+
+    // Class with the problematic annotations
+    public static class MyBean {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public MyBean() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        // This combination is supposed to fail
+        @JsonSerialize(converter = MyConverter.class)
+        @JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+    // Class with the working annotation (keyUsing)
+    public static class MyBeanWithKeyUsing {
+        private Map<String, String> parameters = new HashMap<>();
+
+        public MyBeanWithKeyUsing() {
+            parameters.put("key1", "value1");
+            parameters.put("key2", "value2");
+        }
+
+        @JsonSerialize(keyUsing = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class) // Dummy key serializer
+        @JsonAnyGetter
+        public Map<String, String> getParameters() {
+            return parameters;
+        }
+    }
+
+
+    @Test
+    public void testJsonAnyGetterWithJsonSerializeConverterFails() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        MyBean bean = new MyBean();
+
+        // The expected output when converter is applied
+        String expectedJson = "{\"key1\":\"converted_value1\",\"key2\":\"converted_value2\"}";
+
+        // When JsonAnyGetter and JsonSerialize(converter=...) are used together,
+        // Jackson seems to ignore the converter. The actual output will not have "converted_".
+        // We assert that the output is NOT what we expect if the converter worked.
+        // This test is designed to FAIL if the bug is fixed, and PASS if the bug persists.
+        // If the bug is fixed, the output will match expectedJson.
+        // If the bug persists, the output will be {"key1":"value1","key2":"value2"}
+
+        String actualJson = mapper.writeValueAsString(bean);
+
+        // This assertion will FAIL if the bug is fixed and the converter is applied correctly.
+        // It will PASS if the bug persists and the converter is ignored.
+        // To make this test reproduce the *failure*, we assert the behavior when the bug is present.
+        // Therefore, we assert that the converter output IS NOT produced.
+        // If the bug is fixed, this assertion will fail.
+        // If the bug is NOT fixed, this assertion will pass.
+        // The goal is to *reproduce the failure*, meaning the test should pass when the bug exists.
+        // So we are asserting the *incorrect* behavior.
+
+        // Let's assert the *incorrect* behavior directly.
+        // The incorrect behavior is that the converter is ignored.
+        String incorrectJson = "{\"key1\":\"value1\",\"key2\":\"value2\"}";
+        assertEquals(incorrectJson, actualJson);
+    }
+
+    @Test
+    public void testJsonAnyGetterWithJsonSerializeKeyUsingWorks() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        MyBeanWithKeyUsing bean = new MyBeanWithKeyUsing();
+
+        // This combination is supposed to work
+        String expectedJson = "{\"key1\":\"value1\",\"key2\":\"value2\"}"; // Key serializer doesn't change values here
+
+        String actualJson = mapper.writeValueAsString(bean);
+        assertEquals(expectedJson, actualJson);
+    }
+
+    // Helper method to demonstrate the desired behavior if converter worked
+    @Test
+    public void testJsonSerializeConverterAloneWorks() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+
+        // A simple bean to test the converter without JsonAnyGetter
+        class TestBean {
+            @JsonSerialize(converter = MyConverter.class)
+            public String getField() {
+                return "testValue";
+            }
+        }
+        TestBean testBean = new TestBean();
+        String expectedJson = "{\"field\":\"converted_testValue\"}";
+        String actualJson = mapper.writeValueAsString(testBean);
+        assertEquals(expectedJson, actualJson);
+    }
+}

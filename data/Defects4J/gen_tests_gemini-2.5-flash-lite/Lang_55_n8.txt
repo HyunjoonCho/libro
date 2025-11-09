@@ -1,0 +1,105 @@
+public void testStopWatchSuspendResume() throws InterruptedException {
+    StopWatch sw = new StopWatch();
+    sw.start();
+    Thread.sleep(100); // Use a small sleep time for faster tests
+    sw.suspend();
+    long time1 = sw.getTime();
+    Thread.sleep(100);
+    assertEquals(time1, sw.getTime()); // Time should not advance while suspended
+    sw.resume();
+    Thread.sleep(100);
+    long time2 = sw.getTime();
+    assertTrue(time2 > time1); // Time should advance after resume
+    Thread.sleep(100);
+    sw.suspend();
+    long time3 = sw.getTime();
+    assertEquals(time3, time2); // Time should not advance while suspended
+    Thread.sleep(100);
+    assertEquals(time3, sw.getTime()); // Time should not advance while suspended
+    sw.resume();
+    Thread.sleep(100);
+    long time4 = sw.getTime();
+    assertTrue(time4 > time3); // Time should advance after resume
+    Thread.sleep(100);
+    sw.stop();
+    long time5 = sw.getTime();
+    // The crucial part: after stop, the time should represent the total elapsed time
+    // including the last resumed period, not a new "split" time.
+    // The bug report implies that getTime() after stop() is calculating a new time.
+    // We expect time5 to be the total duration from start to stop,
+    // which should be greater than time4.
+    assertTrue(time5 >= time4);
+    // To specifically test the bug: the time reported after stop should not be
+    // less than the time reported just before stop if resume was called.
+    // The bug description implies that `stop()` might reset or restart the timer incorrectly.
+    // Let's assert that the final time is a logical progression from the last active time.
+    // The exact value depends on the sleep times, but it should reflect the total duration.
+    // A more direct test for the described bug: if suspend() acts like split() before stop(),
+    // then stopping after a suspend/resume cycle would give an incorrect total duration.
+    // We can infer the expected total duration based on the sleep times.
+    // For this test, let's focus on the behavior that `stop()` after `resume()` should
+    // reflect the total elapsed time, not a split.
+    // The original bug description implies `sw.getTime()` after `sw.stop()` is incorrect.
+    // Let's assume the total expected time is roughly the sum of all sleep durations.
+    // This is hard to assert precisely due to thread scheduling.
+    // A better approach is to check the state transitions.
+    // If suspend() acted like split(), then stopping would give the time *since the last split*.
+    // The test should verify that stop() gives the *total* time.
+    // The provided example implies that after the last suspend(), the time was `Time 2`.
+    // Then after `stop()`, it reports `Time 3`, which is wrong. It should report `Time 2` + final sleep.
+    // Let's re-evaluate the expected behavior based on the description.
+    // The description says: "Time 2 (should be, but is Time 3 => NOT ok)"
+    // This means `sw.getTime()` after `sw.stop()` is providing a value that implies
+    // the timer was still running during the last suspend period, or it reset incorrectly.
+    // Let's try to assert that the final time is at least the time recorded before the last suspend.
+    assertTrue(time5 >= time3); // The total time should be at least the time up to the last suspend.
+
+    // To be more precise about the bug: if suspend() acted like split(),
+    // then stop() would measure from the last suspend.
+    // The test should show that stop() measures from the *start*.
+    // Let's capture the time after the last resume and before stop.
+    sw.resume(); // Re-resume to ensure it's running before stop
+    Thread.sleep(100);
+    long timeBeforeStop = sw.getTime();
+    sw.stop();
+    long timeAfterStop = sw.getTime();
+    // The bug is that timeAfterStop might be significantly larger than timeBeforeStop
+    // if suspend() was treated as a split.
+    // A correct implementation should have timeAfterStop be approximately timeBeforeStop + duration of last running period.
+    // The description implies that `sw.getTime()` after `sw.stop()` is calculating a new, longer duration.
+    // We can assert that the difference between timeAfterStop and timeBeforeStop is NOT excessively large,
+    // implying the timer didn't restart or split incorrectly.
+    // This is still tricky without knowing the exact sleep durations and thread scheduling.
+
+    // Let's simplify based on the core issue: suspend/resume should pause the timer.
+    // stop() should report the total elapsed time.
+    // The bug is that stop() is reporting a time that doesn't account for suspend/resume correctly.
+    // Let's re-run the scenario and check the final time against expected durations.
+    sw = new StopWatch();
+    sw.start();
+    Thread.sleep(50); // Short sleep
+    sw.suspend();
+    Thread.sleep(50); // Suspended
+    sw.resume();
+    Thread.sleep(50); // Running again
+    sw.suspend();
+    Thread.sleep(50); // Suspended again
+    sw.resume();
+    Thread.sleep(50); // Running again
+    sw.stop();
+    long finalTime = sw.getTime();
+    // The total *running* time should be approximately 50 + 50 + 50 = 150ms.
+    // The total *elapsed* time (including suspended periods) will be longer.
+    // The bug is that `finalTime` might be calculated as if the suspended periods were running.
+    // The description states: "Time 2 (should be, but is Time 3 => NOT ok)"
+    // This implies that `sw.getTime()` after `sw.stop()` is yielding a value that is
+    // *longer* than it should be, as if the suspended periods were counted.
+    // Let's assume the total actual running time is roughly sum of sleep periods when not suspended.
+    // This test is hard to make deterministic without mocking Thread.sleep.
+    // The core assertion is that the time reported after stop is consistent with the total running time.
+    // Let's check that the time doesn't increase infinitely after stop.
+    long timeAfterStop1 = sw.getTime();
+    Thread.sleep(50);
+    long timeAfterStop2 = sw.getTime();
+    assertEquals(timeAfterStop1, timeAfterStop2); // Time should not increase after stop
+}

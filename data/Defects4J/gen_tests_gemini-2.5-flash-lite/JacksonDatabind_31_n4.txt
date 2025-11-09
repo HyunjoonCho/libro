@@ -1,0 +1,60 @@
+public void testJsonStreamContextMismatch() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.setFilterProvider(new SimpleFilterProvider().addFilter("myFilter", SimpleBeanPropertyFilter.filterOutAllExcept("field1")));
+
+    Map<String, Object> inputMap = new HashMap<>();
+    inputMap.put("field1", "value1");
+    inputMap.put("field2", "value2");
+
+    // Test using convertValue
+    Map<String, Object> convertedMap = mapper.convertValue(inputMap, Map.class);
+    assertTrue(convertedMap.containsKey("field1"));
+    assertFalse(convertedMap.containsKey("field2"));
+
+    // Test using writeValueAsString (which uses JsonStreamContext differently)
+    // This part is harder to assert directly without deep inspection of JsonStreamContext
+    // The bug report implies that filtering might not work as expected here,
+    // but a direct reproduction of the context mismatch is tricky in a simple test.
+    // We'll simulate a scenario where the filter *should* apply but might not due to context.
+
+    // To simulate the issue more closely, we need to trigger the filtering logic
+    // during serialization. Let's create a simple Pojo.
+    @Data
+    @JsonFilter("myFilter")
+    class FilteredPojo {
+        private String field1;
+        private String field2;
+    }
+
+    FilteredPojo pojo = new FilteredPojo();
+    pojo.setField1("value1");
+    pojo.setField2("value2");
+
+    // When writing this POJO, the JsonStreamContext is built.
+    // The bug report suggests that the context built during write operations
+    // might not correctly reflect the path for filtering compared to convertValue.
+    // A direct assertion on the JsonStreamContext internal state is not public API.
+    // However, we can assert the *outcome* of the filtering. If the filtering
+    // works correctly, "field2" should be excluded.
+
+    String jsonOutput = mapper.writeValueAsString(pojo);
+
+    // If the bug related to JsonStreamContext leads to incorrect filtering during write,
+    // this assertion might fail. The description implies that the filtering
+    // applied during `convertValue` works, but the filtering during `writeValue`
+    // might not.
+
+    // This assertion checks if the filtering works as expected for writeValueAsString.
+    // If the bug described in the report is present and affects the outcome,
+    // this assertion would fail because "field2" might be present in the output.
+    assertFalse(jsonOutput.contains("\"field2\""));
+    assertTrue(jsonOutput.contains("\"field1\""));
+
+    // NOTE: The core of the bug is about the *internal* state of JsonStreamContext
+    // during different operations. Directly testing that internal state is not
+    // feasible with public APIs. This test asserts the *observable outcome*
+    // of filtering, assuming that differences in JsonStreamContext lead to
+    // different filtering results. If the filtering works correctly in both cases,
+    // this test will pass. If the filtering fails for writeValueAsString due to
+    // the described context issue, this test will fail.
+}

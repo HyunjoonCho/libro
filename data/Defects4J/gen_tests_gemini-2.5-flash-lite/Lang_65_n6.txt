@@ -1,0 +1,133 @@
+public void testTruncateDST() throws Exception {
+    Calendar cal = Calendar.getInstance();
+    cal.set(2004, Calendar.OCTOBER, 31, 1, 0, 0);
+    cal.set(Calendar.MILLISECOND, 0);
+    // MDT is UTC-6, MST is UTC-7. Daylight saving ends at 2 AM on Oct 31, 2004.
+    // 1 AM MDT is before DST ends.
+    Date oct31_01MDT = cal.getTime();
+
+    // Truncating by hour should not change the date/time if it's before DST ends.
+    Date result = DateUtils.truncate(oct31_01MDT, Calendar.HOUR_OF_DAY);
+
+    // The original code asserted that oct31_01MDT == result.
+    // However, the description implies that the result is actually 2 AM MST.
+    // Let's check the expected behavior: truncating 1 AM MDT by hour should result in 1 AM MDT.
+    // If the system's timezone is America/Denver or similar, it might incorrectly adjust.
+    // To reproduce the bug described, we need to assert that the truncation *doesn't* do what's expected.
+    // The description says "you'll actually get 2004-10-31 01:00:00 MST, which is one hour after the input hour."
+    // This implies that the result *should not* be equal to the input.
+    // Let's construct the expected incorrect result based on the description.
+    cal.set(2004, Calendar.OCTOBER, 31, 1, 0, 0); // Reset to 1 AM
+    // Now, set it to 2 AM MST.
+    // The DST switch happens at 2 AM local time, where it goes from 1:59:59 AM MDT to 1:00:00 AM MST.
+    // So, 1 AM MDT is followed by 1 AM MST. The description seems to imply a jump *forward* in time.
+    // Let's re-read: "you'll actually get 2004-10-31 01:00:00 MST, which is one hour after the input hour."
+    // This is confusing. If the input is 1 AM MDT, and the output is 1 AM MST, that's *not* one hour after the input hour.
+    // 1 AM MDT is UTC-6. 1 AM MST is UTC-7. So 1 AM MST is *one hour earlier* than 1 AM MDT.
+    // The description "one hour after the input hour" sounds like it should be 2 AM MST.
+    // Let's assume the description meant that the *truncated hour* becomes 2 AM MST.
+    // If the input is 1 AM MDT (which is 7 AM UTC), and it's truncated to the hour, and DST ends at 2 AM local time (which is 8 AM UTC),
+    // then the hour boundary might be crossed incorrectly.
+    // Let's try to create the time that the bug *claims* is the result.
+    // If the input is 2004-10-31 01:00:00 MDT, and the output is 2004-10-31 01:00:00 MST, this is a time *earlier* than the input.
+    // This contradicts "one hour after the input hour".
+    // Let's assume the bug description is slightly flawed in its phrasing and the *intent* was that the truncation results in a time that is an hour *later* than expected, specifically crossing the DST boundary in a problematic way.
+
+    // Let's re-evaluate the example:
+    // Input: 2004-10-31 01:00:00 MDT (UTC offset -6) -> This is 2004-10-31 07:00:00 UTC
+    // DST ends at 2 AM local time on Oct 31, 2004.
+    // So, 1:59:59 AM MDT is followed by 1:00:00 AM MST.
+    // The hour of 1 AM local time exists *twice* on this day.
+    // The first 1 AM is MDT (UTC-6). The second 1 AM is MST (UTC-7).
+    // If DateUtils.truncate(oct31_01MDT, Calendar.HOUR_OF_DAY) is called, and oct31_01MDT represents the *first* 1 AM (MDT),
+    // then truncating to the hour should yield the *start* of that hour, which is still the first 1 AM (MDT).
+    // The bug description says it yields "2004-10-31 01:00:00 MST". This is the *second* 1 AM.
+    // This means the truncation incorrectly jumped to the *second* occurrence of 1 AM on that day.
+    // The statement "which is one hour after the input hour" is still confusing.
+    // If the input is 1 AM MDT, and the output is 1 AM MST, the output time is *earlier* in wall-clock time (due to MST being UTC-7 vs MDT UTC-6).
+    // However, the *absolute* time (UTC) might have shifted.
+    // 2004-10-31 01:00:00 MDT = 2004-10-31 07:00:00 UTC
+    // 2004-10-31 01:00:00 MST = 2004-10-31 07:00:00 UTC  <- This is incorrect. MST is UTC-7.
+    // 2004-10-31 01:00:00 MST = 2004-10-31 08:00:00 UTC
+
+    // So, input: 2004-10-31 01:00:00 MDT (07:00 UTC)
+    // Expected output from description: 2004-10-31 01:00:00 MST (08:00 UTC)
+    // This output is indeed *one hour after the input hour* in terms of UTC.
+
+    // The original assertion was assertEquals(oct31_01MDT, result);
+    // This implies the bug *wasn't* happening in the environment where the test was run, or the assertion was wrong.
+    // To reproduce the *described failure*, we need to assert that the result *is not* oct31_01MDT, and specifically that it matches the described faulty output.
+
+    // Let's construct the faulty output: 2004-10-31 01:00:00 MST
+    // This corresponds to 2004-10-31 08:00:00 UTC.
+    // In the America/Denver timezone (which observes this DST rule), 01:00 MST on Oct 31, 2004 is 08:00 UTC.
+    cal.setTime(oct31_01MDT); // Reset to 1 AM MDT
+    cal.add(Calendar.HOUR_OF_DAY, 1); // This would make it 2 AM MDT if DST wasn't ending.
+    // The correct DST end is at 2 AM. So 1 AM MDT is followed by 1 AM MST.
+    // If the truncation is supposed to give the *start* of the hour, and the input is 1 AM MDT,
+    // the correct output should be 1 AM MDT.
+    // The bug description says it becomes 1 AM MST.
+    // This means the truncation operation is advancing the hour in a way that lands on the *second* occurrence of 1 AM.
+
+    // Let's recreate the input date object carefully.
+    // Using a fixed timezone is crucial here. Let's assume the test environment uses a timezone that observes this DST.
+    // The key is that DateUtils.truncate might be using the system's default timezone, which could be problematic.
+    // To reproduce the bug, we need to set up a date that *when truncated* by hour, crosses this DST boundary incorrectly.
+
+    // Let's create the input date as the *first* 1 AM on Oct 31, 2004 in a timezone that observes this.
+    // America/Denver is a good candidate.
+    TimeZone tz = TimeZone.getTimeZone("America/Denver");
+    Calendar inputCal = Calendar.getInstance(tz);
+    inputCal.set(2004, Calendar.OCTOBER, 31, 1, 0, 0);
+    inputCal.set(Calendar.MILLISECOND, 0);
+    // We need to ensure this is the *first* 1 AM (MDT).
+    // The DST ends at 2 AM local time. So 1 AM MDT exists.
+    Date inputDate = inputCal.getTime();
+
+    // Now, let's perform the truncation.
+    Date truncatedDate = DateUtils.truncate(inputDate, Calendar.HOUR_OF_DAY);
+
+    // The bug description states the result is "2004-10-31 01:00:00 MST".
+    // Let's create this expected faulty output date.
+    Calendar faultyOutputCal = Calendar.getInstance(tz);
+    faultyOutputCal.set(2004, Calendar.OCTOBER, 31, 1, 0, 0);
+    faultyOutputCal.set(Calendar.MILLISECOND, 0);
+    // This 1 AM will be the *second* 1 AM (MST) because DST has ended.
+    Date faultyExpectedDate = faultyOutputCal.getTime();
+
+    // The original test asserted: assertEquals(oct31_01MDT, result);
+    // This would pass if the truncation worked correctly and returned the original date.
+    // To reproduce the bug, we assert that the truncatedDate is NOT the original inputDate,
+    // and that it IS the faultyExpectedDate.
+
+    // Let's also verify the original input date's offset.
+    // 2004-10-31 01:00:00 MDT in America/Denver is 2004-10-31 07:00:00 UTC.
+    // 2004-10-31 01:00:00 MST in America/Denver is 2004-10-31 08:00:00 UTC.
+
+    // The bug description says: "you'll actually get 2004-10-31 01:00:00 MST, which is one hour after the input hour."
+    // Input hour: 1 AM MDT. Output hour: 1 AM MST.
+    // UTC of input: 07:00. UTC of output: 08:00.
+    // The UTC time has indeed advanced by one hour.
+
+    // The original assertion `assertEquals(oct31_01MDT, result);` would fail if the bug is present.
+    // So, to reproduce the failure, we need to assert that `result` is *different* from `oct31_01MDT`.
+    // And specifically, that it matches the described faulty output.
+
+    // Let's construct the faulty output date object carefully.
+    // It should represent 2004-10-31 01:00:00 MST.
+    // This means the Calendar object should be set to 1 AM, and the timezone should be considered.
+    Calendar expectedFaultyCal = Calendar.getInstance(tz);
+    expectedFaultyCal.set(2004, Calendar.OCTOBER, 31, 1, 0, 0);
+    expectedFaultyCal.set(Calendar.MILLISECOND, 0);
+    // This will represent the *second* 1 AM on that day, which is 1 AM MST.
+    Date expectedFaultyDate = expectedFaultyCal.getTime();
+
+    // The bug is that `DateUtils.truncate(inputDate, Calendar.HOUR_OF_DAY)` returns `expectedFaultyDate` instead of `inputDate`.
+    // The original test asserted `assertEquals(inputDate, truncatedDate);`.
+    // This assertion would fail if the bug is present.
+    // Therefore, to reproduce the failure, we must assert that `truncatedDate` is *not* `inputDate`.
+    // And ideally, assert that it *is* `expectedFaultyDate`.
+
+    assertFalse("Truncation should not change the date/time when DST is not crossed in this direction", inputDate.equals(truncatedDate));
+    assertEquals("Truncation incorrectly advanced time across DST boundary", expectedFaultyDate, truncatedDate);
+}

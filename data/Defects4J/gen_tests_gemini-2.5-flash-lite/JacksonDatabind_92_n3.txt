@@ -1,0 +1,37 @@
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.junit.Assert.fail;
+
+public class JacksonDatabindSecurityTest {
+
+    @Test
+    public void testBlockJdkTypes() throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        Map<String, Object> map = new HashMap<>();
+        // Example of a potentially dangerous type, though the exact payload
+        // to exploit CVE-2017-15095 might differ. This test aims to ensure
+        // that common JDK types are not deserialized polymorphically by default.
+        map.put("className", "java.lang.ProcessBuilder");
+        map.put("command", new String[]{"ls", "-la"});
+
+        try {
+            objectMapper.writeValueAsString(map); // Serialization is usually fine
+            // The vulnerability lies in deserialization.
+            // We expect an exception when trying to deserialize a malicious payload.
+            // The exact exception type and message might vary based on Jackson version and configuration.
+            // For this test, we'll attempt deserialization and expect it to fail for blocked types.
+            String jsonInput = "{\"@class\":\"java.lang.ProcessBuilder\",\"command\":[\"ls\",\"-la\"]}";
+            objectMapper.readValue(jsonInput, Object.class);
+            fail("Deserialization of a blocked JDK type should have failed.");
+        } catch (Exception e) {
+            // We expect an exception, indicating the type was likely blocked or handled safely.
+            // A more robust test might check the specific exception type or message.
+            System.out.println("Successfully caught expected exception: " + e.getMessage());
+        }
+    }
+}

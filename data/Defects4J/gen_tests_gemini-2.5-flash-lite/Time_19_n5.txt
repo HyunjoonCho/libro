@@ -1,0 +1,29 @@
+public void testIssue124() {
+    DateTimeZone londonZone = DateTimeZone.forID("Europe/London");
+    DateTimeZone osloZone = DateTimeZone.forID("Europe/Oslo");
+    DateTime helsinkiZone = DateTimeZone.forID("Europe/Helsinki");
+
+    DateTime britishDate = new DateTime(2011, 10, 30, 1, 59, 0, 0, londonZone);
+    DateTime norwDate = new DateTime(2011, 10, 30, 2, 59, 0, 0, osloZone);
+    DateTime finnishDate = new DateTime(2011, 10, 30, 3, 59, 0, 0, helsinkiZone);
+
+    // In Europe/London, the clock goes from 01:59:59 to 01:00:00 on this day (DST ends)
+    // So 01:59:00 in Europe/London should be in BST (UTC+1)
+    assertEquals("2011-10-30T01:59:00.000+01:00", britishDate.toString());
+
+    // Oslo and Helsinki are in UTC+2 at this time of year (standard time)
+    // The problem description suggests that 02:59 in Oslo and 03:59 in Helsinki were being
+    // interpreted as DST (UTC+2) when they should have been standard time (UTC+1 for Oslo, UTC+2 for Helsinki).
+    // The fix in 2.0 is to prefer the *earlier* instant in case of ambiguity.
+    // The ambiguous hour in London is 01:00 to 01:59.
+    // The instant 2011-10-30T01:59:00.000+01:00 (British time) corresponds to:
+    // - 2011-10-30T02:59:00.000+02:00 in Oslo (which is UTC+1 in standard time)
+    // - 2011-10-30T03:59:00.000+03:00 in Helsinki (which is UTC+2 in standard time)
+    // The bug report indicated that 2.0 produced +02:00 for Oslo and +03:00 for Helsinki,
+    // which is consistent with the release notes preferring the earlier instant (summer time).
+    // However, the expected output for BritishDate was +01:00, which implies it's *not*
+    // in BST, but rather in GMT (UTC+0). This seems to be the core of the inconsistency.
+    // The test below asserts the behavior described in the bug report for version 2.0.
+    assertEquals("2011-10-30T02:59:00.000+02:00", norwDate.toString());
+    assertEquals("2011-10-30T03:59:00.000+03:00", finnishDate.toString());
+}

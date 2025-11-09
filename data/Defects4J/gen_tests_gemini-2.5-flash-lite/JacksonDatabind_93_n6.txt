@@ -1,0 +1,41 @@
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+import java.util.ArrayList;
+import java.util.List;
+
+// Dummy classes to replicate the structure from the bug report
+class Authentication {
+    private List<GrantedAuthority> authorities = new ArrayList<GrantedAuthority>();
+
+    public List<GrantedAuthority> getAuthorities() {
+        return this.authorities;
+    }
+
+    public void setAuthorities(List<GrantedAuthority> authorities) {
+        this.authorities = authorities;
+    }
+}
+
+interface GrantedAuthority {
+    String getAuthority();
+}
+
+public class SubTypeValidatorTest {
+
+    @Test
+    public void testValidateSubTypeFailsWithNPE() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
+
+        // This JSON structure is designed to trigger the NPE in SubTypeValidator
+        // when an interface from org.springframework.security.core is encountered.
+        String json = "{\"@class\":\"org.springframework.security.core.Authentication\",\"authorities\":[\"java.util.ArrayList\",[]]}";
+
+        // The readValue call is expected to throw a NullPointerException due to the bug.
+        // If it doesn't throw an exception, the test would pass, indicating the bug is not reproduced.
+        // However, the goal is to reproduce the failure, so we don't assert on the result,
+        // but rather on the exception being thrown (implicitly, by the test failing if no exception).
+        mapper.readValue(json, Authentication.class);
+    }
+}

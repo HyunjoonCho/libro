@@ -1,0 +1,42 @@
+public void testPosixParserInterruptsTarget() throws ParseException {
+    Options options = new Options();
+    options.addOption("t", "target", true, "Generate files for the specified target machine");
+
+    PosixParser parser = new PosixParser();
+    String[] args = {"-target", "foobar.com"};
+    CommandLine parsedLine = parser.parse(options, args);
+
+    // The bug is that "-target foobar.com" is parsed as option "t" with value "arget foobar.com"
+    // We expect the option "target" to be recognized and its value to be "foobar.com"
+    // The current buggy behavior would lead to getOptionValue("t") returning "arget foobar.com"
+    // Or, if the bug is that it doesn't recognize "target" at all and throws an exception or
+    // treats "arget" as the value for "t", we need to assert against that.
+    // Based on the description, it seems it IS recognizing "-target" as option "t"
+    // and "foobar.com" as the value. The error is that "arget" is also part of the value.
+    // Let's test for the described incorrect behavior.
+
+    // Assert that the option "t" is present (which is the short form for "target")
+    assertTrue(parsedLine.hasOption("t"));
+
+    // Assert that the value for the option "t" is incorrect, as described in the bug.
+    // The bug states it prints "processing selected target: arget" when the input is "-target foobar.com"
+    // This implies that "foobar.com" is split, and "arget" is taken as the value for "t".
+    // However, the example code shows `parsedLine.getOptionValue(OPTION_TARGET)`, which is "t".
+    // So we should check the value of "t".
+    // The description says "processing selected target: arget", which means getOptionValue("t") would return "arget".
+    // This contradicts the later part "Again, why not handle bigger Hex numbers?" and the example code.
+    // Let's re-read: "A command line with just "-target foobar.com" prints out "processing selected target: arget" (ERROR?)"
+    // This implies the value obtained for the option 't' (which is what '-target' maps to internally) is 'arget'.
+    // This is unexpected, as 'foobar.com' should be the value.
+    // The explanation clarifies: "'t' is the token, it is an options so 'arget' is the argument value."
+    // This means the parser sees '-t' and then takes 'arget' as the value, and 'foobar.com' is left unparsed or parsed incorrectly.
+    // Let's assume the bug is that `getOptionValue("t")` returns `"arget"` when the input is `"-target foobar.com"`.
+
+    // This assertion checks for the INCORRECT behavior described.
+    // If the test passes, it means the bug is present.
+    assertEquals("arget", parsedLine.getOptionValue("t"));
+
+    // Additionally, let's check that the long option "target" is NOT recognized directly as expected.
+    // The bug implies it's treated as a short option.
+    assertFalse(parsedLine.hasOption("target")); // Should not have the long option directly
+}

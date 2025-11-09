@@ -1,0 +1,52 @@
+public void testCorrelatedRandomVectorGeneratorWithZeroRows() {
+    // Test case where the covariance matrix has zero rows/columns, which should be handled gracefully.
+    // The original bug report mentions issues with zero *values* in the covariance matrix,
+    // leading to incorrect rank calculation and decomposition.
+    // This test attempts to reproduce that by providing a covariance matrix
+    // that results in a rank deficiency or zero diagonal elements,
+    // which might trigger the bug in RectangularCholeskyDecomposition.
+
+    // Covariance matrix from the bug report that caused issues.
+    // This matrix has a row/column of zeros, indicating a rank deficiency.
+    double[][] covArray = {
+            {0.013445532, 0.01039469, 0.0, 0.009881156, 0.010499559},
+            {0.01039469, 0.023006616, 0.0, 0.008196856, 0.010732709},
+            {0.0, 0.0, 0.0, 0.0, 0.0}, // This row/column of zeros is key
+            {0.009881156, 0.008196856, 0.0, 0.019023866, 0.009210099},
+            {0.010499559, 0.010732709, 0.0, 0.009210099, 0.019107243}
+    };
+    RealMatrix covarianceMatrix = MatrixUtils.createRealMatrix(covArray);
+
+    // Mean vector (can be zero if not specified, but let's be explicit)
+    double[] meanArray = {0.0, 0.0, 0.0, 0.0, 0.0};
+    RealVector meanVector = MatrixUtils.createRealVector(meanArray);
+
+    // CorrelatedRandomVectorGenerator constructor expects a mean and a covariance matrix.
+    // It internally uses RectangularCholeskyDecomposition.
+    // The bug was that the rank was incorrectly calculated as 5 instead of 4
+    // for this specific matrix.
+    // We will check if the rank is correctly identified.
+    // We don't need to call sample() to reproduce the failure;
+    // the issue is in the initialization/decomposition.
+
+    // Create the generator. The failure might occur during its construction or
+    // when getRank() or getRootMatrix() is called.
+    CorrelatedRandomVectorGenerator generator = new CorrelatedRandomVectorGenerator(meanVector, covarianceMatrix, 100, new DefaultProperties(new Random(123456)));
+
+    // Assert that the rank is correctly identified.
+    // Based on the bug report, the rank should be 4, not 5.
+    // The RectangularCholeskyDecomposition should have handled the zero row/column.
+    assertEquals(4, generator.getRank());
+
+    // We can also check that the root matrix is not null and has the expected dimensions
+    // (though the exact values might vary based on implementation details of decomposition).
+    RealMatrix rootMatrix = generator.getRootMatrix();
+    assertNotNull(rootMatrix);
+    assertEquals(covarianceMatrix.getRowDimension(), rootMatrix.getRowDimension());
+    assertEquals(generator.getRank(), rootMatrix.getColumnDimension()); // Root matrix columns should equal rank
+
+    // If the bug was that it produced NaNs or threw an exception for this case,
+    // we'd assert that no exception is thrown or check for specific values if applicable.
+    // The bug report implies incorrect rank and potentially incorrect decomposition.
+    // Checking the rank is the most direct way to verify the fix for the described issue.
+}
