@@ -4,6 +4,7 @@ import requests
 import random
 
 import openai
+import google.generativeai as genai
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline, StoppingCriteria, StoppingCriteriaList
 
@@ -14,6 +15,10 @@ HF_KEY = os.getenv("HUGGINGFACE_TOKEN")
 AVAILABLE_MODEL_INFO = {
     'OpenAI/gpt-4o': {
         'query_type': 'openai',
+        'uses_chat': True,
+    },
+    'models/gemini-2.5-flash-lite': {
+        'query_type': 'googleai',
         'uses_chat': True,
     },
     'meta-llama/Meta-Llama-3-8B-Instruct': {
@@ -107,6 +112,39 @@ def query_chat_llm(prompt, model, stop_tokens):
         cost = {
             'prompt_tokens': response.usage.prompt_tokens,
             'completion_tokens': response.usage.completion_tokens,
+        }
+        if gen_result and "```" in gen_result:
+            parts = gen_result.split("```")
+            if len(parts) >= 2:
+                gen_result = parts[1]
+                gen_result = gen_result.removeprefix('java')
+    elif model_info['query_type'] == 'googleai':
+        system_instruction = None
+        start_idx = 0
+        if prompt and prompt[0]['role'] == 'system':
+            system_instruction = prompt[0]['content']
+            start_idx = 1
+        
+        gemini_model = genai.GenerativeModel(model, system_instruction=system_instruction)
+        
+        gemini_messages = []
+        for msg in prompt[start_idx:]:
+            role = 'user' if msg['role'] == 'user' else 'model'
+            gemini_messages.append({'role': role, 'parts': [msg['content']]})
+        
+        chat = gemini_model.start_chat(history=gemini_messages[:-1])
+        response = chat.send_message(
+            gemini_messages[-1]['parts'][0],
+            generation_config=genai.GenerationConfig(
+                temperature=TEMP + tiny_noise(), 
+                candidate_count=1,
+                stop_sequences=stop_tokens
+            )
+        )
+        gen_result = response.text
+        cost = {
+            'prompt_tokens': response.usage_metadata.prompt_token_count,
+            'completion_tokens': response.usage_metadata.candidates_token_count,
         }
         if gen_result and "```" in gen_result:
             parts = gen_result.split("```")
