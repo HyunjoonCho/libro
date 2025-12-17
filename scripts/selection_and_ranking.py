@@ -327,6 +327,7 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--result_file', default=None, help='Path to the execution result file (e.g., `../results/example2_n50.json`)')
     parser.add_argument('-g', '--gen_test_path', default=None, help='Directory that contains raw generated tests (e.g., `../data/Defects4J/gen_tests/`)')
     parser.add_argument('-p', '--postfix', default='')
+    parser.add_argument('-n', '--num_samples', default=10)
     parser.add_argument('--projects', nargs='*')
     parser.add_argument('--random', action='store_true', help='Produce random baseline results')
     args = parser.parse_args()
@@ -421,14 +422,14 @@ if __name__ == "__main__":
     print(f'* Total (success): {len(rank_df[rank_df.first_success_rank < BIG_NUMBER])}')
     print(f'* Total (fib): {len(rank_df)}')
 
-    # binary result for routing: at least one BRT generated or not?
-    rank_dict = dict([(row['bug_id'], row['first_success_rank']) for _, row in rank_df.iterrows()]) 
+    # success_rate
+    rank_dict = dict([(row['bug_id'], len(row['success_ranks'])) for _, row in rank_df.iterrows()]) 
     simple_result_dict = dict()
     for bug_id in result_dict:
         if bug_id not in rank_dict:
-            simple_result_dict[bug_id] = False
+            simple_result_dict[bug_id] = 0.0 
         else:
-            simple_result_dict[bug_id] = rank_dict[bug_id] < BIG_NUMBER
+            simple_result_dict[bug_id] = rank_dict[bug_id] / args.num_samples
     with open(f'../results/simple_result_{dname}{args.postfix}.json', 'w') as f:
         json.dump(simple_result_dict, f, indent=2)
 
